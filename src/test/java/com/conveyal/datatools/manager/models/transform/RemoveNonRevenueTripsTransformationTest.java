@@ -81,13 +81,13 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
             .collect(Collectors.joining("\n"));
 
         CsvReader csvReader = new CsvReader(new StringReader(stopTimesRows));
-        Map<String, List<String[]>> revenueStopTimes = trans.getAllRevenueStopTimes(
+        RemoveNonRevenueTripsTransformation.RevenueData revenueStopTimes = trans.getAllRevenueStopTimes(
             csvReader,
             fieldIndexes
         );
         csvReader.close();
-        assertEquals(1, revenueStopTimes.size());
-        assertEquals(stopTimesRevenue.size(), revenueStopTimes.get("revenue-trip").size());
+        assertEquals(1, revenueStopTimes.getStopTimeRows().size());
+        assertEquals(stopTimesRevenue.size(), revenueStopTimes.getStopTimeRows().get("revenue-trip").size());
     }
 
     static Stream<Arguments> createNonRevenueCases() {
@@ -160,8 +160,8 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
 
     private void hadExpectTransformResults(List<TableTransformResult> tableTransformResults) {
         assertEquals(2, tableTransformResults.size());
-        assertEquals(4, tableTransformResults.get(0).addedCount);
-        assertEquals(1, tableTransformResults.get(1).addedCount);
+        assertEquals(5, tableTransformResults.get(0).deletedCount);
+        assertEquals(1, tableTransformResults.get(1).deletedCount);
     }
 
     private boolean hasNonRevenueTrips(String pathToZip) throws IOException {

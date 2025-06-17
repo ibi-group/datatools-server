@@ -65,7 +65,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
                 return;
             }
 
-            Map<String, List<String[]>> revenueStopTimes = getAllRevenueStopTimes(
+            RevenueData revenueStopTimes = getAllRevenueStopTimes(
                 csvReaderForStopTimes,
                 fieldIndexes
             );
@@ -80,19 +80,26 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
                 status.fail("Unable to remove non revenue trips because the trips file does not contain the required trip id field.");
                 return;
             }
-            List<String[]> revenueTrips = getAllRevenueTrips(csvReaderForTrips, revenueStopTimes.keySet(), tripIdFieldIndex);
-            if (revenueTrips.isEmpty()) {
+            RevenueData revenueTrips = getAllRevenueTrips(csvReaderForTrips, revenueStopTimes.getStopTimeRows().keySet(), tripIdFieldIndex);
+            if (revenueTrips.getTripRows().isEmpty()) {
                 LOG.warn("No revenue trips! All trips and related stop times will be removed.");
             }
 
             writeToFile(
                 zipTarget,
                 "stop_times.txt",
-                revenueStopTimes.values().stream().flatMap(List::stream).collect(Collectors.toList()),
-                headersForStopTime
+                revenueStopTimes.getStopTimeRows().values().stream().flatMap(List::stream).collect(Collectors.toList()),
+                headersForStopTime,
+                revenueStopTimes.getDeletedRowCount()
             );
 
-            writeToFile(zipTarget, "trips.txt", revenueTrips, headersForTrips);
+            writeToFile(
+                zipTarget,
+                "trips.txt",
+                revenueTrips.tripRows,
+                headersForTrips,
+                revenueTrips.getDeletedRowCount()
+            );
         } catch (Exception e) {
             status.fail("Unknown error encountered while attempting to remove non revenue trip from zip file.", e);
         }
@@ -136,18 +143,20 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     /**
      * Get all trips that have revenue stop times.
      */
-    public List<String[]> getAllRevenueTrips(
+    public RevenueData getAllRevenueTrips(
         CsvReader csvReader,
         Set<String> revenueTrips,
         int tripIdFieldIndex
     ) throws IOException {
         List<String[]> revenueTripRows = new ArrayList<>();
+        int totalRowCount = 0;
         while (csvReader.readRecord()) {
+            totalRowCount++;
             if (revenueTrips.contains(csvReader.get(tripIdFieldIndex))) {
                 revenueTripRows.add(csvReader.getValues());
             }
         }
-        return revenueTripRows;
+        return new RevenueData(revenueTripRows, totalRowCount - revenueTripRows.size());
     }
 
     /**
@@ -155,13 +164,15 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
      * has a pickup, drop off, continuous pickup or continuous drop off. This will have the effect of removing non
      * revenue trips.
      */
-    public Map<String, List<String[]>> getAllRevenueStopTimes(
+    public RevenueData getAllRevenueStopTimes(
         CsvReader csvReader,
         Map<String, Integer> fieldIndexes
     ) throws IOException {
         Map<String, List<String[]>> nonRevenueStopTimes = new HashMap<>();
         Map<String, List<String[]>> revenueStopTimes = new HashMap<>();
+        int totalRowCount = 0;
         while (csvReader.readRecord()) {
+            totalRowCount++;
             String tripId = csvReader.get(fieldIndexes.get(TRIP_ID_FIELD_NAME));
             String[] currentRecord = csvReader.getValues();
 
@@ -184,7 +195,10 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
                 }
             }
         }
-        return revenueStopTimes;
+        return new RevenueData(
+            revenueStopTimes,
+            totalRowCount - (int) revenueStopTimes.values().stream().mapToLong(List::size).sum()
+        );
     }
 
     /**
@@ -230,7 +244,8 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
         FeedTransformZipTarget zipTarget,
         String tableName,
         List<String[]> rows,
-        String[] headers
+        String[] headers,
+        int deletedRowCount
     ) throws IOException {
         try(
             StringWriter stringWriter = new StringWriter();
@@ -256,7 +271,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             ) {
                 Files.copy(inputStream, getTablePathInZip(tableName, targetZipFile), StandardCopyOption.REPLACE_EXISTING);
                 zipTarget.feedTransformResult.tableTransformResults.add(
-                    new TableTransformResult(tableName, 0, 0, rows.size())
+                    new TableTransformResult(tableName, deletedRowCount, 0, 0)
                 );
             }
         }
@@ -265,5 +280,36 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     @Override
     public void validateParameters(MonitorableJob.Status status) {
         // No required.
+    }
+
+    /**
+     * Helper class to hold revenue data and the number of rows deleted after processing stop times and trip data.
+     */
+    public static class RevenueData {
+        private Map<String, List<String[]>> stopTimeRows;
+        private List<String[]> tripRows;
+        private final int deletedRowCount;
+
+        public RevenueData(Map<String, List<String[]>> stopTimeRows, int deletedRowCount) {
+            this.stopTimeRows = stopTimeRows;
+            this.deletedRowCount = deletedRowCount;
+        }
+
+        public RevenueData(List<String[]> tripRows, int deletedRowCount) {
+            this.tripRows = tripRows;
+            this.deletedRowCount = deletedRowCount;
+        }
+
+        public Map<String, List<String[]>> getStopTimeRows() {
+            return stopTimeRows;
+        }
+
+        public List<String[]> getTripRows() {
+            return tripRows;
+        }
+
+        public int getDeletedRowCount() {
+            return deletedRowCount;
+        }
     }
 }

@@ -3,6 +3,7 @@ non-revenue-trip,04:58:00,04:58:00,CONC,1,1,1,1
 non-revenue-trip,05:03:00,05:03:00,PHIL,1,1,1,1
 non-revenue-trip,05:06:00,05:06:00,WCRK,1,1,1,1
 non-revenue-trip,05:11:00,05:11:00,LAFY,1,1,1,1
+non-revenue-trip,05:12:00,05:13:00,TGLD,1,1,1,1
 revenue-trip,04:58:00,04:58:00,CONC,0,0,2,2
 revenue-trip,05:03:00,05:03:00,PHIL,1,1,1,1
 revenue-trip,05:06:00,05:06:00,WCRK,1,1,2,2
