@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.utils;
 
-import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import org.apache.commons.codec.binary.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +13,7 @@ import java.security.MessageDigest;
 
 public class HashUtils {
 
-    public static final Logger LOG = LoggerFactory.getLogger(MtcFeedResource.class);
+    public static final Logger LOG = LoggerFactory.getLogger(HashUtils.class);
 
     /**
      * Get MD5 hash for the specified file.
