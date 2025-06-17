@@ -12,12 +12,14 @@ import com.conveyal.datatools.manager.models.transform.DbTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
+import com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -34,6 +36,9 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
     private final boolean isNewVersion;
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
     private final FeedSource feedSource;
+
+    // Used in testing when the MTC extension is needed but transformations are not.
+    public static boolean ENABLE_MTC_TRANSFORMATIONS = true;
 
     /**
      * Create a job for the given feed version.
@@ -88,9 +93,21 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
         LOG.info("Processing feed for {}", feedVersion.id);
         FeedTransformRules rules = feedSource.getRulesForRetrievalMethod(feedVersion.retrievalMethod);
         boolean shouldTransform = rules != null;
+        List<ZipTransformation> zipTransformations = new ArrayList<>();
+
+        if (ENABLE_MTC_TRANSFORMATIONS && DataManager.isExtensionEnabled("mtc")) {
+            RemoveNonRevenueTripsTransformation removeNonRevenueTripsTransformation = new RemoveNonRevenueTripsTransformation();
+            // A valid (but arbitrary) table name to prevent transformation failing because this is not set.
+            removeNonRevenueTripsTransformation.table = "trips";
+            zipTransformations.add(removeNonRevenueTripsTransformation);
+        }
+
         if (shouldTransform) {
+            zipTransformations.addAll(rules.getActiveTransformations(feedVersion, ZipTransformation.class));
+        }
+
+        if (!zipTransformations.isEmpty()) {
             // Run zip transformations before load to handle any operations that must be applied directly to the zip file.
-            List<ZipTransformation> zipTransformations = rules.getActiveTransformations(feedVersion, ZipTransformation.class);
             FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(feedVersion.retrieveGtfsFile());
             for (ZipTransformation transformation : zipTransformations) {
                 ArbitraryTransformJob zipTransform = new ArbitraryTransformJob(owner, zipTarget, transformation);

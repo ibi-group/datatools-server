@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.extensions.mtc;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -56,6 +57,11 @@ class MtcFeedResourceTest extends UnitTest {
     static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+
+        // Enable MTC extension, but disable the transformations.
+        ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = false;
+        DatatoolsTest.enableMTCExtension();
+
         Auth0Connection.setAuthDisabled(true);
         // Create a project, feed sources.
         project = new Project();
@@ -81,6 +87,8 @@ class MtcFeedResourceTest extends UnitTest {
         if (project != null) {
             project.delete();
         }
+        DatatoolsTest.resetMTCExtension();
+        ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = true;
     }
 
     @Test
