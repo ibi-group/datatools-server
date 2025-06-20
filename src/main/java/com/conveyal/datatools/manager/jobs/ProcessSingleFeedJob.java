@@ -40,6 +40,9 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
     // Used in testing when the MTC extension is needed but transformations are not.
     public static boolean ENABLE_MTC_TRANSFORMATIONS = true;
 
+    // Used in testing to skip validation and speed up response times.
+    public static boolean VALIDATE_MOBILITY_DATA = true;
+
     /**
      * Create a job for the given feed version.
      */
@@ -128,7 +131,9 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
 
         // Next, validate the feed.
         addNextJob(new ValidateFeedJob(feedVersion, owner, isNewVersion));
-        addNextJob(new ValidateMobilityDataFeedJob(feedVersion, owner, isNewVersion));
+        if (VALIDATE_MOBILITY_DATA) {
+            addNextJob(new ValidateMobilityDataFeedJob(feedVersion, owner, isNewVersion));
+        }
 
         // We only need to snapshot the feed if there are transformations at the database level. In the case that there
         // are, the snapshot namespace will be the target of these modifications. If we were to apply the modifications
