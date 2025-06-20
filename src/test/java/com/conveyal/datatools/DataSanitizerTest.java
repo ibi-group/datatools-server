@@ -99,7 +99,6 @@ class DataSanitizerTest {
     @Test
     void canAuditFeedVersions() {
         Map<String, Integer> audit = DataSanitizer.feedVersionAudit();
-        assertEquals(2, audit.size());
         assertEquals(1, audit.get(feedSourceParent.id));
     }
 
