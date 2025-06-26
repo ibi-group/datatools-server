@@ -52,7 +52,7 @@ public class AutoPublishJob extends MonitorableJobWithResourceLock<FeedSource> {
                     status.fail("Could not publish this feed version because it contains GTFS+ blocking errors.");
                 }
             } catch(Exception e) {
-                status.fail("Could not read GTFS+ zip file", e);
+                status.fail("Could not read GTFS+ zip file.", e);
             }
         }
 
@@ -63,7 +63,7 @@ public class AutoPublishJob extends MonitorableJobWithResourceLock<FeedSource> {
         } else {
             // Notify feed and project subscribed users of failure.
             String message = String.format(
-                "WARNING: Auto-published feed source %s failed to deploy. Error: %s.",
+                "WARNING: Auto-published feed source %s failed to deploy. Error: %s",
                 feedSource.name,
                 status.message
             );
