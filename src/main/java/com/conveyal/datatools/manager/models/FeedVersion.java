@@ -20,12 +20,14 @@ import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.validator.MTCValidator;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.conveyal.gtfs.validator.model.Priority;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import org.bson.Document;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.mobilitydata.gtfsvalidator.runner.ApplicationType;
 import org.mobilitydata.gtfsvalidator.runner.ValidationRunner;
@@ -77,6 +79,8 @@ public class FeedVersion extends Model implements Serializable {
     private static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
     // FIXME: move this out of FeedVersion (also, it should probably not be public)?
     public static FeedStore feedStore = new FeedStore();
+
+    private static LocalDate dateOverride = null;
     /**
      * Input feed versions used to create a merged version.
      */
@@ -479,7 +483,7 @@ public class FeedVersion extends Model implements Serializable {
      */
     public boolean hasCriticalErrors() {
         return hasValidationAndLoadErrors() ||
-            hasFeedVersionExpired() ||
+            hasExpired() ||
             hasHighSeverityErrorTypes();
     }
 
@@ -501,9 +505,19 @@ public class FeedVersion extends Model implements Serializable {
      * Has this feed expired?
      * @return If the validation result last calendar date is null or has expired return true, else return false.
      */
-    private boolean hasFeedVersionExpired() {
+    @JsonIgnore
+    @BsonIgnore
+    public boolean hasExpired() {
         return validationResult.lastCalendarDate == null ||
-            LocalDate.now().isAfter(validationResult.lastCalendarDate);
+            getNowAsLocalDate().isAfter(validationResult.lastCalendarDate);
+    }
+
+    private static LocalDate getNowAsLocalDate() {
+        return dateOverride == null ? LocalDate.now() : dateOverride;
+    }
+
+    public static void setDateOverride(LocalDate value) {
+        dateOverride = value;
     }
 
     /**
