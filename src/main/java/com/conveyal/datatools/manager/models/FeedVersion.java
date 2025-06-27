@@ -80,7 +80,7 @@ public class FeedVersion extends Model implements Serializable {
     // FIXME: move this out of FeedVersion (also, it should probably not be public)?
     public static FeedStore feedStore = new FeedStore();
 
-    private static LocalDate dateOverride = null;
+    private static LocalDate dateOverrideForTesting = null;
     /**
      * Input feed versions used to create a merged version.
      */
@@ -513,11 +513,11 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     private static LocalDate getNowAsLocalDate() {
-        return dateOverride == null ? LocalDate.now() : dateOverride;
+        return dateOverrideForTesting == null ? LocalDate.now() : dateOverrideForTesting;
     }
 
-    public static void setDateOverride(LocalDate value) {
-        dateOverride = value;
+    public static void setDateOverrideForTesting(LocalDate value) {
+        dateOverrideForTesting = value;
     }
 
     /**

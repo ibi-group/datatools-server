@@ -56,7 +56,7 @@ public class AutoPublishJobTest extends UnitTest {
         // start server if it isn't already running
         DatatoolsTest.setUp();
 
-        FeedVersion.setDateOverride(LocalDate.of(2019, 3, 1));
+        FeedVersion.setDateOverrideForTesting(LocalDate.of(2019, 3, 1));
 
         // Enable MTC extension, but disable the transformations.
         ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = false;
@@ -88,7 +88,7 @@ public class AutoPublishJobTest extends UnitTest {
     @AfterEach
     void afterEach() {
         // Reset date overrides.
-        FeedVersion.setDateOverride(null);
+        FeedVersion.setDateOverrideForTesting(null);
     }
 
     @AfterAll
@@ -108,7 +108,7 @@ public class AutoPublishJobTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createPublishFeedCases")
     void shouldProcessFeed(String resourceName, LocalDate nowDate, boolean isError, String errorMessage) throws IOException {
-        FeedVersion.setDateOverride(nowDate);
+        FeedVersion.setDateOverrideForTesting(nowDate);
         // Add the version to the feed source
         FeedVersion originalFeedVersion;
         if (resourceName.endsWith(".zip")) {
@@ -171,7 +171,7 @@ public class AutoPublishJobTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createUpdateFeedInfoCases")
     void shouldUpdateFeedInfoAfterPublishComplete(String agencyId, boolean isUnknownFeedId) {
-        FeedVersion.setDateOverride(LocalDate.of(2019, 3, 1));
+        FeedVersion.setDateOverrideForTesting(LocalDate.of(2019, 3, 1));
 
         // Add the version to the feed source
         FeedVersion createdVersion = createFeedVersionFromGtfsZip(feedSource, "bart_new_lite.zip");
@@ -252,7 +252,7 @@ public class AutoPublishJobTest extends UnitTest {
      */
     @Test
     void shouldNotUpdateFromAPreviouslyPublishedVersionOnStartup() {
-        FeedVersion.setDateOverride(LocalDate.of(2019, 3, 1));
+        FeedVersion.setDateOverrideForTesting(LocalDate.of(2019, 3, 1));
 
         final int TWO_DAYS_MILLIS = 48 * 3600000;
 
