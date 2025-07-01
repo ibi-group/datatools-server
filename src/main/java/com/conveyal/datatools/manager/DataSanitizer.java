@@ -88,7 +88,7 @@ public class DataSanitizer {
         if (orphaned == 0) {
             System.out.println("No orphaned feed versions found!");
         } else {
-            System.out.printf("Orphaned feed versions (%s)%n", orphaned);
+            System.out.printf("%d orphaned feed versions:%n", orphaned);
             for (FeedVersion feedVersion : feedVersions) {
                 System.out.printf("%-10s | %-10s | %-10s | %-10s%n", "ID", "Version", "Created", "Updated");
                 System.out.printf(
