@@ -127,7 +127,7 @@ class DataSanitizerTest {
 
     @Test
     void canAuditFeedVersions() {
-        Map<String, Integer> audit = DataSanitizer.feedVersionAudit();
+        Map<String, Integer> audit = DataSanitizer.feedVersionAudit(false);
         assertEquals(1, audit.get(feedSourceParent.id));
     }
 
@@ -136,7 +136,8 @@ class DataSanitizerTest {
         // From the initial four feed versions, delete the older two.
         int deleted = DataSanitizer.deleteObsoleteFeedVersions(
             feedSourceWithObsoleteFeedVersion.id,
-            2
+            2,
+            false
         );
         assertEquals(2, deleted);
         Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(

@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.DataSanitizer;
 import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -303,6 +304,15 @@ public class FeedSourceController {
     }
 
     /**
+     * Delete all feed versions keeping just the latest.
+     * @return The number of obsolete feed versions deleted.
+     */
+    private static Integer deleteOldFeedVersions(Request req, Response res) {
+        FeedSource source = requestFeedSourceById(req, Actions.MANAGE);
+        return DataSanitizer.deleteObsoleteFeedVersions(source.id);
+    }
+
+    /**
      * HTTP endpoint to delete a feed source.
      *
      * FIXME: Should this just set a "deleted" flag instead of removing from the database entirely?
@@ -471,6 +481,7 @@ public class FeedSourceController {
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
+        get(apiPrefix + "secure/feedsource/:id/deleteOldFeedVersions", FeedSourceController::deleteOldFeedVersions, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
         post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, json::write);
         get(apiPrefix + "secure/feedsourceSummaries", FeedSourceController::getAllFeedSourceSummaries, json::write);

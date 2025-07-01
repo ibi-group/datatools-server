@@ -46,6 +46,7 @@ public class DataSanitizer {
     public static final List<String> ORPHANED_FLAGS = List.of("--orphaned", "-O");
     public static final List<String> DELETE_FLAGS = List.of("--delete", "-D");
     public static final List<String> FEED_VERSIONS_FLAGS = List.of("--feedversions", "-F");
+    public static final List<String> REMOVE_OBSOLETE_FEED_VERSIONS_FLAGS = List.of("--remove", "-R");
 
     public static void main(String[] args) throws IOException {
         initializeApplication(args, false);
@@ -60,11 +61,11 @@ public class DataSanitizer {
         Map<String, Set<String>> groupedParams = parseCommandLineArguments(arguments);
         groupedParams.forEach((flag, commandValues) -> {
             if (ORPHANED_FLAGS.contains(flag)) {
-                sanitizeDBSchemas(DELETE_FLAGS.contains(flag));
                 sanitizeOrphanedFeedVersions(DELETE_FLAGS.contains(flag));
+                sanitizeDBSchemas(DELETE_FLAGS.contains(flag));
             }
             if (FEED_VERSIONS_FLAGS.contains(flag)) {
-                feedVersionAudit();
+                feedVersionAudit(REMOVE_OBSOLETE_FEED_VERSIONS_FLAGS.contains(flag));
             }
         });
     }
@@ -116,15 +117,35 @@ public class DataSanitizer {
     }
 
     /**
+     * For a given feed source, delete all feed versions keeping just the latest.
+     */
+    public static int deleteObsoleteFeedVersions(String feedSourceId, boolean sourceIsCli) {
+        return deleteObsoleteFeedVersions(feedSourceId, 1, sourceIsCli);
+    }
+
+    /**
+     * For a given feed source, delete all feed versions keeping just the latest.
+     */
+    public static int deleteObsoleteFeedVersions(String feedSourceId) {
+        return deleteObsoleteFeedVersions(feedSourceId, 1, false);
+    }
+
+    /**
      * For a given feed source, delete feed version prior to the keep number.
      */
-    public static int deleteObsoleteFeedVersions(String feedSourceId, int numberOfPreviousVersionsToKeep) {
+    public static int deleteObsoleteFeedVersions(
+        String feedSourceId,
+        int numberOfPreviousVersionsToKeep,
+        boolean sourceIsCli
+    ) {
         Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(
             eq("feedSourceId", feedSourceId),
             Sorts.descending("version")
         );
         if (feedVersions.isEmpty() || numberOfPreviousVersionsToKeep >= feedVersions.size()) {
-            LOG.info("No feed versions or none that qualify for deletion.");
+            String message = "No feed versions or none that qualify for deletion. Feed source id: " + feedSourceId;
+            LOG.info(message);
+            if (sourceIsCli) System.out.println(message);
             return -1;
         }
 
@@ -139,13 +160,16 @@ public class DataSanitizer {
                 deleteCount++;
             }
         }
+        String message = String.format("Deleted %s feed versions from feed source id: %s", deleteCount, feedSourceId);
+        LOG.info(message);
+        if (sourceIsCli) System.out.println(message);
         return deleteCount;
     }
 
     /**
      * Group feed source and number of feed versions.
      */
-    public static Map<String, Integer> feedVersionAudit() {
+    public static Map<String, Integer> feedVersionAudit(boolean deleteObsoleteFeedVersions) {
         Map<String, Integer> audit = new HashMap<>();
         List<FeedSource> feedSources = Persistence.feedSources.getAll();
         System.out.printf("Feed version audit for %s feed sources%n", feedSources.size());
@@ -154,10 +178,18 @@ public class DataSanitizer {
             System.out.printf("%-10s | %-10s%n", "Feed Source", "No. Feed Versions");
             System.out.printf(
                 "%-10s | %-10s%n",
-                feedSource.id,
+                feedSource.name,
                 feedVersions.size()
             );
             audit.put(feedSource.id, feedVersions.size());
+        }
+
+        if (deleteObsoleteFeedVersions) {
+            audit
+                .entrySet()
+                .stream()
+                .filter(entry -> entry.getValue() > 1)
+                .forEach(entry -> deleteObsoleteFeedVersions(entry.getKey(), true));
         }
         return audit;
     }
@@ -165,7 +197,7 @@ public class DataSanitizer {
     /**
      * Group orphaned schemas and optionally delete.
      */
-    public static int sanitizeDBSchemas(boolean delete) {
+    public static void sanitizeDBSchemas(boolean delete) {
         List<String> orphanedSchemas = getOrphanedDBSchemas(getFeedVersionSchemas());
         if (orphanedSchemas.isEmpty()) {
             System.out.println("No orphaned DB schemas found!");
@@ -180,7 +212,6 @@ public class DataSanitizer {
         if (delete && !orphanedSchemas.isEmpty()) {
             System.out.println("Total orphaned DB schemas deleted: " + deleteOrphanedDBSchemas(orphanedSchemas));
         }
-        return orphanedSchemas.size();
     }
 
     /**
