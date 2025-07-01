@@ -472,7 +472,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     void canDeleteObsoleteFeedVersions() {
         SimpleHttpResponse response = TestUtils.makeRequest(
             String.format(
-                "/api/manager/secure/feedsource/%s/deleteOldFeedVersions",
+                "/api/manager/secure/feedsource/%s/deleteObsoleteFeedVersions",
                 feedSourceWithObsoleteFeedVersion.id
             ),
             null,

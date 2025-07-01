@@ -42,7 +42,8 @@ import static com.mongodb.client.model.Filters.nin;
  * configurations/test/env.yml.tmp configurations/test/server.yml.tmp --orphaned --delete
  */
 public class DataSanitizer {
-    public static final Logger LOG = LoggerFactory.getLogger(DataSanitizer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(DataSanitizer.class);
+
     public static final List<String> ORPHANED_FLAGS = List.of("--orphaned", "-O");
     public static final List<String> DELETE_FLAGS = List.of("--delete", "-D");
     public static final List<String> FEED_VERSIONS_FLAGS = List.of("--feedversions", "-F");

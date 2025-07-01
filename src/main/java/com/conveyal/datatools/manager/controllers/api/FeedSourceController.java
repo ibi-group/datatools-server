@@ -307,7 +307,7 @@ public class FeedSourceController {
      * Delete all feed versions keeping just the latest.
      * @return The number of obsolete feed versions deleted.
      */
-    private static Integer deleteOldFeedVersions(Request req, Response res) {
+    private static Integer deleteObsoleteFeedVersions(Request req, Response res) {
         FeedSource source = requestFeedSourceById(req, Actions.MANAGE);
         return DataSanitizer.deleteObsoleteFeedVersions(source.id);
     }
@@ -481,7 +481,7 @@ public class FeedSourceController {
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
-        get(apiPrefix + "secure/feedsource/:id/deleteOldFeedVersions", FeedSourceController::deleteOldFeedVersions, json::write);
+        get(apiPrefix + "secure/feedsource/:id/deleteObsoleteFeedVersions", FeedSourceController::deleteObsoleteFeedVersions, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
         post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, json::write);
         get(apiPrefix + "secure/feedsourceSummaries", FeedSourceController::getAllFeedSourceSummaries, json::write);
