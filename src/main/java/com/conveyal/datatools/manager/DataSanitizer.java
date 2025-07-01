@@ -33,7 +33,7 @@ import static com.mongodb.client.model.Aggregates.project;
 import static com.mongodb.client.model.Filters.nin;
 
 /**
- * The Data sanitizer requires the env.yml and server.yml files for configuration. Data sanitizer specific parameters
+ * The Data sanitizer requires the env.yml and server.yml files for configuration. Data sanitizer specific command-line parameters
  * should be provided after these e.g.:
  * configurations/test/env.yml.tmp configurations/test/server.yml.tmp --orphaned --delete
  */
