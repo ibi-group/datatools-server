@@ -202,7 +202,7 @@ public class DataSanitizer {
     }
 
     /**
-     * Make sure the schema qualifies as an OTP related schema.
+     * Make sure the schema qualifies as datatools-related schema.
      */
     private static boolean isValidSchema(String schemaName) {
         List<String> criticalSchemas = List.of("catalog", "information_schema", "public", "temp", "toast");
