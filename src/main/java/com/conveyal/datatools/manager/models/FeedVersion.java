@@ -623,6 +623,11 @@ public class FeedVersion extends Model implements Serializable {
         feedStore.deleteFeed(id);
         GTFS.delete(namespace, DataManager.GTFS_DATA_SOURCE);
         LOG.info("Dropped feed version's GTFS tables from Postgres.");
+        if (DataManager.isModuleEnabled("gtfsplus")) {
+            FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
+            gtfsPlusStore.deleteFeed(id + ".db");
+            gtfsPlusStore.deleteFeed(id + ".db.p");
+        }
         Persistence.feedVersions.removeById(id);
     }
 

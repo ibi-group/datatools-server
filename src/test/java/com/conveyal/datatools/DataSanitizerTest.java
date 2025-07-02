@@ -20,8 +20,8 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Map;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 import static com.conveyal.datatools.TestUtils.appendDate;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
@@ -116,13 +116,13 @@ class DataSanitizerTest {
     @Test
     void canIdentifyOrphanedDBSchemas() {
         // Other schemas will exist. For this test, just make sure the list contains the test orphaned schema.
-        List<String> orphanedSchemas = DataSanitizer.getOrphanedDBSchemas(new ArrayList<>());
+        Set<String> orphanedSchemas = DataSanitizer.getOrphanedDBSchemas(new HashSet<>());
         assertTrue(orphanedSchemas.contains(orphanedDBSchema));
     }
 
     @Test
     void canRemoveOrphanedDBSchema() {
-        assertEquals(1, DataSanitizer.deleteOrphanedDBSchemas(List.of(orphanedDBSchema)));
+        assertEquals(1, DataSanitizer.deleteOrphanedDBSchemas(Set.of(orphanedDBSchema)));
     }
 
     @Test
