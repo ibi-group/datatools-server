@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collection;
-import java.util.Map;
+import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -127,8 +127,10 @@ class DataSanitizerTest {
 
     @Test
     void canAuditFeedVersions() {
-        Map<String, Integer> audit = DataSanitizer.feedVersionAudit(false);
-        assertEquals(1, audit.get(feedSourceParent.id));
+        List<DataSanitizer.FeedVersionAudit> result = DataSanitizer.feedVersionAudit();
+        assertTrue(result.stream().anyMatch(audit -> audit.projectName.equals(project.name)));
+        assertTrue(result.stream().anyMatch(audit -> audit.feedSourceName.equals(feedSourceParent.name)));
+        assertTrue(result.stream().anyMatch(audit -> audit.feedSourceName.equals(feedSourceWithObsoleteFeedVersion.name)));
     }
 
     @Test

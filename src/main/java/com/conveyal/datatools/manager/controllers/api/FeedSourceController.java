@@ -309,7 +309,18 @@ public class FeedSourceController {
      */
     private static Integer deleteObsoleteFeedVersions(Request req, Response res) {
         FeedSource source = requestFeedSourceById(req, Actions.MANAGE);
-        return DataSanitizer.deleteObsoleteFeedVersions(source.id);
+        String maxVersionHistoryParam = req.params("maxVersionHistory");
+        if (maxVersionHistoryParam == null) {
+            logMessageAndHalt(req, 400, "Please specify max version history param");
+        }
+        int maxVersionHistory = 1;
+        try {
+            maxVersionHistory = Integer.parseInt(maxVersionHistoryParam);
+        } catch (Exception e) {
+            logMessageAndHalt(req, 400, "Please specify numeric max version history param");
+        }
+
+        return DataSanitizer.deleteObsoleteFeedVersions(source.id, maxVersionHistory);
     }
 
     /**
@@ -481,7 +492,7 @@ public class FeedSourceController {
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
-        get(apiPrefix + "secure/feedsource/:id/deleteObsoleteFeedVersions", FeedSourceController::deleteObsoleteFeedVersions, json::write);
+        get(apiPrefix + "secure/feedsource/:id/deleteObsoleteFeedVersions/:maxVersionHistory", FeedSourceController::deleteObsoleteFeedVersions, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
         post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, json::write);
         get(apiPrefix + "secure/feedsourceSummaries", FeedSourceController::getAllFeedSourceSummaries, json::write);
