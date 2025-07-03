@@ -40,7 +40,7 @@ import static com.mongodb.client.model.Filters.nin;
 /**
  * The Data sanitizer requires the env.yml and server.yml files for configuration. Data sanitizer specific command-line parameters
  * should be provided after these e.g.:
- * configurations/test/env.yml.tmp configurations/test/server.yml.tmp --orphaned --delete (or -O d)
+ * configurations/test/env.yml.tmp configurations/test/server.yml.tmp --orphaned delete (or -O d)
  */
 public class DataSanitizer {
     private static final Logger LOG = LoggerFactory.getLogger(DataSanitizer.class);
@@ -58,9 +58,9 @@ public class DataSanitizer {
         Options options = new Options();
         Option orphanedOption = Option.builder("O")
             .longOpt("orphaned")
-            .desc("Command for orphaned items (delete, d)")
-            .hasArg(true)
-            .argName("command")
+            .desc("Optional delete command for orphaned items")
+            .optionalArg(true)
+            .argName("deleteCommand")
             .build();
         options.addOption(orphanedOption);
 
@@ -68,8 +68,8 @@ public class DataSanitizer {
             CommandLineParser parser = new DefaultParser();
             CommandLine cmd = parser.parse(options, arguments);
             if (cmd.hasOption("O")) {
-                String command = cmd.getOptionValue("O");
-                boolean delete = "delete".equalsIgnoreCase(command) || "d".equalsIgnoreCase(command);
+                String deleteCommand = cmd.getOptionValue("O");
+                boolean delete = "delete".equalsIgnoreCase(deleteCommand) || "d".equalsIgnoreCase(deleteCommand);
                 sanitizeFeedVersions(delete);
                 sanitizeDBSchemas(delete);
             }
