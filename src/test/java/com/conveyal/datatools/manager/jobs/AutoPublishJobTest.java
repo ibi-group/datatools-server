@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.collect.Lists;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -19,6 +20,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -54,6 +56,8 @@ public class AutoPublishJobTest extends UnitTest {
         // start server if it isn't already running
         DatatoolsTest.setUp();
 
+        FeedVersion.setDateOverrideForTesting(LocalDate.of(2019, 3, 1));
+
         // Enable MTC extension, but disable the transformations.
         ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = false;
         DatatoolsTest.enableMTCExtension();
@@ -81,6 +85,12 @@ public class AutoPublishJobTest extends UnitTest {
         Persistence.externalFeedSourceProperties.create(agencyIdProp);
     }
 
+    @AfterEach
+    void afterEach() {
+        // Reset date overrides.
+        FeedVersion.setDateOverrideForTesting(null);
+    }
+
     @AfterAll
     public static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
@@ -97,7 +107,8 @@ public class AutoPublishJobTest extends UnitTest {
      */
     @ParameterizedTest
     @MethodSource("createPublishFeedCases")
-    void shouldProcessFeed(String resourceName, boolean isError, String errorMessage) throws IOException {
+    void shouldProcessFeed(String resourceName, LocalDate nowDate, boolean isError, String errorMessage) throws IOException {
+        FeedVersion.setDateOverrideForTesting(nowDate);
         // Add the version to the feed source
         FeedVersion originalFeedVersion;
         if (resourceName.endsWith(".zip")) {
@@ -128,21 +139,31 @@ public class AutoPublishJobTest extends UnitTest {
     }
 
     private static Stream<Arguments> createPublishFeedCases() {
+        LocalDate feedValidDate = LocalDate.of(2019, 3, 1);
         return Stream.of(
             Arguments.of(
                 "fake-agency-with-only-calendar-expire-in-2099-with-failed-referential-integrity",
+                feedValidDate,
                 true,
                 "Could not publish this feed version because it contains blocking errors."
             ),
             Arguments.of(
                 "bart_old_lite.zip",
+                feedValidDate,
                 true,
                 "Could not publish this feed version because it contains GTFS+ blocking errors."
             ),
             Arguments.of(
                 "bart_new_lite.zip",
+                feedValidDate,
                 false,
                 null
+            ),
+            Arguments.of(
+                "bart_new_lite.zip",
+                null,
+                true,
+                "Could not publish this feed version because it has expired."
             )
         );
     }
@@ -150,6 +171,8 @@ public class AutoPublishJobTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createUpdateFeedInfoCases")
     void shouldUpdateFeedInfoAfterPublishComplete(String agencyId, boolean isUnknownFeedId) {
+        FeedVersion.setDateOverrideForTesting(LocalDate.of(2019, 3, 1));
+
         // Add the version to the feed source
         FeedVersion createdVersion = createFeedVersionFromGtfsZip(feedSource, "bart_new_lite.zip");
 
@@ -229,6 +252,8 @@ public class AutoPublishJobTest extends UnitTest {
      */
     @Test
     void shouldNotUpdateFromAPreviouslyPublishedVersionOnStartup() {
+        FeedVersion.setDateOverrideForTesting(LocalDate.of(2019, 3, 1));
+
         final int TWO_DAYS_MILLIS = 48 * 3600000;
 
         // Set up a test FeedUpdater instance that fakes an external published date in the past.
