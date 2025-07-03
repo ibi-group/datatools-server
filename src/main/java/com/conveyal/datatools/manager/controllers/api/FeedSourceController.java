@@ -304,7 +304,7 @@ public class FeedSourceController {
     }
 
     /**
-     * Delete all feed versions keeping just the latest.
+     * Delete all feed versions keeping max version history.
      * @return The number of obsolete feed versions deleted.
      */
     private static Integer deleteObsoleteFeedVersions(Request req, Response res) {
