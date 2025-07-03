@@ -64,9 +64,9 @@ public class DataSanitizer {
         Options options = new Options();
         Option orphaned = Option.builder("O")
             .longOpt("orphaned")
-            .desc("Command for orphaned items (delete, d)")
-            .hasArg(true)
-            .argName("command")
+            .desc("Optional delete command for orphaned items")
+            .optionalArg(true)
+            .argName("deleteCommand")
             .build();
         Option feedVersionAudit = Option.builder("A")
             .longOpt("audit")
@@ -87,8 +87,8 @@ public class DataSanitizer {
             CommandLineParser parser = new DefaultParser();
             CommandLine cmd = parser.parse(options, arguments);
             if (cmd.hasOption("O")) {
-                String command = cmd.getOptionValue("O");
-                boolean delete = "delete".equalsIgnoreCase(command) || "d".equalsIgnoreCase(command);
+                String deleteCommand = cmd.getOptionValue("O");
+                boolean delete = "delete".equalsIgnoreCase(deleteCommand) || "d".equalsIgnoreCase(deleteCommand);
                 sanitizeOrphanedFeedVersions(delete);
                 sanitizeDBSchemas(delete);
             }
@@ -96,7 +96,7 @@ public class DataSanitizer {
                 feedVersionAudit();
             }
             if (cmd.hasOption("P")) {
-                String feedSourceId = cmd.getOptionValue("purge-feed-versions");
+                String feedSourceId = cmd.getOptionValue("P");
                 System.out.println("Purge command received for feed source id: " + feedSourceId);
                 deleteObsoleteFeedVersions(feedSourceId, true);
             }
