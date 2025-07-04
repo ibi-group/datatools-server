@@ -271,8 +271,8 @@
         <dependency>
             <groupId>com.github.ibi-group</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>b35915e2246dbb30e6e7582ddc32e90a64ee0af2</version>
             <!-- Latest dev-flex build on jitpack.io -->
+            <version>b115413db386bce4ea70284857284b07671c2906</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -459,6 +459,11 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>3.17.0</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-cli</groupId>
+            <artifactId>commons-cli</artifactId>
+            <version>1.9.0</version>
         </dependency>
     </dependencies>
 

@@ -3,11 +3,13 @@ package com.conveyal.datatools.manager.extensions.mtc;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.SqlAssert;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -18,11 +20,15 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Date;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.parseJson;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
+import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.STOP_CODE_PRIMARY_PREFIX_FIELD_NAME;
+import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME;
+import static com.conveyal.gtfs.error.NewGTFSErrorType.MISSING_STOP_CODE_PREFIX;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -51,6 +57,11 @@ class MtcFeedResourceTest extends UnitTest {
     static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+
+        // Enable MTC extension, but disable the transformations.
+        ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = false;
+        DatatoolsTest.enableMTCExtension();
+
         Auth0Connection.setAuthDisabled(true);
         // Create a project, feed sources.
         project = new Project();
@@ -76,6 +87,8 @@ class MtcFeedResourceTest extends UnitTest {
         if (project != null) {
             project.delete();
         }
+        DatatoolsTest.resetMTCExtension();
+        ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = true;
     }
 
     @Test
@@ -99,31 +112,13 @@ class MtcFeedResourceTest extends UnitTest {
 
         // Set up some entries in the ExternalFeedSourceProperties collection.
         // This one (AgencyId) should not change.
-        ExternalFeedSourceProperty agencyIdProp = new ExternalFeedSourceProperty(
-            feedSource,
-            "MTC",
-            "AgencyId",
-            AGENCY_CODE
-        );
-        Persistence.externalFeedSourceProperties.create(agencyIdProp);
+        String agencyIdPropId = createExternalFeedSourceProperties("AgencyId", AGENCY_CODE);
 
         // This one (AgencyPublicId) should be deleted after this test (not in RTD response).
-        ExternalFeedSourceProperty agencyPublicIdProp = new ExternalFeedSourceProperty(
-            feedSource,
-            "MTC",
-            "AgencyPublicId",
-            AGENCY_CODE
-        );
-        Persistence.externalFeedSourceProperties.create(agencyPublicIdProp);
+        String agencyPublicIdPropId = createExternalFeedSourceProperties("AgencyPublicId", AGENCY_CODE);
 
         // This one (AgencyEmail) should be updated with this test.
-        ExternalFeedSourceProperty agencyEmailProp = new ExternalFeedSourceProperty(
-            feedSource,
-            "MTC",
-            "AgencyEmail",
-            "old@email.example.com"
-        );
-        Persistence.externalFeedSourceProperties.create(agencyEmailProp);
+        String agencyEmailPropId = createExternalFeedSourceProperties("AgencyEmail", "old@email.example.com");
 
         // make RTD request and parse the json response
         JsonNode rtdResponse = parseJson(
@@ -137,55 +132,86 @@ class MtcFeedResourceTest extends UnitTest {
         // Also extract desired values from response
         String responseEmail = rtdResponse.get("AgencyEmail").asText();
         String responseAgencyName = rtdResponse.get("AgencyName").asText();
+        String responsePrimaryPrefix = rtdResponse.get(STOP_CODE_PRIMARY_PREFIX_FIELD_NAME).asText();
+        String responseSecondaryPrefixes = rtdResponse.get(STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME).asText();
 
         // Update MTC Feed properties in Mongo based response.
         new MtcFeedResource().updateMongoExternalFeedProperties(feedSource, rtdResponse);
 
         // Existing field AgencyId should retain the same value.
-        ExternalFeedSourceProperty updatedAgencyIdProp = Persistence.externalFeedSourceProperties.getById(agencyIdProp.id);
-        assertThat(updatedAgencyIdProp.value, equalTo(agencyIdProp.value));
+        ExternalFeedSourceProperty updatedAgencyIdProp = Persistence.externalFeedSourceProperties.getById(agencyIdPropId);
+        assertThat(updatedAgencyIdProp.value, equalTo(AGENCY_CODE));
 
         // Existing field AgencyEmail should be updated from RTD response.
-        ExternalFeedSourceProperty updatedEmailProp = Persistence.externalFeedSourceProperties.getById(agencyEmailProp.id);
+        ExternalFeedSourceProperty updatedEmailProp = Persistence.externalFeedSourceProperties.getById(agencyEmailPropId);
         assertThat(updatedEmailProp.value, equalTo(responseEmail));
 
-        // New field AgencyName (not set up above) from RTD response should be added to Mongo.
-        ExternalFeedSourceProperty newAgencyNameProp = Persistence.externalFeedSourceProperties.getOneFiltered(
+        checkForRTDPropInMongo("AgencyName", responseAgencyName);
+        String primaryPrefixPropId = checkForRTDPropInMongo(STOP_CODE_PRIMARY_PREFIX_FIELD_NAME, responsePrimaryPrefix);
+        String secondaryPrefixesPropId = checkForRTDPropInMongo(STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME, responseSecondaryPrefixes);
+
+        // Removed field AgencyPublicId from RTD should be deleted from Mongo.
+        ExternalFeedSourceProperty removedPublicIdProp = Persistence.externalFeedSourceProperties.getById(agencyPublicIdPropId);
+        assertThat(removedPublicIdProp, nullValue());
+
+        Persistence.externalFeedSourceProperties.removeById(agencyIdPropId);
+        Persistence.externalFeedSourceProperties.removeById(agencyPublicIdPropId);
+        Persistence.externalFeedSourceProperties.removeById(agencyEmailPropId);
+        Persistence.externalFeedSourceProperties.removeById(primaryPrefixPropId);
+        Persistence.externalFeedSourceProperties.removeById(secondaryPrefixesPropId);
+    }
+
+    /**
+     * Check that new fields from RTD response are added to Mongo.
+     */
+    private String checkForRTDPropInMongo(String propName, String expectedValue) {
+        ExternalFeedSourceProperty prop = Persistence.externalFeedSourceProperties.getOneFiltered(
             and(
                 eq("feedSourceId", feedSource.id),
                 eq("resourceType", "MTC"),
-                eq("name", "AgencyName")            )
+                eq("name", propName)
+            )
         );
-        assertThat(newAgencyNameProp, notNullValue());
-        assertThat(newAgencyNameProp.value, equalTo(responseAgencyName));
-
-        // Removed field AgencyPublicId from RTD should be deleted from Mongo.
-        ExternalFeedSourceProperty removedPublicIdProp = Persistence.externalFeedSourceProperties.getById(agencyPublicIdProp.id);
-        assertThat(removedPublicIdProp, nullValue());
-
-        Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
-        Persistence.externalFeedSourceProperties.removeById(agencyPublicIdProp.id);
-        Persistence.externalFeedSourceProperties.removeById(agencyEmailProp.id);
+        assertThat(prop, notNullValue());
+        assertThat(prop.value, equalTo(expectedValue));
+        return prop.id;
     }
 
     @Test
     void shouldTolerateNullObjectInExternalPropertyAgencyId() throws IOException {
         // Add an entry in the ExternalFeedSourceProperties collection
         // with AgencyId value set to null.
-        ExternalFeedSourceProperty agencyIdProp = new ExternalFeedSourceProperty(
-            feedSource,
-            "MTC",
-            "AgencyId",
-            null
-        );
-        Persistence.externalFeedSourceProperties.create(agencyIdProp);
-
+        String agencyIdProp = createExternalFeedSourceProperties("AgencyId", null);
         // Trigger the feed update process (it should not upload anything to S3).
-        FeedVersion feedVersion = createFeedVersion(feedSource,  zipFolderFiles("mini-bart-new"));
+        FeedVersion feedVersion = createFeedVersion(feedSource, zipFolderFiles("mtc-feed-resource-test"));
         MtcFeedResource mtcFeedResource = new MtcFeedResource();
         assertDoesNotThrow(() -> mtcFeedResource.feedVersionCreated(feedVersion, null));
+        Persistence.externalFeedSourceProperties.removeById(agencyIdProp);
+    }
 
-        Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
+    @Test
+    void shouldValidateStopCodePrefixes() throws IOException, SQLException {
+        String primaryPrefixPropId = createExternalFeedSourceProperties(STOP_CODE_PRIMARY_PREFIX_FIELD_NAME, "primary-1");
+        String secondaryPrefixesPropId = createExternalFeedSourceProperties(STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME, "secondary-1,secondary-2");
+
+        FeedVersion feedVersion = createFeedVersion(feedSource, zipFolderFiles("mtc-feed-resource-test"));
+        MtcFeedResource mtcFeedResource = new MtcFeedResource();
+        assertDoesNotThrow(() -> mtcFeedResource.feedVersionCreated(feedVersion, null));
+        SqlAssert sqlAssert = new SqlAssert(feedVersion);
+        sqlAssert.errors.assertCount(1, String.format("error_type='%s'", MISSING_STOP_CODE_PREFIX.name()));
+        Persistence.externalFeedSourceProperties.removeById(primaryPrefixPropId);
+        Persistence.externalFeedSourceProperties.removeById(secondaryPrefixesPropId);
+    }
+
+    private String createExternalFeedSourceProperties(String name, String value) {
+        ExternalFeedSourceProperty prop = new ExternalFeedSourceProperty(
+            feedSource,
+            "MTC",
+            name,
+            value
+        );
+        Persistence.externalFeedSourceProperties.create(prop);
+        return prop.id;
     }
 
     @ParameterizedTest
