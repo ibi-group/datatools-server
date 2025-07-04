@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
@@ -17,15 +18,18 @@ import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.graphql.fetchers.JDBCFetcher;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
+import com.conveyal.gtfs.util.InvalidNamespaceException;
 import com.conveyal.gtfs.validator.MTCValidator;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.conveyal.gtfs.validator.model.Priority;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import org.bson.Document;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.mobilitydata.gtfsvalidator.runner.ApplicationType;
 import org.mobilitydata.gtfsvalidator.runner.ValidationRunner;
@@ -77,6 +81,8 @@ public class FeedVersion extends Model implements Serializable {
     private static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
     // FIXME: move this out of FeedVersion (also, it should probably not be public)?
     public static FeedStore feedStore = new FeedStore();
+
+    private static LocalDate dateOverrideForTesting = null;
     /**
      * Input feed versions used to create a merged version.
      */
@@ -479,7 +485,7 @@ public class FeedVersion extends Model implements Serializable {
      */
     public boolean hasCriticalErrors() {
         return hasValidationAndLoadErrors() ||
-            hasFeedVersionExpired() ||
+            hasExpired() ||
             hasHighSeverityErrorTypes();
     }
 
@@ -501,9 +507,19 @@ public class FeedVersion extends Model implements Serializable {
      * Has this feed expired?
      * @return If the validation result last calendar date is null or has expired return true, else return false.
      */
-    private boolean hasFeedVersionExpired() {
+    @JsonIgnore
+    @BsonIgnore
+    public boolean hasExpired() {
         return validationResult.lastCalendarDate == null ||
-            LocalDate.now().isAfter(validationResult.lastCalendarDate);
+            getNowAsLocalDate().isAfter(validationResult.lastCalendarDate);
+    }
+
+    private static LocalDate getNowAsLocalDate() {
+        return dateOverrideForTesting == null ? LocalDate.now() : dateOverrideForTesting;
+    }
+
+    public static void setDateOverrideForTesting(LocalDate value) {
+        dateOverrideForTesting = value;
     }
 
     /**
@@ -612,6 +628,21 @@ public class FeedVersion extends Model implements Serializable {
         } catch (Exception e) {
             LOG.warn("Error deleting version", e);
         }
+    }
+
+    /**
+     * Delete resources related to this orphaned feed version. Then delete the orphaned feed version.
+     */
+    public void deleteOrphan() throws SQLException, InvalidNamespaceException, CheckedAWSException {
+        feedStore.deleteFeed(id);
+        GTFS.delete(namespace, DataManager.GTFS_DATA_SOURCE);
+        LOG.info("Dropped feed version's GTFS tables from Postgres.");
+        if (DataManager.isModuleEnabled("gtfsplus")) {
+            FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
+            gtfsPlusStore.deleteFeed(id + ".db");
+            gtfsPlusStore.deleteFeed(id + ".db.p");
+        }
+        Persistence.feedVersions.removeById(id);
     }
 
     /**

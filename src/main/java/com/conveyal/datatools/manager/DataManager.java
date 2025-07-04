@@ -113,6 +113,9 @@ public class DataManager {
     }
 
     static void initializeApplication(String[] args) throws IOException {
+        initializeApplication(args, true);
+    }
+    static void initializeApplication(String[] args, boolean initScheduledTasks) throws IOException {
         // Load configuration files (env.yml and server.yml).
         loadConfig(args);
         loadProperties();
@@ -142,7 +145,7 @@ public class DataManager {
         Persistence.initialize();
 
         // Initialize scheduled tasks
-        Scheduler.initialize();
+        if (initScheduledTasks) Scheduler.initialize();
     }
 
     /*
