@@ -158,6 +158,17 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
         assertFalse(hasNonRevenueTrips(zipTarget.gtfsFile.getAbsolutePath()));
     }
 
+    @Test
+    void testDirectNonRevenueTripRemovalTransformationFail() throws Exception {
+        // Feed is missing required pickup and drop off fields. This will stop the transformation, but should not flag
+        // it has failed. Subsequent transformations and import can then still take place.
+        File zip = zipFolderFiles("non-revenue-trips-fail");
+        FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(zip);
+        MonitorableJob.Status status = new MonitorableJob.Status();
+        trans.transform(zipTarget, status);
+        assertFalse(status.error);
+    }
+
     private void hadExpectTransformResults(List<TableTransformResult> tableTransformResults) {
         assertEquals(2, tableTransformResults.size());
         assertEquals(5, tableTransformResults.get(0).deletedCount);
