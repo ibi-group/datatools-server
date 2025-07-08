@@ -75,7 +75,7 @@ class DataSanitizerTest {
         // Delete feed version to orphan DB schema.
         Persistence.feedVersions.removeById(feedVersionWithOrphanDBSchema.id);
 
-        for(int i=0; i<4; i++){
+        for(int i=0; i<5; i++){
             createFeedVersion(
                 feedSourceWithObsoleteFeedVersion,
                 zipFolderFiles("fake-agency-with-only-calendar")
@@ -135,18 +135,18 @@ class DataSanitizerTest {
 
     @Test
     void canDeleteObsoleteFeedVersions() {
-        // From the initial four feed versions, delete the older two.
+        // From the initial four feed versions, keep the two most recent.
         int deleted = DataSanitizer.deleteObsoleteFeedVersions(
             feedSourceWithObsoleteFeedVersion.id,
             2,
             false
         );
-        assertEquals(2, deleted);
+        assertEquals(3, deleted);
         Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(
             eq("feedSourceId", feedSourceWithObsoleteFeedVersion.id),
             Sorts.descending("version")
         );
-        // Feed versions are renumbered after being deleted. Should no longer have versions three and four.
+        // Feed versions are renumbered after being deleted. Should no longer have versions 3, 4 and 5.
         for (FeedVersion feedVersion : feedVersions) {
             assertTrue(feedVersion.version <= 2);
         }

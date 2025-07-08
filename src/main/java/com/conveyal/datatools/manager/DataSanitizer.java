@@ -1,13 +1,11 @@
 package com.conveyal.datatools.manager;
 
-import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.FeedVersionSummary;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.util.InvalidNamespaceException;
 import com.mongodb.client.model.Sorts;
 import com.conveyal.gtfs.util.Util;
@@ -146,15 +144,15 @@ public class DataSanitizer {
     /**
      * For a given feed source, delete all feed versions keeping just the latest.
      */
-    public static int deleteObsoleteFeedVersions(String feedSourceId, boolean sourceIsCli) {
-        return deleteObsoleteFeedVersions(feedSourceId, 1, sourceIsCli);
+    public static void deleteObsoleteFeedVersions(String feedSourceId, boolean sourceIsCli) {
+        deleteObsoleteFeedVersions(feedSourceId, 1, sourceIsCli);
     }
 
     /**
-     * For a given feed source, delete all feed versions keeping just the latest.
+     * For a given feed source, delete all feed versions prior to the keep number.
      */
-    public static int deleteObsoleteFeedVersions(String feedSourceId, int maxVersionHistory) {
-        return deleteObsoleteFeedVersions(feedSourceId, maxVersionHistory, false);
+    public static int deleteObsoleteFeedVersions(String feedSourceId, int numberOfVersionsToKeep) {
+        return deleteObsoleteFeedVersions(feedSourceId, numberOfVersionsToKeep, false);
     }
 
     /**
@@ -162,14 +160,14 @@ public class DataSanitizer {
      */
     public static int deleteObsoleteFeedVersions(
         String feedSourceId,
-        int maxVersionHistory,
+        int numberOfVersionsToKeep,
         boolean sourceIsCli
     ) {
         Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(
             eq("feedSourceId", feedSourceId),
             Sorts.descending("version")
         );
-        if (feedVersions.isEmpty() || maxVersionHistory >= feedVersions.size()) {
+        if (feedVersions.isEmpty() || numberOfVersionsToKeep >= feedVersions.size()) {
             String message = "No feed versions or none that qualify for deletion. Feed source id: " + feedSourceId;
             LOG.info(message);
             if (sourceIsCli) System.out.println(message);
@@ -180,7 +178,7 @@ public class DataSanitizer {
         int deleteCount = 0;
         
         for (FeedVersion feedVersion : feedVersions) {
-            if (keepCount < maxVersionHistory) {
+            if (keepCount < numberOfVersionsToKeep) {
                 keepCount++;
             } else {
                 feedVersion.delete();
@@ -211,10 +209,10 @@ public class DataSanitizer {
                 audit.add(new FeedVersionAudit(project.name, feedSource.name, feedVersions.size()));
 
                 if (!hasHeader) {
-                    System.out.printf("%-20s | %-50s | %-20s%n", "No. Feed Versions", "Feed Source", "Project");
+                    System.out.printf("%-40s | %-40s | %-40s | %s%n", "Project", "Feed Source", "Feed Source id", "versions");
                     hasHeader = true;
                 }
-                System.out.printf("%-20d | %-50s | %-20s%n", feedVersions.size(), feedSource.name, project.name);
+                System.out.printf("%-40s | %-40s | %-40s | %s%n", project.name, feedSource.name, feedSource.id, feedVersions.size());
             }
         }
 
@@ -251,13 +249,9 @@ public class DataSanitizer {
     private static int deleteOrphanedFeedVersions(List<FeedVersion> feedVersions) {
         int deletedFeedVersions = 0;
         for (FeedVersion feedVersion : feedVersions) {
-            try {
-                System.out.println("Deleting orphaned feed version: " + feedVersion.id);
-                feedVersion.deleteOrphan();
-                deletedFeedVersions++;
-            } catch (SQLException | CheckedAWSException | InvalidNamespaceException e) {
-                System.err.printf("Failed to delete feed version: %s. %s%n", feedVersion.id, e.getMessage());
-            }
+            System.out.println("Deleting orphaned feed version: " + feedVersion.id);
+            feedVersion.deleteOrphan();
+            deletedFeedVersions++;
         }
         return deletedFeedVersions;
     }
@@ -268,12 +262,7 @@ public class DataSanitizer {
     public static int deleteOrphanedDBSchemas(Set<String> orphanedSchemas) {
         int deletedSchemas = 0;
         for (String orphanedSchema : orphanedSchemas) {
-            try {
-                GTFS.delete(orphanedSchema, DataManager.GTFS_DATA_SOURCE);
-                LOG.info("Dropped orphaned DB schema from Postgres.");
-            } catch (SQLException | InvalidNamespaceException e) {
-                System.err.printf("Failed to delete DB schema: %s. %s%n", orphanedSchema, e.getMessage());
-            }
+            FeedVersion.deleteDBSchema(orphanedSchema);
             deletedSchemas++;
         }
         return deletedSchemas;
