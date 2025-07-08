@@ -161,7 +161,7 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
     @Test
     void testDirectNonRevenueTripRemovalTransformationFail() throws Exception {
         // Feed is missing required pickup and drop off fields. This will stop the transformation, but should not flag
-        // it has failed. Subsequent transformations and import can then still take place.
+        // it as failed. Subsequent transformations and import can then still take place.
         File zip = zipFolderFiles("non-revenue-trips-fail");
         FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(zip);
         MonitorableJob.Status status = new MonitorableJob.Status();
