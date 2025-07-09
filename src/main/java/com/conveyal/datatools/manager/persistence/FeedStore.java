@@ -139,7 +139,9 @@ public class FeedStore {
         // NOTE: depending on the feed store, there may not be a feedSource provided (e.g., gtfsplus)
         File file = new File(path, id);
         LOG.info("Writing file to {}", file.getAbsolutePath());
-        ByteStreams.copy(inputStream, new FileOutputStream(file));
+        try (InputStream stream = inputStream; FileOutputStream outputStream = new FileOutputStream(file)) {
+            ByteStreams.copy(stream, outputStream);
+        }
         if (feedSource != null && !DataManager.useS3) {
             // Store latest as feed-source-id.zip if feedSource provided and if not using s3
             copyVersionToLatest(file, feedSource);
