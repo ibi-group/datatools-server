@@ -149,13 +149,6 @@ public class DataSanitizer {
     }
 
     /**
-     * For a given feed source, delete all feed versions prior to the keep number.
-     */
-    public static int deleteObsoleteFeedVersions(String feedSourceId, int numberOfVersionsToKeep) {
-        return deleteObsoleteFeedVersions(feedSourceId, numberOfVersionsToKeep, false);
-    }
-
-    /**
      * For a given feed source, delete feed version prior to the keep number.
      */
     public static int deleteObsoleteFeedVersions(
