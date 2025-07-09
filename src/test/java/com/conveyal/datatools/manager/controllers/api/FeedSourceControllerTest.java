@@ -328,8 +328,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(BAD_REQUEST_400, createInvalidFeedSourceResponse.status);
         // Create feed source with labels
         SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
-            JsonUtil.toJson(feedSourceWithLabels),
-            HttpUtils.REQUEST_METHOD.POST
+                JsonUtil.toJson(feedSourceWithLabels),
+                HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(OK_200, createFeedSourceResponse.status);
 
