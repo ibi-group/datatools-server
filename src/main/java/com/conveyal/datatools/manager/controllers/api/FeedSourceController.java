@@ -4,7 +4,6 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.DataSanitizer;
 import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -304,26 +303,6 @@ public class FeedSourceController {
     }
 
     /**
-     * Delete all feed versions keeping max version history.
-     * @return The number of obsolete feed versions deleted.
-     */
-    private static Integer deleteObsoleteFeedVersions(Request req, Response res) {
-        FeedSource source = requestFeedSourceById(req, Actions.MANAGE);
-        String maxVersionHistoryParam = req.params("maxVersionHistory");
-        if (maxVersionHistoryParam == null) {
-            logMessageAndHalt(req, 400, "Please specify max version history param");
-        }
-        int maxVersionHistory = 1;
-        try {
-            maxVersionHistory = Integer.parseInt(maxVersionHistoryParam);
-        } catch (Exception e) {
-            logMessageAndHalt(req, 400, "Please specify numeric max version history param");
-        }
-
-        return DataSanitizer.deleteObsoleteFeedVersions(source.id, maxVersionHistory);
-    }
-
-    /**
      * HTTP endpoint to delete a feed source.
      *
      * FIXME: Should this just set a "deleted" flag instead of removing from the database entirely?
@@ -492,7 +471,6 @@ public class FeedSourceController {
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
-        get(apiPrefix + "secure/feedsource/:id/deleteObsoleteFeedVersions/:maxVersionHistory", FeedSourceController::deleteObsoleteFeedVersions, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
         post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, json::write);
         get(apiPrefix + "secure/feedsourceSummaries", FeedSourceController::getAllFeedSourceSummaries, json::write);

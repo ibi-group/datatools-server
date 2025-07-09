@@ -4,7 +4,6 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
-import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -33,9 +32,6 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
-import static com.conveyal.datatools.TestUtils.appendDate;
-import static com.conveyal.datatools.TestUtils.zipFolderFiles;
-import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static com.mongodb.client.model.Filters.eq;
 import static org.eclipse.jetty.http.HttpStatus.BAD_REQUEST_400;
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
@@ -67,15 +63,10 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static FeedVersion feedVersionFromPinnedDeployment = null;
     private static Deployment deploymentPinned = null;
 
-    private static FeedSource feedSourceWithObsoleteFeedVersion;
-    private static FeedVersion feedVersionLatest;
-    private static FeedVersion feedVersionObsolete;
-
     @BeforeAll
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
-        ProcessSingleFeedJob.VALIDATE_MOBILITY_DATA = false;
         project = new Project();
         project.name = "ProjectOne";
         project.autoFetchFeeds = true;
@@ -98,19 +89,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         setUpFeedVersionFromLatestDeployment();
         setUpFeedVersionFromPinnedDeployment();
-
-        feedSourceWithObsoleteFeedVersion = new FeedSource(appendDate("Test Feed 3"), project.id, MANUALLY_UPLOADED);
-        Persistence.feedSources.create(feedSourceWithObsoleteFeedVersion);
-
-        feedVersionObsolete = TestUtils.createFeedVersion(
-            feedSourceWithObsoleteFeedVersion,
-            zipFolderFiles("fake-agency-with-only-calendar")
-        );
-
-        feedVersionLatest = TestUtils.createFeedVersion(
-            feedSourceWithObsoleteFeedVersion,
-            zipFolderFiles("fake-agency-with-only-calendar")
-        );
 
     }
 
@@ -198,7 +176,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     @AfterAll
     public static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
-        ProcessSingleFeedJob.VALIDATE_MOBILITY_DATA = true;
         if (project != null) {
             Persistence.projects.removeById(project.id);
         }
@@ -216,18 +193,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         }
         if (adminOnlyLabel != null) {
             Persistence.labels.removeById(adminOnlyLabel.id);
-        }
-
-        if (feedSourceWithObsoleteFeedVersion != null) {
-            Persistence.feedSources.removeById(feedSourceWithObsoleteFeedVersion.id);
-        }
-
-        if (feedVersionLatest != null) {
-            Persistence.feedVersions.removeById(feedVersionLatest.id);
-        }
-
-        if (feedVersionObsolete != null) {
-            Persistence.feedVersions.removeById(feedVersionObsolete.id);
         }
         tearDownDeployedFeedVersion();
     }
@@ -338,13 +303,13 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     public void createFeedSourceWithLabels() {
         // Create labels
         SimpleHttpResponse createFirstLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
-                JsonUtil.toJson(publicLabel),
-                HttpUtils.REQUEST_METHOD.POST
+            JsonUtil.toJson(publicLabel),
+            HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(OK_200, createFirstLabelResponse.status);
         SimpleHttpResponse createSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
-                JsonUtil.toJson(adminOnlyLabel),
-                HttpUtils.REQUEST_METHOD.POST
+            JsonUtil.toJson(adminOnlyLabel),
+            HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(OK_200, createSecondLabelResponse.status);
 
@@ -357,14 +322,14 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         // Create feed source with invalid labels
         feedSourceWithInvalidLabels.labelIds.add("does not exist");
         SimpleHttpResponse createInvalidFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
-                JsonUtil.toJson(feedSourceWithInvalidLabels),
-                HttpUtils.REQUEST_METHOD.POST
+            JsonUtil.toJson(feedSourceWithInvalidLabels),
+            HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(BAD_REQUEST_400, createInvalidFeedSourceResponse.status);
         // Create feed source with labels
         SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
-                JsonUtil.toJson(feedSourceWithLabels),
-                HttpUtils.REQUEST_METHOD.POST
+            JsonUtil.toJson(feedSourceWithLabels),
+            HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(OK_200, createFeedSourceResponse.status);
 
@@ -384,8 +349,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         // Test that after deleting a label, it's deleted from the feed source and project
         SimpleHttpResponse deleteSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label/" + adminOnlyLabel.id,
-                null,
-                HttpUtils.REQUEST_METHOD.DELETE
+            null,
+            HttpUtils.REQUEST_METHOD.DELETE
         );
         assertEquals(OK_200, deleteSecondLabelResponse.status);
         assertEquals(1, labelCountForFeed(feedSourceWithLabels.id));
@@ -466,22 +431,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.startDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.endDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
-    }
-
-    @Test
-    void canDeleteObsoleteFeedVersions() {
-        SimpleHttpResponse response = TestUtils.makeRequest(
-            String.format(
-                "/api/manager/secure/feedsource/%s/deleteObsoleteFeedVersions/1",
-                feedSourceWithObsoleteFeedVersion.id
-            ),
-            null,
-            HttpUtils.REQUEST_METHOD.GET
-        );
-        assertEquals(OK_200, response.status);
-        assertEquals("1", response.body);
-        assertNotNull(Persistence.feedVersions.getById(feedVersionLatest.id));
-        assertNull(Persistence.feedVersions.getById(feedVersionObsolete.id));
     }
 
     private static FeedSource createFeedSource(String name, URL url, Project project) {
