@@ -303,13 +303,13 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     public void createFeedSourceWithLabels() {
         // Create labels
         SimpleHttpResponse createFirstLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
-            JsonUtil.toJson(publicLabel),
-            HttpUtils.REQUEST_METHOD.POST
+                JsonUtil.toJson(publicLabel),
+                HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(OK_200, createFirstLabelResponse.status);
         SimpleHttpResponse createSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
-            JsonUtil.toJson(adminOnlyLabel),
-            HttpUtils.REQUEST_METHOD.POST
+                JsonUtil.toJson(adminOnlyLabel),
+                HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(OK_200, createSecondLabelResponse.status);
 
@@ -322,8 +322,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         // Create feed source with invalid labels
         feedSourceWithInvalidLabels.labelIds.add("does not exist");
         SimpleHttpResponse createInvalidFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
-            JsonUtil.toJson(feedSourceWithInvalidLabels),
-            HttpUtils.REQUEST_METHOD.POST
+                JsonUtil.toJson(feedSourceWithInvalidLabels),
+                HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(BAD_REQUEST_400, createInvalidFeedSourceResponse.status);
         // Create feed source with labels
@@ -349,8 +349,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         // Test that after deleting a label, it's deleted from the feed source and project
         SimpleHttpResponse deleteSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label/" + adminOnlyLabel.id,
-            null,
-            HttpUtils.REQUEST_METHOD.DELETE
+                null,
+                HttpUtils.REQUEST_METHOD.DELETE
         );
         assertEquals(OK_200, deleteSecondLabelResponse.status);
         assertEquals(1, labelCountForFeed(feedSourceWithLabels.id));
