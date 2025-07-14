@@ -139,7 +139,7 @@ public class DeploymentController {
         }
         AmazonS3URI uri = new AmazonS3URI(uriString);
 
-        // If a redirect query param is provided, find the matching job summary.
+        // If a redirect query param is provided, pass it along to the download method.
         boolean redirect = Boolean.parseBoolean(req.queryParams("redirect"));
 
         // Assume the alternative role if needed to download the deploy artifact.
