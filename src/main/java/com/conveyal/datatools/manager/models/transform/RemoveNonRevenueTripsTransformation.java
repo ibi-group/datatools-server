@@ -36,6 +36,9 @@ import static com.conveyal.gtfs.loader.Field.getFieldIndex;
  * This transformation removes non revenue trips from a feed. Establishing trips where _all_ related stop times have
  * "no pickup available" or "no continuous stopping pickup". Then remove these stop times and related trips from the
  * feed. "Non revenue" stops are kept because the transit ops systems use these in the published feed for all trips.
+ *
+ * If the transformation fails for any reason e.g. because of missing fields, the transformation is skipped instead of
+ * being failed. This allows subsequent transformations to take place and for the import to still succeed.
  */
 public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     private static final Logger LOG = LoggerFactory.getLogger(RemoveNonRevenueTripsTransformation.class);
@@ -60,8 +63,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             Field[] fieldsFoundInStopTimes = gtfsTable.getFieldsFromFieldHeaders(headersForStopTime, null);
             Map<String, Integer> fieldIndexes = getFieldIndexes(fieldsFoundInStopTimes);
             if (!hasRequiredFields(fieldIndexes)) {
-                status.error = true;
-                status.fail("Unable to remove non revenue trips because the stop times file does not contain all required fields.");
+                LOG.warn("Unable to remove non revenue trips because the stop times file does not contain all required fields.");
                 return;
             }
 
@@ -76,8 +78,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             Field[] fieldsFoundInStopTrips = gtfsTable.getFieldsFromFieldHeaders(headersForTrips, null);
             int tripIdFieldIndex = getFieldIndex(fieldsFoundInStopTrips, TRIP_ID_FIELD_NAME);
             if (tripIdFieldIndex == -1) {
-                status.error = true;
-                status.fail("Unable to remove non revenue trips because the trips file does not contain the required trip id field.");
+                LOG.warn("Unable to remove non revenue trips because the trips file does not contain the required trip id field.");
                 return;
             }
             RevenueData revenueTrips = getAllRevenueTrips(csvReaderForTrips, revenueStopTimes.getStopTimeRows().keySet(), tripIdFieldIndex);
@@ -101,7 +102,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
                 revenueTrips.getDeletedRowCount()
             );
         } catch (Exception e) {
-            status.fail("Unknown error encountered while attempting to remove non revenue trip from zip file.", e);
+            LOG.error("Unknown error encountered while attempting to remove non revenue trip from zip file.", e);
         }
     }
 
