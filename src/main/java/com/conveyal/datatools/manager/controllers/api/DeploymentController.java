@@ -607,8 +607,9 @@ public class DeploymentController {
         options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
         get(apiPrefix + "secure/deployments/:id/artifact", DeploymentController::downloadBuildArtifact);
-        // This path allows the downloaded artifact file to be named anything
-        get(apiPrefix + "secure/deployments/:id/artifact/:ignored", DeploymentController::downloadBuildArtifact);
+        // This path allows the downloaded artifact file to be named anything. Without this line, the downloaded file
+        // will be named `artifact`.
+        get(apiPrefix + "secure/deployments/:id/artifact/:expectedFileName", DeploymentController::downloadBuildArtifact);
         get(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::fetchEC2InstanceSummaries, slimJson::write);
         delete(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::terminateEC2InstanceForDeployment, slimJson::write);
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, fullJson::write);
