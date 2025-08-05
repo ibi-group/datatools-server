@@ -1,11 +1,13 @@
 package com.conveyal.datatools.manager;
 
-import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.FeedVersionSummary;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.util.InvalidNamespaceException;
+import com.mongodb.client.model.Sorts;
 import com.conveyal.gtfs.util.Util;
 import com.google.common.collect.Lists;
 import com.mongodb.client.model.Projections;
@@ -26,7 +28,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -34,12 +38,13 @@ import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
 import static com.conveyal.datatools.manager.DataManager.initializeApplication;
+import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Aggregates.project;
 import static com.mongodb.client.model.Filters.nin;
 
 /**
- * The Data sanitizer requires the env.yml and server.yml files for configuration. Data sanitizer specific command-line parameters
- * should be provided after these e.g.:
+ * The Data sanitizer requires the env.yml and server.yml files for configuration. Data sanitizer specific command-line
+ * parameters should be provided after these e.g.:
  * configurations/test/env.yml.tmp configurations/test/server.yml.tmp --orphaned delete (or -O d)
  */
 public class DataSanitizer {
@@ -56,13 +61,26 @@ public class DataSanitizer {
      */
     public static void parseArguments(String[] arguments) {
         Options options = new Options();
-        Option orphanedOption = Option.builder("O")
+        Option orphaned = Option.builder("O")
             .longOpt("orphaned")
             .desc("Optional delete command for orphaned items")
             .optionalArg(true)
             .argName("deleteCommand")
             .build();
-        options.addOption(orphanedOption);
+        Option feedVersionAudit = Option.builder("A")
+            .longOpt("audit")
+            .desc("Command for feed version audit")
+            .hasArg(false)
+            .build();
+        Option purge = Option.builder("P")
+            .longOpt("purge-feed-versions")
+            .desc("Command for purging all but the latest feed version for a feed source")
+            .hasArg(true)
+            .argName("feedSourceId")
+            .build();
+        options.addOption(orphaned);
+        options.addOption(feedVersionAudit);
+        options.addOption(purge);
 
         try {
             CommandLineParser parser = new DefaultParser();
@@ -70,8 +88,16 @@ public class DataSanitizer {
             if (cmd.hasOption("O")) {
                 String deleteCommand = cmd.getOptionValue("O");
                 boolean delete = "delete".equalsIgnoreCase(deleteCommand) || "d".equalsIgnoreCase(deleteCommand);
-                sanitizeFeedVersions(delete);
+                sanitizeOrphanedFeedVersions(delete);
                 sanitizeDBSchemas(delete);
+            }
+            if (cmd.hasOption("A")) {
+                feedVersionAudit();
+            }
+            if (cmd.hasOption("P")) {
+                String feedSourceId = cmd.getOptionValue("P");
+                System.out.println("Purge command received for feed source id: " + feedSourceId);
+                deleteObsoleteFeedVersions(feedSourceId, true);
             }
         } catch (ParseException e) {
             System.out.println(e.getMessage());
@@ -84,7 +110,7 @@ public class DataSanitizer {
     /**
      * Group orphaned feed versions and optionally delete.
      */
-    public static int sanitizeFeedVersions(boolean delete) {
+    public static int sanitizeOrphanedFeedVersions(boolean delete) {
         List<FeedVersion> feedVersions = getOrphanedFeedVersions();
         int orphaned = feedVersions.size();
         if (orphaned == 0) {
@@ -117,6 +143,91 @@ public class DataSanitizer {
     }
 
     /**
+     * For a given feed source, delete all feed versions keeping just the latest.
+     */
+    public static void deleteObsoleteFeedVersions(String feedSourceId, boolean sourceIsCli) {
+        deleteObsoleteFeedVersions(feedSourceId, 1, sourceIsCli);
+    }
+
+    /**
+     * For a given feed source, delete feed version prior to the keep number.
+     */
+    public static int deleteObsoleteFeedVersions(
+        String feedSourceId,
+        int numberOfVersionsToKeep,
+        boolean sourceIsCli
+    ) {
+        Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(
+            eq("feedSourceId", feedSourceId),
+            Sorts.descending("version")
+        );
+        if (feedVersions.isEmpty() || numberOfVersionsToKeep >= feedVersions.size()) {
+            String message = "No feed versions or none that qualify for deletion. Feed source id: " + feedSourceId;
+            LOG.info(message);
+            if (sourceIsCli) System.out.println(message);
+            return -1;
+        }
+
+        int keepCount = 0;
+        int deleteCount = 0;
+        
+        for (FeedVersion feedVersion : feedVersions) {
+            if (keepCount < numberOfVersionsToKeep) {
+                keepCount++;
+            } else {
+                feedVersion.delete();
+                deleteCount++;
+            }
+        }
+        String message = String.format("Deleted %s feed versions from feed source id: %s", deleteCount, feedSourceId);
+        LOG.info(message);
+        if (sourceIsCli) System.out.println(message);
+        return deleteCount;
+    }
+
+    /**
+     * Group feed source and number of feed versions.
+     */
+    public static List<FeedVersionAudit> feedVersionAudit() {
+        System.out.println("Producing feed version audit...");
+        List<FeedVersionAudit> audit = new ArrayList<>();
+
+        List<Project> projects = Persistence.projects.getAll();
+
+        for (Project project : projects) {
+            Collection<FeedSource> feedSources = project.retrieveProjectFeedSources();
+
+            for (FeedSource feedSource : feedSources) {
+                Collection<FeedVersionSummary> feedVersions = feedSource.retrieveFeedVersionSummaries();
+                audit.add(new FeedVersionAudit(project.name, feedSource.name, feedSource.id, feedVersions.size()));
+            }
+        }
+
+        Collections.sort(audit);
+
+        if (!audit.isEmpty()) {
+            boolean hasHeader = false;
+            for (FeedVersionAudit feedVersionAudit : audit) {
+                if (!hasHeader) {
+                    System.out.printf("%-40s | %-40s | %-40s | %s%n", "Project", "Feed Source", "Feed Source Id", "No. Feed Versions");
+                    hasHeader = true;
+                }
+                System.out.printf(
+                    "%-40s | %-40s | %-40s | %s%n",
+                    feedVersionAudit.projectName,
+                    feedVersionAudit.feedSourceName,
+                    feedVersionAudit.feedSourceId,
+                    feedVersionAudit.numberOfFeedVersions
+                );
+            }
+        } else {
+            System.out.println("No feed versions to audit!");
+        }
+        System.out.println("Feed version audit complete.");
+        return audit;
+    }
+
+    /**
      * Group orphaned schemas and optionally delete.
      */
     public static void sanitizeDBSchemas(boolean delete) {
@@ -142,13 +253,9 @@ public class DataSanitizer {
     private static int deleteOrphanedFeedVersions(List<FeedVersion> feedVersions) {
         int deletedFeedVersions = 0;
         for (FeedVersion feedVersion : feedVersions) {
-            try {
-                System.out.println("Deleting orphaned feed version: " + feedVersion.id);
-                feedVersion.deleteOrphan();
-                deletedFeedVersions++;
-            } catch (SQLException | CheckedAWSException | InvalidNamespaceException e) {
-                System.err.printf("Failed to delete feed version: %s. %s%n", feedVersion.id, e.getMessage());
-            }
+            System.out.println("Deleting orphaned feed version: " + feedVersion.id);
+            feedVersion.deleteOrphan();
+            deletedFeedVersions++;
         }
         return deletedFeedVersions;
     }
@@ -159,12 +266,7 @@ public class DataSanitizer {
     public static int deleteOrphanedDBSchemas(Set<String> orphanedSchemas) {
         int deletedSchemas = 0;
         for (String orphanedSchema : orphanedSchemas) {
-            try {
-                GTFS.delete(orphanedSchema, DataManager.GTFS_DATA_SOURCE);
-                LOG.info("Dropped orphaned DB schema from Postgres.");
-            } catch (SQLException | InvalidNamespaceException e) {
-                System.err.printf("Failed to delete DB schema: %s. %s%n", orphanedSchema, e.getMessage());
-            }
+            FeedVersion.deleteDBSchema(orphanedSchema);
             deletedSchemas++;
         }
         return deletedSchemas;
@@ -192,7 +294,6 @@ public class DataSanitizer {
         Set<String> orphanedSchemas = new HashSet<>();
         try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
             String sql = String.format("SELECT nspname FROM pg_namespace %s", whereClause);
-            LOG.info(sql);
             PreparedStatement preparedStatement = connection.prepareStatement(sql);
             ResultSet resultSet = preparedStatement.executeQuery();
             while (resultSet.next()) {
@@ -239,5 +340,25 @@ public class DataSanitizer {
             fields.add(feedVersionDocument.getString(field));
         }
         return fields;
+    }
+
+    public static class FeedVersionAudit implements Comparable<FeedVersionAudit> {
+        public final String projectName;
+        public final String feedSourceName;
+        public final String feedSourceId;
+        public final int numberOfFeedVersions;
+
+        FeedVersionAudit(String projectName, String feedSourceName, String feedSourceId, int numberOfFeedVersions) {
+            this.projectName = projectName;
+            this.feedSourceName = feedSourceName;
+            this.feedSourceId = feedSourceId;
+            this.numberOfFeedVersions = numberOfFeedVersions;
+        }
+
+        @Override
+        public int compareTo(FeedVersionAudit other) {
+            // Sort by numberOfFeedVersions in ascending order
+            return Integer.compare(other.numberOfFeedVersions, this.numberOfFeedVersions);
+        }
     }
 }
