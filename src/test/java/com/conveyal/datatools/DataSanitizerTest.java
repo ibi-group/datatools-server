@@ -75,7 +75,7 @@ class DataSanitizerTest {
         // Delete feed version to orphan DB schema.
         Persistence.feedVersions.removeById(feedVersionWithOrphanDBSchema.id);
 
-        for(int i=0; i<5; i++){
+        for (int i=0; i<5; i++) {
             createFeedVersion(
                 feedSourceWithObsoleteFeedVersion,
                 zipFolderFiles("fake-agency-with-only-calendar")

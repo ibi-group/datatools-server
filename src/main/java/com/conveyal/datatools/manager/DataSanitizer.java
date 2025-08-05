@@ -294,7 +294,6 @@ public class DataSanitizer {
         Set<String> orphanedSchemas = new HashSet<>();
         try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
             String sql = String.format("SELECT nspname FROM pg_namespace %s", whereClause);
-            LOG.info(sql);
             PreparedStatement preparedStatement = connection.prepareStatement(sql);
             ResultSet resultSet = preparedStatement.executeQuery();
             while (resultSet.next()) {
