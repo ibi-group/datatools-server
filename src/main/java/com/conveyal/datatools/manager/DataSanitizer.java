@@ -30,6 +30,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -193,23 +194,33 @@ public class DataSanitizer {
 
         List<Project> projects = Persistence.projects.getAll();
 
-        boolean hasHeader = false;
         for (Project project : projects) {
             Collection<FeedSource> feedSources = project.retrieveProjectFeedSources();
 
             for (FeedSource feedSource : feedSources) {
                 Collection<FeedVersionSummary> feedVersions = feedSource.retrieveFeedVersionSummaries();
-                audit.add(new FeedVersionAudit(project.name, feedSource.name, feedVersions.size()));
-
-                if (!hasHeader) {
-                    System.out.printf("%-40s | %-40s | %-40s | %s%n", "Project", "Feed Source", "Feed Source id", "versions");
-                    hasHeader = true;
-                }
-                System.out.printf("%-40s | %-40s | %-40s | %s%n", project.name, feedSource.name, feedSource.id, feedVersions.size());
+                audit.add(new FeedVersionAudit(project.name, feedSource.name, feedSource.id, feedVersions.size()));
             }
         }
 
-        if (audit.isEmpty()) {
+        Collections.sort(audit);
+
+        if (!audit.isEmpty()) {
+            boolean hasHeader = false;
+            for (FeedVersionAudit feedVersionAudit : audit) {
+                if (!hasHeader) {
+                    System.out.printf("%-40s | %-40s | %-40s | %s%n", "Project", "Feed Source", "Feed Source Id", "No. Feed Versions");
+                    hasHeader = true;
+                }
+                System.out.printf(
+                    "%-40s | %-40s | %-40s | %s%n",
+                    feedVersionAudit.projectName,
+                    feedVersionAudit.feedSourceName,
+                    feedVersionAudit.feedSourceId,
+                    feedVersionAudit.numberOfFeedVersions
+                );
+            }
+        } else {
             System.out.println("No feed versions to audit!");
         }
         System.out.println("Feed version audit complete.");
@@ -332,15 +343,23 @@ public class DataSanitizer {
         return fields;
     }
 
-    public static class FeedVersionAudit {
+    public static class FeedVersionAudit implements Comparable<FeedVersionAudit> {
         public final String projectName;
         public final String feedSourceName;
+        public final String feedSourceId;
         public final int numberOfFeedVersions;
 
-        FeedVersionAudit(String projectName, String feedSourceName, int numberOfFeedVersions) {
+        FeedVersionAudit(String projectName, String feedSourceName, String feedSourceId, int numberOfFeedVersions) {
             this.projectName = projectName;
             this.feedSourceName = feedSourceName;
+            this.feedSourceId = feedSourceId;
             this.numberOfFeedVersions = numberOfFeedVersions;
+        }
+
+        @Override
+        public int compareTo(FeedVersionAudit other) {
+            // Sort by numberOfFeedVersions in ascending order
+            return Integer.compare(other.numberOfFeedVersions, this.numberOfFeedVersions);
         }
     }
 }

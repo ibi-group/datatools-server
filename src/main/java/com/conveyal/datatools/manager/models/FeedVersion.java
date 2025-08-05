@@ -662,6 +662,10 @@ public class FeedVersion extends Model implements Serializable {
      * being skipped.
      */
     public static void deleteDBSchema(String schema) {
+        if (schema == null) {
+            LOG.warn("Schema is null! Unable to delete feed version's GTFS schema from Postgres.");
+            return;
+        }
         try {
             GTFS.delete(schema, DataManager.GTFS_DATA_SOURCE);
             LOG.info("Deleted feed version's GTFS schema from Postgres.");
