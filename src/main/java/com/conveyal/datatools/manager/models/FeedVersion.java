@@ -611,12 +611,9 @@ public class FeedVersion extends Model implements Serializable {
             }
             ensurePublishedVersionIdIsUnset(fs);
 
-            feedStore.deleteFeed(id);
-            // Delete feed version tables in GTFS database
-            if (this.namespace != null) {
-                GTFS.delete(this.namespace, DataManager.GTFS_DATA_SOURCE);
-            }
-            LOG.info("Dropped version's GTFS tables from Postgres.");
+            deleteFeedVersionFile();
+            deleteDBSchema(namespace);
+
             // Remove this FeedVersion from all Deployments associated with this FeedVersion's FeedSource's Project
             // TODO TEST THOROUGHLY THAT THIS UPDATE EXPRESSION IS CORRECT
             // Although outright deleting the feedVersion from deployments could be surprising and shouldn't be done anyway.
@@ -637,16 +634,47 @@ public class FeedVersion extends Model implements Serializable {
     /**
      * Delete resources related to this orphaned feed version. Then delete the orphaned feed version.
      */
-    public void deleteOrphan() throws SQLException, InvalidNamespaceException, CheckedAWSException {
-        feedStore.deleteFeed(id);
-        GTFS.delete(namespace, DataManager.GTFS_DATA_SOURCE);
-        LOG.info("Dropped feed version's GTFS tables from Postgres.");
+    public void deleteOrphan() {
+        deleteFeedVersionFile();
+        deleteDBSchema(namespace);
         if (DataManager.isModuleEnabled("gtfsplus")) {
-            FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
-            gtfsPlusStore.deleteFeed(id + ".db");
-            gtfsPlusStore.deleteFeed(id + ".db.p");
+            try {
+                FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
+                gtfsPlusStore.deleteFeed(id + ".db");
+                gtfsPlusStore.deleteFeed(id + ".db.p");
+            } catch (CheckedAWSException e) {
+                LOG.error("Failed to delete GTFS+ files.");
+            }
         }
         Persistence.feedVersions.removeById(id);
+    }
+
+    /**
+     * Delete the feed version file related to this feed version.
+     */
+    private void deleteFeedVersionFile() {
+        try {
+            feedStore.deleteFeed(id);
+        } catch (CheckedAWSException e) {
+            LOG.error("Failed to delete feed version file.");
+        }
+    }
+
+    /**
+     * Delete the database schema related to this feed version. Catch all related errors to prevent follow on tasks from
+     * being skipped.
+     */
+    public static void deleteDBSchema(String schema) {
+        if (schema == null) {
+            LOG.warn("Schema is null! Unable to delete feed version's GTFS schema from Postgres.");
+            return;
+        }
+        try {
+            GTFS.delete(schema, DataManager.GTFS_DATA_SOURCE);
+            LOG.info("Deleted feed version's GTFS schema from Postgres.");
+        } catch (SQLException | InvalidNamespaceException e) {
+            LOG.error("Failed to delete feed version's GTFS schema from Postgres.");
+        }
     }
 
     /**
