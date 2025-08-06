@@ -11,12 +11,15 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.util.InvalidNamespaceException;
+import com.mongodb.client.model.Sorts;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Collection;
+import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -24,6 +27,7 @@ import static com.conveyal.datatools.TestUtils.appendDate;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
+import static com.mongodb.client.model.Filters.eq;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -34,6 +38,8 @@ class DataSanitizerTest {
     private static Project project;
     private static FeedVersion feedVersionOrphan;
     private static FeedVersion feedVersionWithParent;
+    private static FeedSource feedSourceParent;
+    private static FeedSource feedSourceWithObsoleteFeedVersion;
     private static String orphanedDBSchema;
 
     @BeforeAll
@@ -47,8 +53,10 @@ class DataSanitizerTest {
         Persistence.projects.create(project);
         FeedSource feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSource);
-        FeedSource feedSourceParent = new FeedSource(appendDate("Test Feed 2"), project.id, MANUALLY_UPLOADED);
+        feedSourceParent = new FeedSource(appendDate("Test Feed 2"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSourceParent);
+        feedSourceWithObsoleteFeedVersion = new FeedSource(appendDate("Test Feed 3"), project.id, MANUALLY_UPLOADED);
+        Persistence.feedSources.create(feedSourceWithObsoleteFeedVersion);
         feedVersionOrphan = createFeedVersion(
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar")
@@ -66,6 +74,13 @@ class DataSanitizerTest {
         Persistence.feedSources.removeById(feedSource.id);
         // Delete feed version to orphan DB schema.
         Persistence.feedVersions.removeById(feedVersionWithOrphanDBSchema.id);
+
+        for (int i=0; i<5; i++) {
+            createFeedVersion(
+                feedSourceWithObsoleteFeedVersion,
+                zipFolderFiles("fake-agency-with-only-calendar")
+            );
+        }
     }
 
     @AfterAll
@@ -86,14 +101,14 @@ class DataSanitizerTest {
 
     @Test
     void canIdentifyOrphanedFeedVersion() {
-        assertEquals(1, DataSanitizer.sanitizeFeedVersions(false));
+        assertEquals(1, DataSanitizer.sanitizeOrphanedFeedVersions(false));
         assertNotNull(Persistence.feedVersions.getById(feedVersionOrphan.id));
         assertNotNull(Persistence.feedVersions.getById(feedVersionWithParent.id));
     }
 
     @Test
     void canRemoveOrphanedFeedVersion() {
-        assertEquals(1, DataSanitizer.sanitizeFeedVersions(true));
+        assertEquals(1, DataSanitizer.sanitizeOrphanedFeedVersions(true));
         assertNull(Persistence.feedVersions.getById(feedVersionOrphan.id));
         assertNotNull(Persistence.feedVersions.getById(feedVersionWithParent.id));
     }
@@ -108,5 +123,32 @@ class DataSanitizerTest {
     @Test
     void canRemoveOrphanedDBSchema() {
         assertEquals(1, DataSanitizer.deleteOrphanedDBSchemas(Set.of(orphanedDBSchema)));
+    }
+
+    @Test
+    void canAuditFeedVersions() {
+        List<DataSanitizer.FeedVersionAudit> result = DataSanitizer.feedVersionAudit();
+        assertTrue(result.stream().anyMatch(audit -> audit.projectName.equals(project.name)));
+        assertTrue(result.stream().anyMatch(audit -> audit.feedSourceName.equals(feedSourceParent.name)));
+        assertTrue(result.stream().anyMatch(audit -> audit.feedSourceName.equals(feedSourceWithObsoleteFeedVersion.name)));
+    }
+
+    @Test
+    void canDeleteObsoleteFeedVersions() {
+        // From the initial four feed versions, keep the two most recent.
+        int deleted = DataSanitizer.deleteObsoleteFeedVersions(
+            feedSourceWithObsoleteFeedVersion.id,
+            2,
+            false
+        );
+        assertEquals(3, deleted);
+        Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(
+            eq("feedSourceId", feedSourceWithObsoleteFeedVersion.id),
+            Sorts.descending("version")
+        );
+        // Feed versions are renumbered after being deleted. Should no longer have versions 3, 4 and 5.
+        for (FeedVersion feedVersion : feedVersions) {
+            assertTrue(feedVersion.version <= 2);
+        }
     }
 }

@@ -25,7 +25,7 @@ import static com.mongodb.client.model.Filters.eq;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 
 public class FeedVersionTest extends UnitTest {
     private static Project project;
@@ -144,10 +144,8 @@ public class FeedVersionTest extends UnitTest {
         feedVersion1.delete();
         assertThat(getPubVersionId(feedSourceId), equalTo(null));
 
-        // The delete statements above will not remove the feed versions from Mongo.
-        // This is because of expected caught exceptions about deleting the non-existent namespaces in this test.
-        assertThat(Persistence.feedVersions.getById(feedVersion1.id), notNullValue());
-        assertThat(Persistence.feedVersions.getById(feedVersion2.id), notNullValue());
+        assertThat(Persistence.feedVersions.getById(feedVersion1.id), nullValue());
+        assertThat(Persistence.feedVersions.getById(feedVersion2.id), nullValue());
         // Delete the feed versions manually as a result.
         Persistence.feedVersions.removeById(feedVersion1.id);
         Persistence.feedVersions.removeById(feedVersion2.id);
