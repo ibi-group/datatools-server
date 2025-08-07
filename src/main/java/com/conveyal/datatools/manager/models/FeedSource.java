@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -241,11 +242,12 @@ public class FeedSource extends Model implements Cloneable {
             conn.connect();
             return processFetchResponse(status, optionalUrlOverride, version, latest, new HttpURLConnectionResponse(conn));
         } catch (IOException e) {
-            String message = String.format("Unable to connect to %s; not fetching %s feed", conn.getURL(), this.name); // url, this.name);
-            LOG.error(message);
+            String message = String.format("Unable to connect to %s; not fetching %s feed", conn.getURL(), this.name);
+            LOG.error(message, e);
             status.fail(message);
-            e.printStackTrace();
             return null;
+        } finally {
+            conn.disconnect();
         }
     }
 
@@ -331,7 +333,9 @@ public class FeedSource extends Model implements Cloneable {
                     status.update(message, 75.0);
                     // Create new file from input stream (this also handles hashing the file and other version fields
                     // calculated from the GTFS file.
-                    newGtfsFile = version.newGtfsFile(response.getInputStream());
+                    try (InputStream inputStream = response.getInputStream()) {
+                        newGtfsFile = version.newGtfsFile(inputStream);
+                    }
                     break;
                 case HttpURLConnection.HTTP_MOVED_TEMP:
                 case HttpURLConnection.HTTP_MOVED_PERM:
