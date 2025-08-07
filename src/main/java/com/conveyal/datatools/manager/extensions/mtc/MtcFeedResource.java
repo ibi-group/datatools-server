@@ -223,12 +223,13 @@ public class MtcFeedResource implements ExternalFeedResource {
      * Update or create a carrier and its properties with an HTTP request to the RTD.
      */
     private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) throws IOException {
+        HttpURLConnection connection = null;
         try {
             String carrierJson = carrier.toJson();
 
             URL rtdUrl = new URL(rtdApi + "/Carrier/" + (createNew ? "" : carrier.AgencyId));
             LOG.info("Writing to RTD URL: {} JSON >>>{}", rtdUrl, carrierJson);
-            HttpURLConnection connection = (HttpURLConnection) rtdUrl.openConnection();
+            connection = (HttpURLConnection) rtdUrl.openConnection();
 
             connection.setRequestMethod(createNew ? "POST" : "PUT");
             connection.setDoOutput(true);
@@ -236,10 +237,10 @@ public class MtcFeedResource implements ExternalFeedResource {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Authorization", authHeader);
 
-            OutputStreamWriter osw = new OutputStreamWriter(connection.getOutputStream());
-            osw.write(carrierJson);
-            osw.flush();
-            osw.close();
+            try (OutputStreamWriter osw = new OutputStreamWriter(connection.getOutputStream())) {
+                osw.write(carrierJson);
+                osw.flush();
+            }
             LOG.info(
                 "RTD API {} response: {}/{}",
                 connection.getRequestMethod(),
@@ -249,6 +250,10 @@ public class MtcFeedResource implements ExternalFeedResource {
         } catch (Exception e) {
             LOG.error("Error writing to RTD", e);
             throw e;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
     }
 
@@ -256,24 +261,24 @@ public class MtcFeedResource implements ExternalFeedResource {
      * Fetch agency properties from RTD and update the ExternalFeedSourceProperty collection in Mongo.
      */
     private void fetchCarrierFromRtdAndUpdateMongo(FeedSource source, RtdCarrier carrier, String authHeader) throws IOException {
+        HttpURLConnection connection = null;
         try {
             URL rtdUrl = new URL(rtdApi + "/Carrier/" + carrier.AgencyId);
             LOG.info("Fetching to RTD URL: {}", rtdUrl);
-            HttpURLConnection connection = (HttpURLConnection) rtdUrl.openConnection();
+            connection = (HttpURLConnection) rtdUrl.openConnection();
 
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Authorization", authHeader);
 
-            BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-            String inputLine;
             StringBuilder response = new StringBuilder();
-
-            while ((inputLine = in.readLine()) != null) {
-                response.append(inputLine);
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                String inputLine;
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                }
             }
-            in.close();
 
             LOG.info("RTD API GET response: {}/{}", connection.getResponseCode(), connection.getResponseMessage());
 
@@ -284,6 +289,10 @@ public class MtcFeedResource implements ExternalFeedResource {
         } catch (Exception e) {
             LOG.error("Error writing to RTD", e);
             throw e;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
     }
 

@@ -67,8 +67,9 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                 throw ex;
             }
 
+            HttpURLConnection con = null;
             try {
-                HttpURLConnection con = (HttpURLConnection) url.openConnection();
+                con = (HttpURLConnection) url.openConnection();
 
                 // optional default is GET
                 con.setRequestMethod("GET");
@@ -80,15 +81,14 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                 LOG.info("Sending 'GET' request to URL : " + url);
                 LOG.info("Response Code : " + responseCode);
 
-                BufferedReader in = new BufferedReader(
-                        new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuffer response = new StringBuffer();
+                StringBuilder response = new StringBuilder();
+                try (BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()))) {
+                    String inputLine;
 
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
+                    while ((inputLine = in.readLine()) != null) {
+                        response.append(inputLine);
+                    }
                 }
-                in.close();
 
                 String json = response.toString();
                 JsonNode node = mapper.readTree(json);
@@ -153,6 +153,10 @@ public class TransitLandFeedResource implements ExternalFeedResource {
             } catch (Exception ex) {
                 LOG.error("Error reading from TransitLand API");
                 throw ex;
+            } finally {
+                if (con != null) {
+                    con.disconnect();
+                }
             }
             count++;
         }
