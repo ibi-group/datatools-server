@@ -220,7 +220,6 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.NETWORKS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
-            new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTE_NETWORKS, DataManager.GTFS_DATA_SOURCE);
             // NOTE: Patterns controller handles updates to nested tables shapes, pattern stops, and frequencies.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.PATTERNS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.SCHEDULE_EXCEPTIONS, DataManager.GTFS_DATA_SOURCE);
