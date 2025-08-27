@@ -7,6 +7,7 @@ import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.ReferenceTracker;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.util.CsvReaderUtil;
 import com.csvreader.CsvReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -131,7 +132,7 @@ public class MergeLineContext {
         keyFieldMissing = false;
 
         idScope = makeIdScope(version);
-        csvReader = table.getCsvReader(feed.zipFile, null);
+        csvReader = CsvReaderUtil.getCsvReaderAccordingToFileName(table, feed.zipFile, null);
         // If csv reader is null, the table was not found in the zip file. There is no need
         // to handle merging this table for this zip file.
         // No need to iterate over second (active) file if strategy is to simply extend the future GTFS

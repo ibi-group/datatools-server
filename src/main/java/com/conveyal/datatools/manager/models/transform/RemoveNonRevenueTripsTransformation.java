@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.models.TableTransformResult;
 import com.conveyal.datatools.manager.utils.GtfsUtils;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.util.CsvReaderUtil;
 import com.csvreader.CsvReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,7 +59,11 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             Files.copy(originalZipPath, tempZipPath, StandardCopyOption.REPLACE_EXISTING);
 
             Table gtfsTable = GtfsUtils.getGtfsTable("stop_times");
-            CsvReader csvReaderForStopTimes = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
+            CsvReader csvReaderForStopTimes = CsvReaderUtil.getCsvReaderAccordingToFileName(
+                gtfsTable,
+                new ZipFile(tempZipPath.toAbsolutePath().toString()),
+                null
+            );
             final String[] headersForStopTime = csvReaderForStopTimes.getHeaders();
             Field[] fieldsFoundInStopTimes = gtfsTable.getFieldsFromFieldHeaders(headersForStopTime, null);
             Map<String, Integer> fieldIndexes = getFieldIndexes(fieldsFoundInStopTimes);
@@ -73,7 +78,11 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             );
 
             gtfsTable = GtfsUtils.getGtfsTable("trips");
-            CsvReader csvReaderForTrips = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
+            CsvReader csvReaderForTrips = CsvReaderUtil.getCsvReaderAccordingToFileName(
+                gtfsTable,
+                new ZipFile(tempZipPath.toAbsolutePath().toString()),
+                null
+            );
             final String[] headersForTrips = csvReaderForTrips.getHeaders();
             Field[] fieldsFoundInStopTrips = gtfsTable.getFieldsFromFieldHeaders(headersForTrips, null);
             int tripIdFieldIndex = getFieldIndex(fieldsFoundInStopTrips, TRIP_ID_FIELD_NAME);
