@@ -159,6 +159,7 @@ public class DeploymentController {
         File temp = File.createTempFile("deployment", ".zip");
         // just include GTFS, not any of the ancillary information
         deployment.dump(temp, false, false, false);
+        // File input stream must be closed by calling method.
         FileInputStream fis = new FileInputStream(temp);
         String cleanName = deployment.name.replaceAll("[^a-zA-Z0-9]", "");
         res.type("application/zip");

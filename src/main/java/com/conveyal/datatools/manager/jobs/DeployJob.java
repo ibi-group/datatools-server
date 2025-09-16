@@ -55,7 +55,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -544,41 +543,34 @@ public class DeployJob extends MonitorableJob {
             }
 
             // retrieveById the input file
-            FileChannel input;
-            try {
-                input = new FileInputStream(deploymentTempFile).getChannel();
-            } catch (FileNotFoundException e) {
+            try (
+                FileInputStream fileInputStream = new FileInputStream(deploymentTempFile);
+                FileChannel input = fileInputStream.getChannel()
+            ) {
+                try {
+                    conn.connect();
+                } catch (IOException e) {
+                    status.fail(String.format("Unable to open connection to OTP server %s", url), e);
+                    return false;
+                }
+
+                // copy
+                try {
+                    input.transferTo(0, Long.MAX_VALUE, post);
+                } catch (IOException e) {
+                    status.fail(String.format("Unable to transfer deployment to server %s", url), e);
+                    return false;
+                }
+
+                try {
+                    post.close();
+                } catch (IOException e) {
+                    status.fail(String.format("Error finishing connection to server %s", url), e);
+                    return false;
+                }
+            } catch (IOException e) {
                 status.fail("Internal error: could not read dumped deployment!", e);
                 return false;
-            }
-
-            try {
-                conn.connect();
-            } catch (IOException e) {
-                status.fail(String.format("Unable to open connection to OTP server %s", url), e);
-                return false;
-            }
-
-            // copy
-            try {
-                input.transferTo(0, Long.MAX_VALUE, post);
-            } catch (IOException e) {
-                status.fail(String.format("Unable to transfer deployment to server %s", url), e);
-                return false;
-            }
-
-            try {
-                post.close();
-            } catch (IOException e) {
-                status.fail(String.format("Error finishing connection to server %s", url), e);
-                return false;
-            }
-
-            try {
-                input.close();
-            } catch (IOException e) {
-                // do nothing
-                LOG.warn("Could not close input stream for deployment file.");
             }
 
             status.uploading = false;

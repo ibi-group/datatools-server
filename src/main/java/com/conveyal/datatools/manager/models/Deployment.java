@@ -42,10 +42,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -326,7 +324,7 @@ public class Deployment extends Model implements Serializable {
     public void dump (File output, boolean includeManifest, boolean includeOsm, boolean includeOtpConfig) throws IOException {
         // Create the zipfile.
         ZipOutputStream out;
-        try {
+        try  {
             out = new ZipOutputStream(new FileOutputStream(output));
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
@@ -349,25 +347,22 @@ public class Deployment extends Model implements Serializable {
         // Write each of the feed version GTFS files into the zip.
         for (FeedVersion v : this.retrieveFullFeedVersions()) {
             File gtfsFile = v.retrieveGtfsFile();
-            FileInputStream in;
-            try {
-                in = new FileInputStream(gtfsFile);
+            // Try-with-resources for FileInputStream
+            try (FileInputStream in = new FileInputStream(gtfsFile)) {
+                // Determine the entry name for the zip file.
+                String entryName = getFeedSourceBundleFilename(v, gtfsFile);
+                ZipEntry e = new ZipEntry(entryName);
+                out.putNextEntry(e);
+                ByteStreams.copy(in, out);
+                out.closeEntry();
             } catch (FileNotFoundException e1) {
                 LOG.error("Could not retrieve file for {}", v.name);
                 throw new RuntimeException(e1);
-            }
-            // Determine the entry name for the zip file.
-            String entryName = getFeedSourceBundleFilename(v, gtfsFile);
-            ZipEntry e = new ZipEntry(entryName);
-            out.putNextEntry(e);
-            ByteStreams.copy(in, out);
-            try {
-                in.close();
             } catch (IOException e1) {
-                LOG.warn("Could not close GTFS file input stream {}", gtfsFile.getName());
+                LOG.warn("Error processing GTFS file input stream {}", gtfsFile.getName());
                 e1.printStackTrace();
+                // Optionally rethrow or handle as appropriate for your app
             }
-            out.closeEntry();
         }
 
         if (includeOsm) {

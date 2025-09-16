@@ -82,8 +82,8 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
             }
             LOG.info("Storing snapshot GTFS at {}", S3Utils.getDefaultBucketUriForKey(s3Key));
         } else {
-            try {
-                File gtfsFile = FeedVersion.feedStore.newFeed(filename, new FileInputStream(tempFile), null);
+            try (FileInputStream fileInputStream = new FileInputStream(tempFile)) {
+                File gtfsFile = FeedVersion.feedStore.newFeed(filename, fileInputStream, null);
                 if (isNewVersion) feedVersion.assignGtfsFileAttributes(gtfsFile);
             } catch (IOException e) {
                 status.fail(String.format("Could not store feed for snapshot %s", snapshot.id), e);

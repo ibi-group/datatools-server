@@ -10,7 +10,6 @@ import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.IOUtils;
-import org.apache.http.HttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -217,9 +216,10 @@ public class TestUtils {
                 ZipEntry entry = new ZipEntry(zipEntryName);
                 out.putNextEntry(entry);
 
-                FileInputStream in = new FileInputStream(file.getAbsolutePath());
-                IOUtils.copy(in, out);
-                IOUtils.closeQuietly(in);
+                try (FileInputStream in = new FileInputStream(file.getAbsolutePath())) {
+                    IOUtils.copy(in, out);
+                    IOUtils.closeQuietly(in);
+                }
             }
         }
     }

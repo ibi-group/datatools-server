@@ -226,8 +226,8 @@ public class GtfsPlusController {
         // Create a new feed version to represent the published GTFS+.
         FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource(), PRODUCED_IN_HOUSE_GTFS_PLUS);
         File newGtfsFile = null;
-        try {
-            newGtfsFile = newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
+        try (FileInputStream fis = new FileInputStream(newFeed)) {
+            newGtfsFile = newFeedVersion.newGtfsFile(fis);
         } catch (IOException e) {
             e.printStackTrace();
             logMessageAndHalt(req, 500, "Error reading GTFS file input stream", e);

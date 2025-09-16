@@ -478,24 +478,28 @@ public class DataManager {
      * default configuration file locations. Config fields are retrieved with getConfigProperty.
      */
     private static void loadConfig(String[] args) throws IOException {
-        FileInputStream envConfigStream;
-        FileInputStream serverConfigStream;
+        File envFile;
+        File serverFile;
 
         if (args.length == 0) {
             LOG.warn("Using default env.yml: {}", DEFAULT_ENV);
             LOG.warn("Using default server.yml: {}", DEFAULT_CONFIG);
-            envConfigStream = new FileInputStream(new File(DEFAULT_ENV));
-            serverConfigStream = new FileInputStream(new File(DEFAULT_CONFIG));
-        }
-        else {
+            envFile = new File(DEFAULT_ENV);
+            serverFile = new File(DEFAULT_CONFIG);
+        } else {
             LOG.info("Loading env.yml: {}", args[0]);
             LOG.info("Loading server.yml: {}", args[1]);
-            envConfigStream = new FileInputStream(new File(args[0]));
-            serverConfigStream = new FileInputStream(new File(args[1]));
+            envFile = new File(args[0]);
+            serverFile = new File(args[1]);
         }
 
-        envConfig = yamlMapper.readTree(envConfigStream);
-        serverConfig = yamlMapper.readTree(serverConfigStream);
+        try (
+            FileInputStream envConfigStream = new FileInputStream(envFile);
+            FileInputStream serverConfigStream = new FileInputStream(serverFile)
+        ) {
+            envConfig = yamlMapper.readTree(envConfigStream);
+            serverConfig = yamlMapper.readTree(serverConfigStream);
+        }
     }
 
     /**
