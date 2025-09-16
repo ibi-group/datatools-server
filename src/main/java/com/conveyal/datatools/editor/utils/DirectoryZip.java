@@ -20,7 +20,6 @@ public class DirectoryZip {
         Deque<File> queue = new LinkedList<>();
         queue.push(directory);
 
-        // Both streams use try-with-resources
         try (
             FileOutputStream out = new FileOutputStream(zipfile);
             ZipOutputStream zout = new ZipOutputStream(out)

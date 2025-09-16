@@ -347,7 +347,6 @@ public class Deployment extends Model implements Serializable {
         // Write each of the feed version GTFS files into the zip.
         for (FeedVersion v : this.retrieveFullFeedVersions()) {
             File gtfsFile = v.retrieveGtfsFile();
-            // Try-with-resources for FileInputStream
             try (FileInputStream in = new FileInputStream(gtfsFile)) {
                 // Determine the entry name for the zip file.
                 String entryName = getFeedSourceBundleFilename(v, gtfsFile);
@@ -361,7 +360,6 @@ public class Deployment extends Model implements Serializable {
             } catch (IOException e1) {
                 LOG.warn("Error processing GTFS file input stream {}", gtfsFile.getName());
                 e1.printStackTrace();
-                // Optionally rethrow or handle as appropriate for your app
             }
         }
 
@@ -517,7 +515,8 @@ public class Deployment extends Model implements Serializable {
         if (extractUrl == null) {
             throw new IllegalArgumentException("Cannot download OSM extract. Extract URL is invalid.");
         }
-        LOG.info("Getting OSM extract at {}", extractUrl.toString());
+        LOG.info("Getting OSM extract at {}", extractUrl);
+        // Http URL connection must be closed by calling method.
         HttpURLConnection conn = (HttpURLConnection) extractUrl.openConnection();
         conn.connect();
         return conn.getInputStream();

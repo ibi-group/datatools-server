@@ -83,8 +83,9 @@ public class MtcFeedResource implements ExternalFeedResource {
             throw ex;
         }
 
+        HttpURLConnection conn = null;
         try {
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn = (HttpURLConnection) url.openConnection();
             //add request header
             conn.setRequestProperty("User-Agent", "User-Agent");
             // add auth header
@@ -134,6 +135,10 @@ public class MtcFeedResource implements ExternalFeedResource {
         } catch(Exception ex) {
             LOG.error("Could not read feeds from MTC RTD API");
             throw ex;
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
         }
     }
 
