@@ -54,22 +54,9 @@ public class DirectoryZip {
         }
       }
 
-     private static void copy(File file, OutputStream out) throws IOException {
-        InputStream in = new FileInputStream(file);
-        try {
-          copy(in, out);
-        } finally {
-          in.close();
+    private static void copy(File file, OutputStream out) throws IOException {
+        try (InputStream in = new FileInputStream(file)) {
+            copy(in, out);
         }
-      }
-
-      private static void copy(InputStream in, File file) throws IOException {
-        OutputStream out = new FileOutputStream(file);
-        try {
-          copy(in, out);
-        } finally {
-          out.close();
-        }
-      }
-
+    }
 }

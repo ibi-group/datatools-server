@@ -100,10 +100,9 @@ public class GtfsPlusController {
             gtfsPlusTables.add(tableNode.get("name").asText());
         }
 
-        try {
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile))) {
             // create a new zip file to only contain the GTFS+ tables
             gtfsPlusFile = File.createTempFile(version.id + "_gtfsplus", ".zip");
-            ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile));
 
             // iterate through the existing GTFS file, copying any GTFS+ tables
             ZipFile gtfsFile = new ZipFile(version.retrieveGtfsFile());
@@ -124,7 +123,6 @@ public class GtfsPlusController {
                 in.close();
                 zos.closeEntry();
             }
-            zos.close();
         } catch (IOException e) {
             logMessageAndHalt(req, 500, "An error occurred while trying to create a gtfs file", e);
         }
@@ -177,10 +175,9 @@ public class GtfsPlusController {
 
         File newFeed = null;
 
-        try {
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed))) {
             // First, create a new zip file to only contain the GTFS+ tables
             newFeed = File.createTempFile(feedVersionId + "_new", ".zip");
-            ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed));
 
             // Next, iterate through the existing GTFS file, copying all non-GTFS+ tables.
             ZipFile gtfsFile = new ZipFile(feedVersion.retrieveGtfsFile());
@@ -219,7 +216,6 @@ public class GtfsPlusController {
                 in.close();
                 zos.closeEntry();
             }
-            zos.close();
         } catch (IOException e) {
             logMessageAndHalt(req, 500, "Error creating combined GTFS/GTFS+ file", e);
         }

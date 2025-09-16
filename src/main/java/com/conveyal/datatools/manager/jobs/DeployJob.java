@@ -474,9 +474,9 @@ public class DeployJob extends MonitorableJob {
             LOG.info("Uploading router-config.json to s3 bucket");
             // Write router config to temp file.
             File routerConfigFile = File.createTempFile("router-config", ".json");
-            FileOutputStream out = new FileOutputStream(routerConfigFile);
-            out.write(routerConfigAsBytes);
-            out.close();
+            try (FileOutputStream out = new FileOutputStream(routerConfigFile)) {
+                out.write(routerConfigAsBytes);
+            }
             // Upload router config.
             transferManager
                 .upload(bucket, getS3FolderURI().getKey() + "/" + ROUTER_CONFIG_FILENAME, routerConfigFile)

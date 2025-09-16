@@ -185,9 +185,9 @@ public class TestUtils {
      * @throws IOException
      */
     private static void compressZipfile(String sourceDir, String outputFile, boolean nestDirectory) throws IOException {
-        ZipOutputStream zipFile = new ZipOutputStream(new FileOutputStream(outputFile));
-        compressDirectoryToZipfile(sourceDir, sourceDir, zipFile, nestDirectory);
-        IOUtils.closeQuietly(zipFile);
+        try (ZipOutputStream zipFile = new ZipOutputStream(new FileOutputStream(outputFile))) {
+            compressDirectoryToZipfile(sourceDir, sourceDir, zipFile, nestDirectory);
+        }
     }
 
     /**
@@ -218,7 +218,6 @@ public class TestUtils {
 
                 try (FileInputStream in = new FileInputStream(file.getAbsolutePath())) {
                     IOUtils.copy(in, out);
-                    IOUtils.closeQuietly(in);
                 }
             }
         }
