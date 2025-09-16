@@ -114,10 +114,9 @@ public class MergeLineContext {
         // fields found in the collection of feeds are included in the merged table.
         allFields = getAllFields(feedMergeContext.feedsToMerge, table);
         this.mergeFeedsResult = job.mergeFeedsResult;
-        try (OutputStreamWriter outputStreamWriter = new OutputStreamWriter(out)) {
-            this.writer = new CsvListWriter(outputStreamWriter, CsvPreference.STANDARD_PREFERENCE);
-            this.out = out;
-        }
+        // OutputStreamWriter is closed when the ZipOutputStream is closed.
+        this.writer = new CsvListWriter(new OutputStreamWriter(out), CsvPreference.STANDARD_PREFERENCE);
+        this.out = out;
     }
 
     public void startNewFeed(int feedIndex) throws IOException {
