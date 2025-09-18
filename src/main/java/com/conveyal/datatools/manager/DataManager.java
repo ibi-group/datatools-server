@@ -159,9 +159,10 @@ public class DataManager {
      */
     private static void loadProperties() {
         final Properties projectProperties = new Properties();
-        InputStream projectPropertiesInputStream =
-            DataManager.class.getClassLoader().getResourceAsStream(".properties");
-        try {
+        try (
+            InputStream projectPropertiesInputStream =
+                DataManager.class.getClassLoader().getResourceAsStream(".properties");
+        ) {
             projectProperties.load(projectPropertiesInputStream);
             repoUrl = projectProperties.getProperty("repo_url");
         } catch (IOException e) {
@@ -170,9 +171,10 @@ public class DataManager {
         }
 
         final Properties gitProperties = new Properties();
-        try {
+        try (
             InputStream gitPropertiesInputStream =
                 DataManager.class.getClassLoader().getResourceAsStream("git.properties");
+        ) {
             gitProperties.load(gitPropertiesInputStream);
             commit = gitProperties.getProperty("git.commit.id");
         } catch (Exception e) {

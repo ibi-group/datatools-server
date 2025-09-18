@@ -166,7 +166,7 @@ public class FeedStore {
         // FIXME: Figure out how to manage temp files created here. Currently, we just call deleteOnExit, but
         //  this will only delete the file once the java process stops.
         tempFile.deleteOnExit();
-        try (FileOutputStream outputStream = new FileOutputStream(tempFile)) {
+        try (in; FileOutputStream outputStream = new FileOutputStream(tempFile)) {
             ByteStreams.copy(in, outputStream);
         }
         return tempFile;

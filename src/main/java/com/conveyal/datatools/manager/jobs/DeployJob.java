@@ -582,18 +582,21 @@ public class DeployJob extends MonitorableJob {
                     int code = conn.getResponseCode();
                     if (code != HttpURLConnection.HTTP_CREATED) {
                         // Get input/error stream from connection response.
-                        InputStream stream = code < HttpURLConnection.HTTP_BAD_REQUEST
-                            ? conn.getInputStream()
-                            : conn.getErrorStream();
-                        String response;
-                        try (Scanner scanner = new Scanner(stream)) {
-                            scanner.useDelimiter("\\Z");
-                            response = scanner.next();
+                        try (
+                            InputStream stream = code < HttpURLConnection.HTTP_BAD_REQUEST
+                                ? conn.getInputStream()
+                                : conn.getErrorStream()
+                        ) {
+                            String response;
+                            try (Scanner scanner = new Scanner(stream)) {
+                                scanner.useDelimiter("\\Z");
+                                response = scanner.next();
+                            }
+                            status.fail(String.format("Got response code %d from server due to %s", code, response));
+                            // Skip deploying to any other servers.
+                            // There is no reason to take out the rest of the servers, it's going to have the same result.
+                            return false;
                         }
-                        status.fail(String.format("Got response code %d from server due to %s", code, response));
-                        // Skip deploying to any other servers.
-                        // There is no reason to take out the rest of the servers, it's going to have the same result.
-                        return false;
                     }
                 } catch (IOException e) {
                     status.fail(String.format("Could not finish request to server %s", url), e);

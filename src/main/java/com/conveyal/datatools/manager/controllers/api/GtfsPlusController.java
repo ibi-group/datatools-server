@@ -115,12 +115,12 @@ public class GtfsPlusController {
                 // create a new empty ZipEntry and copy the contents
                 ZipEntry newEntry = new ZipEntry(entry.getName());
                 zos.putNextEntry(newEntry);
-                InputStream in = gtfsFile.getInputStream(entry);
-                while (0 < in.available()){
-                    int read = in.read(buffer);
-                    zos.write(buffer,0,read);
+                try (InputStream in = gtfsFile.getInputStream(entry)) {
+                    while (0 < in.available()) {
+                        int read = in.read(buffer);
+                        zos.write(buffer, 0, read);
+                    }
                 }
-                in.close();
                 zos.closeEntry();
             }
         } catch (IOException e) {
@@ -191,12 +191,12 @@ public class GtfsPlusController {
                 // create a new empty ZipEntry and copy the contents
                 ZipEntry newEntry = new ZipEntry(entry.getName());
                 zos.putNextEntry(newEntry);
-                InputStream in = gtfsFile.getInputStream(entry);
-                while (0 < in.available()){
-                    int read = in.read(buffer);
-                    zos.write(buffer,0,read);
+                try (InputStream in = gtfsFile.getInputStream(entry)) {
+                    while (0 < in.available()) {
+                        int read = in.read(buffer);
+                        zos.write(buffer, 0, read);
+                    }
                 }
-                in.close();
                 zos.closeEntry();
             }
 
@@ -208,12 +208,12 @@ public class GtfsPlusController {
 
                 ZipEntry newEntry = new ZipEntry(entry.getName());
                 zos.putNextEntry(newEntry);
-                InputStream in = plusZipFile.getInputStream(entry);
-                while (0 < in.available()){
-                    int read = in.read(buffer);
-                    zos.write(buffer,0,read);
+                try (InputStream in = plusZipFile.getInputStream(entry)) {
+                    while (0 < in.available()) {
+                        int read = in.read(buffer);
+                        zos.write(buffer, 0, read);
+                    }
                 }
-                in.close();
                 zos.closeEntry();
             }
         } catch (IOException e) {

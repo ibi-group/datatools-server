@@ -361,13 +361,8 @@ public class Deployment extends Model implements Serializable {
                 // Extract OSM and insert it into the deployment bundle
                 ZipEntry e = new ZipEntry("osm.pbf");
                 out.putNextEntry(e);
-                InputStream is = downloadOsmExtract();
-                ByteStreams.copy(is, out);
-                try {
-                    is.close();
-                } catch (IOException e1) {
-                    LOG.warn("Could not close OSM input stream");
-                    e1.printStackTrace();
+                try (InputStream is = downloadOsmExtract()) {
+                    ByteStreams.copy(is, out);
                 }
                 out.closeEntry();
             }
