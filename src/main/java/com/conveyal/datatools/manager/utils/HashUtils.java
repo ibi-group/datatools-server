@@ -40,6 +40,7 @@ public class HashUtils {
                         i++;
                     }
                 } else {
+                    // Intentionally read through the remainder of the stream to ensure the entire file is hashed.
                     while (dis.read() != -1) {
                     }
                 }
