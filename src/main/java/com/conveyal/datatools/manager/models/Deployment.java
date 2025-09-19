@@ -504,7 +504,7 @@ public class Deployment extends Model implements Serializable {
         if (extractUrl == null) {
             throw new IllegalArgumentException("Cannot download OSM extract. Extract URL is invalid.");
         }
-        LOG.info("Getting OSM extract at {}", extractUrl);
+        LOG.info("Getting OSM extract at {}", extractUrl.toString());
         // Http URL connection must be closed by calling method.
         HttpURLConnection conn = (HttpURLConnection) extractUrl.openConnection();
         conn.connect();
