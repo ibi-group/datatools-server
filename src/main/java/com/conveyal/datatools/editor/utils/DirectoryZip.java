@@ -32,7 +32,7 @@ public class DirectoryZip {
                         queue.push(kid);
                         name = name.endsWith("/") ? name : name + "/";
                         zout.putNextEntry(new ZipEntry(name));
-                        zout.closeEntry(); // Explicitly close directory entry
+                        zout.closeEntry(); // Explicitly close directory entry to ensure ZIP structure is valid; omitting this may corrupt the archive.
                     } else {
                         zout.putNextEntry(new ZipEntry(name));
                         copy(kid, zout);
