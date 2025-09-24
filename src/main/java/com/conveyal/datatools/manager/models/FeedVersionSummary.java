@@ -28,6 +28,8 @@ public class FeedVersionSummary extends Model implements Serializable {
     @JsonIgnore
     public ValidationResult validationResult;
     private PartialValidationSummary validationSummary;
+    public Date processedByExternalPublisher;
+    public Date sentToExternalPublisher;
 
     public PartialValidationSummary getValidationSummary() {
         if (validationSummary == null) {

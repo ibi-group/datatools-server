@@ -33,7 +33,6 @@ import static com.mongodb.client.model.Filters.in;
 
 public class FeedSourceSummary {
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
-
     public String projectId;
 
     public String id;
@@ -70,6 +69,10 @@ public class FeedSourceSummary {
     public List<String> noteIds = new ArrayList<>();
 
     public String organizationId;
+
+    public Date latestProcessedByExternalPublisher;
+
+    public Date latestSentToExternalPublisher;
 
     public FeedSourceSummary() {
     }
@@ -111,6 +114,8 @@ public class FeedSourceSummary {
                     : feedVersionSummary.validationResult.errorCount;
             } else {
                 this.latestValidation = new LatestValidationResult(feedVersionSummary);
+                this.latestProcessedByExternalPublisher = feedVersionSummary.processedByExternalPublisher;
+                this.latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
             }
         }
     }
@@ -208,7 +213,9 @@ public class FeedSourceSummary {
                                 feedVersionId: "$feedVersions._id",
                                 firstCalendarDate: "$feedVersions.validationResult.firstCalendarDate",
                                 lastCalendarDate: "$feedVersions.validationResult.lastCalendarDate",
-                                issues: "$feedVersions.validationResult.errorCount"
+                                errorCount: "$feedVersions.validationResult.errorCount",
+                                processedByExternalPublisher: "$feedVersions.processedByExternalPublisher",
+                                sentToExternalPublisher: "$feedVersions.sentToExternalPublisher"
                             }
                         }
                     }
@@ -226,7 +233,9 @@ public class FeedSourceSummary {
                 Accumulators.last("feedVersionId", "$feedVersions._id"),
                 Accumulators.last("firstCalendarDate", "$feedVersions.validationResult.firstCalendarDate"),
                 Accumulators.last("lastCalendarDate", "$feedVersions.validationResult.lastCalendarDate"),
-                Accumulators.last("errorCount", "$feedVersions.validationResult.errorCount")
+                Accumulators.last("errorCount", "$feedVersions.validationResult.errorCount"),
+                Accumulators.last("processedByExternalPublisher", "$feedVersions.processedByExternalPublisher"),
+                Accumulators.last("sentToExternalPublisher", "$feedVersions.sentToExternalPublisher")
             )
         );
         return extractFeedVersionSummaries(
@@ -464,6 +473,8 @@ public class FeedSourceSummary {
         for (Document feedVersionDocument : Persistence.getDocuments(collection, stages)) {
             FeedVersionSummary feedVersionSummary = new FeedVersionSummary();
             feedVersionSummary.id = feedVersionDocument.getString(feedVersionKey);
+            feedVersionSummary.processedByExternalPublisher = feedVersionDocument.getDate("processedByExternalPublisher");
+            feedVersionSummary.sentToExternalPublisher = feedVersionDocument.getDate("sentToExternalPublisher");
             feedVersionSummary.validationResult = getValidationResult(hasChildValidationResultDocument, feedVersionDocument);
             feedVersionSummaries.put(feedVersionDocument.getString(feedSourceKey), feedVersionSummary);
         }

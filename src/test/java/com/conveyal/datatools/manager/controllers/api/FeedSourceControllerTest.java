@@ -397,6 +397,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.startDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.endDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
+        assertEquals(feedVersionFromLatestDeployment.processedByExternalPublisher, feedSourceSummaries.get(0).latestProcessedByExternalPublisher);
+        assertEquals(feedVersionFromLatestDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
     }
 
     @Test
@@ -431,6 +433,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.startDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.endDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
+        assertEquals(feedVersionFromPinnedDeployment.processedByExternalPublisher, feedSourceSummaries.get(0).latestProcessedByExternalPublisher);
+        assertEquals(feedVersionFromPinnedDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
     }
 
     private static FeedSource createFeedSource(String name, URL url, Project project) {
@@ -504,6 +508,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         validationResult.lastCalendarDate = endDate;
         validationResult.errorCount = 5 + (int)(Math.random() * ((1000 - 5) + 1));
         feedVersion.validationResult = validationResult;
+        feedVersion.processedByExternalPublisher = new Date();
+        feedVersion.sentToExternalPublisher = new Date();
         Persistence.feedVersions.create(feedVersion);
         return feedVersion;
     }
