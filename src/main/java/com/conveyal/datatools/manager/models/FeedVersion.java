@@ -5,6 +5,7 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
+import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
@@ -276,6 +277,8 @@ public class FeedVersion extends Model implements Serializable {
 
     public Document mobilityDataResult;
 
+    public boolean hasGtfsPlusValidationIssues;
+
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
         return format.format(this.updated);
@@ -472,6 +475,30 @@ public class FeedVersion extends Model implements Serializable {
             // FIXME create validation result with new constructor?
             validationResult = new ValidationResult();
             validationResult.fatalException = "failure!";
+        }
+    }
+
+    /**
+     * Produce Gtfs+ validation results for this feed version if GTFS+ module is enabled.
+     */
+    public void validateGtfsPlus(MonitorableJob.Status status) {
+
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
+
+        if (DataManager.isModuleEnabled("gtfsplus")) {
+            try {
+                GtfsPlusValidation gtfsPlusValidation = GtfsPlusValidation.validate(this);
+                hasGtfsPlusValidationIssues = !gtfsPlusValidation.issues.isEmpty();
+            } catch (Exception e) {
+                LOG.warn("Unable to validate GTFS+ validation.", e);
+                status.fail(String.format("Unable to validate feed %s", this.id), e);
+                hasGtfsPlusValidationIssues = true;
+                validationResult = new ValidationResult();
+                validationResult.fatalException = "failure!";
+            }
+        } else {
+            LOG.warn("GTFS+ module not enabled, skipping GTFS+ validation.");
         }
     }
 

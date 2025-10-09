@@ -399,6 +399,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
         assertEquals(feedVersionFromLatestDeployment.processedByExternalPublisher, feedSourceSummaries.get(0).latestProcessedByExternalPublisher);
         assertEquals(feedVersionFromLatestDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
+        assertEquals(feedVersionFromLatestDeployment.hasGtfsPlusValidationIssues, feedSourceSummaries.get(0).latestHasGtfsPlusValidationIssues);
     }
 
     @Test
@@ -435,6 +436,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
         assertEquals(feedVersionFromPinnedDeployment.processedByExternalPublisher, feedSourceSummaries.get(0).latestProcessedByExternalPublisher);
         assertEquals(feedVersionFromPinnedDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
+        assertEquals(feedVersionFromPinnedDeployment.hasGtfsPlusValidationIssues, feedSourceSummaries.get(0).latestHasGtfsPlusValidationIssues);
     }
 
     private static FeedSource createFeedSource(String name, URL url, Project project) {
@@ -510,6 +512,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedVersion.validationResult = validationResult;
         feedVersion.processedByExternalPublisher = new Date();
         feedVersion.sentToExternalPublisher = new Date();
+        feedVersion.hasGtfsPlusValidationIssues = true;
         Persistence.feedVersions.create(feedVersion);
         return feedVersion;
     }

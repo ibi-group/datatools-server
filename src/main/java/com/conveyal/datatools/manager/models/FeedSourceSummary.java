@@ -74,6 +74,8 @@ public class FeedSourceSummary {
 
     public Date latestSentToExternalPublisher;
 
+    public boolean latestHasGtfsPlusValidationIssues;
+
     public FeedSourceSummary() {
     }
 
@@ -116,6 +118,7 @@ public class FeedSourceSummary {
                 this.latestValidation = new LatestValidationResult(feedVersionSummary);
                 this.latestProcessedByExternalPublisher = feedVersionSummary.processedByExternalPublisher;
                 this.latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
+                this.latestHasGtfsPlusValidationIssues = feedVersionSummary.hasGtfsPlusValidationIssues;
             }
         }
     }
@@ -216,6 +219,7 @@ public class FeedSourceSummary {
                                 errorCount: "$feedVersions.validationResult.errorCount",
                                 processedByExternalPublisher: "$feedVersions.processedByExternalPublisher",
                                 sentToExternalPublisher: "$feedVersions.sentToExternalPublisher"
+                                hasGtfsPlusValidationIssues: "$feedVersions.hasGtfsPlusValidationIssues"
                             }
                         }
                     }
@@ -235,7 +239,8 @@ public class FeedSourceSummary {
                 Accumulators.last("lastCalendarDate", "$feedVersions.validationResult.lastCalendarDate"),
                 Accumulators.last("errorCount", "$feedVersions.validationResult.errorCount"),
                 Accumulators.last("processedByExternalPublisher", "$feedVersions.processedByExternalPublisher"),
-                Accumulators.last("sentToExternalPublisher", "$feedVersions.sentToExternalPublisher")
+                Accumulators.last("sentToExternalPublisher", "$feedVersions.sentToExternalPublisher"),
+                Accumulators.last("hasGtfsPlusValidationIssues", "$feedVersions.hasGtfsPlusValidationIssues")
             )
         );
         return extractFeedVersionSummaries(
@@ -475,6 +480,8 @@ public class FeedSourceSummary {
             feedVersionSummary.id = feedVersionDocument.getString(feedVersionKey);
             feedVersionSummary.processedByExternalPublisher = feedVersionDocument.getDate("processedByExternalPublisher");
             feedVersionSummary.sentToExternalPublisher = feedVersionDocument.getDate("sentToExternalPublisher");
+            Boolean hasGtfsPlusValidationIssues = feedVersionDocument.getBoolean("hasGtfsPlusValidationIssues");
+            feedVersionSummary.hasGtfsPlusValidationIssues = hasGtfsPlusValidationIssues != null && hasGtfsPlusValidationIssues;
             feedVersionSummary.validationResult = getValidationResult(hasChildValidationResultDocument, feedVersionDocument);
             feedVersionSummaries.put(feedVersionDocument.getString(feedSourceKey), feedVersionSummary);
         }

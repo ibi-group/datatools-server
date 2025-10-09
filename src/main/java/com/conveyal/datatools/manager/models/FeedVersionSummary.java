@@ -30,6 +30,7 @@ public class FeedVersionSummary extends Model implements Serializable {
     private PartialValidationSummary validationSummary;
     public Date processedByExternalPublisher;
     public Date sentToExternalPublisher;
+    public boolean hasGtfsPlusValidationIssues;
 
     public PartialValidationSummary getValidationSummary() {
         if (validationSummary == null) {
