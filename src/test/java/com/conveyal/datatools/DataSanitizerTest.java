@@ -47,7 +47,7 @@ class DataSanitizerTest {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
-        ProcessSingleFeedJob.SKIP_ADDITIONAL_VALIDATION = false;
+        ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = false;
         project = new Project();
         project.name = appendDate("Test");
         Persistence.projects.create(project);
@@ -86,7 +86,7 @@ class DataSanitizerTest {
     @AfterAll
     static void tearDown() throws SQLException, InvalidNamespaceException, CheckedAWSException {
         Auth0Connection.setAuthDisabled(false);
-        ProcessSingleFeedJob.SKIP_ADDITIONAL_VALIDATION = true;
+        ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = true;
         project.delete();
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionOrphan.id);
         if (feedVersion != null) {

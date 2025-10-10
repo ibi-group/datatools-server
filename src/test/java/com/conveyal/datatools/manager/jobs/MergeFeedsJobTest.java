@@ -87,7 +87,7 @@ public class MergeFeedsJobTest extends UnitTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
-        ProcessSingleFeedJob.SKIP_ADDITIONAL_VALIDATION = false;
+        ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = false;
         // Enable MTC extension, but disable the transformations.
         ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = false;
         DatatoolsTest.enableMTCExtension();
@@ -169,7 +169,7 @@ public class MergeFeedsJobTest extends UnitTest {
         }
         DatatoolsTest.resetMTCExtension();
         ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = true;
-        ProcessSingleFeedJob.SKIP_ADDITIONAL_VALIDATION = true;
+        ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = true;
     }
 
     /**
