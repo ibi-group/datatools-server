@@ -10,6 +10,10 @@ public class ValidationIssue implements Serializable {
     public int rowIndex;
     public String description;
 
+    public ValidationIssue() {
+        // Empty constructor for serialization
+    }
+
     public ValidationIssue(String tableId, String fieldName, int rowIndex, String description) {
         this.tableId = tableId;
         this.fieldName = fieldName;

@@ -277,7 +277,7 @@ public class FeedVersion extends Model implements Serializable {
 
     public Document mobilityDataResult;
 
-    public boolean hasGtfsPlusValidationIssues;
+    public GtfsPlusValidation gtfsPlusValidation;
 
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
@@ -488,12 +488,10 @@ public class FeedVersion extends Model implements Serializable {
 
         if (DataManager.isModuleEnabled("gtfsplus")) {
             try {
-                GtfsPlusValidation gtfsPlusValidation = GtfsPlusValidation.validate(this);
-                hasGtfsPlusValidationIssues = !gtfsPlusValidation.issues.isEmpty();
+                gtfsPlusValidation = GtfsPlusValidation.validate(this);
             } catch (Exception e) {
                 LOG.warn("Unable to validate GTFS+ validation.", e);
                 status.fail(String.format("Unable to validate feed %s", this.id), e);
-                hasGtfsPlusValidationIssues = true;
                 validationResult = new ValidationResult();
                 validationResult.fatalException = "failure!";
             }

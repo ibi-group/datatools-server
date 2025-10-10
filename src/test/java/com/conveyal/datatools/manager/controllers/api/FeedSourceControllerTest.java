@@ -4,6 +4,8 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
+import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
+import com.conveyal.datatools.manager.gtfsplus.ValidationIssue;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -399,7 +401,9 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
         assertEquals(feedVersionFromLatestDeployment.processedByExternalPublisher, feedSourceSummaries.get(0).latestProcessedByExternalPublisher);
         assertEquals(feedVersionFromLatestDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
-        assertEquals(feedVersionFromLatestDeployment.hasGtfsPlusValidationIssues, feedSourceSummaries.get(0).latestHasGtfsPlusValidationIssues);
+        assertEquals(feedVersionFromLatestDeployment.gtfsPlusValidation.issues.size(), feedSourceSummaries.get(0).latestGtfsPlusValidation.issues.size());
+        assertEquals(feedVersionFromLatestDeployment.gtfsPlusValidation.published, feedSourceSummaries.get(0).latestGtfsPlusValidation.published);
+
     }
 
     @Test
@@ -436,7 +440,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
         assertEquals(feedVersionFromPinnedDeployment.processedByExternalPublisher, feedSourceSummaries.get(0).latestProcessedByExternalPublisher);
         assertEquals(feedVersionFromPinnedDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
-        assertEquals(feedVersionFromPinnedDeployment.hasGtfsPlusValidationIssues, feedSourceSummaries.get(0).latestHasGtfsPlusValidationIssues);
+        assertEquals(feedVersionFromPinnedDeployment.gtfsPlusValidation.issues.size(), feedSourceSummaries.get(0).latestGtfsPlusValidation.issues.size());
+        assertEquals(feedVersionFromPinnedDeployment.gtfsPlusValidation.published, feedSourceSummaries.get(0).latestGtfsPlusValidation.published);
     }
 
     private static FeedSource createFeedSource(String name, URL url, Project project) {
@@ -512,7 +517,11 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedVersion.validationResult = validationResult;
         feedVersion.processedByExternalPublisher = new Date();
         feedVersion.sentToExternalPublisher = new Date();
-        feedVersion.hasGtfsPlusValidationIssues = true;
+        List<ValidationIssue> issues = List.of(
+            new ValidationIssue("Test issue 1", "stops.txt", 1, "stop_id"),
+            new ValidationIssue("Test issue 2", "stops.txt", 2, "stop_id")
+        );
+        feedVersion.gtfsPlusValidation = new GtfsPlusValidation(true, issues);
         Persistence.feedVersions.create(feedVersion);
         return feedVersion;
     }

@@ -38,7 +38,7 @@ public class GtfsPlusValidation implements Serializable {
     private static final String REALTIME_ROUTES_TXT = "realtime_routes.txt";
 
     // Public fields to appear in validation JSON.
-    public final String feedVersionId;
+    public String feedVersionId;
     /** Indicates whether GTFS+ validation applies to user-edited feed or original published GTFS feed */
     public boolean published;
     public long lastModified;
@@ -47,6 +47,15 @@ public class GtfsPlusValidation implements Serializable {
 
     private GtfsPlusValidation (String feedVersionId) {
         this.feedVersionId = feedVersionId;
+    }
+
+    public GtfsPlusValidation(boolean published, List<ValidationIssue> issues) {
+        this.published = published;
+        this.issues = issues;
+    }
+
+    public GtfsPlusValidation() {
+        // Empty constructor for serialization
     }
 
     /**

@@ -1,8 +1,12 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
+import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
+import com.conveyal.datatools.manager.gtfsplus.ValidationIssue;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.validator.ValidationResult;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.Lists;
@@ -32,6 +36,7 @@ import static com.mongodb.client.model.Aggregates.unwind;
 import static com.mongodb.client.model.Filters.in;
 
 public class FeedSourceSummary {
+    private static final ObjectMapper mapper = new ObjectMapper();
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
     public String projectId;
 
@@ -74,7 +79,7 @@ public class FeedSourceSummary {
 
     public Date latestSentToExternalPublisher;
 
-    public boolean latestHasGtfsPlusValidationIssues;
+    public GtfsPlusValidation latestGtfsPlusValidation;
 
     public FeedSourceSummary() {
     }
@@ -118,7 +123,7 @@ public class FeedSourceSummary {
                 this.latestValidation = new LatestValidationResult(feedVersionSummary);
                 this.latestProcessedByExternalPublisher = feedVersionSummary.processedByExternalPublisher;
                 this.latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
-                this.latestHasGtfsPlusValidationIssues = feedVersionSummary.hasGtfsPlusValidationIssues;
+                this.latestGtfsPlusValidation = feedVersionSummary.gtfsPlusValidation;
             }
         }
     }
@@ -218,8 +223,8 @@ public class FeedSourceSummary {
                                 lastCalendarDate: "$feedVersions.validationResult.lastCalendarDate",
                                 errorCount: "$feedVersions.validationResult.errorCount",
                                 processedByExternalPublisher: "$feedVersions.processedByExternalPublisher",
-                                sentToExternalPublisher: "$feedVersions.sentToExternalPublisher"
-                                hasGtfsPlusValidationIssues: "$feedVersions.hasGtfsPlusValidationIssues"
+                                sentToExternalPublisher: "$feedVersions.sentToExternalPublisher",
+                                gtfsPlusValidation: "$feedVersions.gtfsPlusValidation"
                             }
                         }
                     }
@@ -240,7 +245,7 @@ public class FeedSourceSummary {
                 Accumulators.last("errorCount", "$feedVersions.validationResult.errorCount"),
                 Accumulators.last("processedByExternalPublisher", "$feedVersions.processedByExternalPublisher"),
                 Accumulators.last("sentToExternalPublisher", "$feedVersions.sentToExternalPublisher"),
-                Accumulators.last("hasGtfsPlusValidationIssues", "$feedVersions.hasGtfsPlusValidationIssues")
+                Accumulators.last("gtfsPlusValidation", "$feedVersions.gtfsPlusValidation")
             )
         );
         return extractFeedVersionSummaries(
@@ -480,12 +485,34 @@ public class FeedSourceSummary {
             feedVersionSummary.id = feedVersionDocument.getString(feedVersionKey);
             feedVersionSummary.processedByExternalPublisher = feedVersionDocument.getDate("processedByExternalPublisher");
             feedVersionSummary.sentToExternalPublisher = feedVersionDocument.getDate("sentToExternalPublisher");
-            Boolean hasGtfsPlusValidationIssues = feedVersionDocument.getBoolean("hasGtfsPlusValidationIssues");
-            feedVersionSummary.hasGtfsPlusValidationIssues = hasGtfsPlusValidationIssues != null && hasGtfsPlusValidationIssues;
+            feedVersionSummary.gtfsPlusValidation = getGtfsPlusValidation(feedVersionDocument);
             feedVersionSummary.validationResult = getValidationResult(hasChildValidationResultDocument, feedVersionDocument);
             feedVersionSummaries.put(feedVersionDocument.getString(feedSourceKey), feedVersionSummary);
         }
         return feedVersionSummaries;
+    }
+
+    /**
+     * Build GtfsPlusValidation object from feed version document.
+     */
+    private static GtfsPlusValidation getGtfsPlusValidation(Document feedVersionDocument) {
+        Document gtfsPlusValidationDocument = getDocumentChild(feedVersionDocument, "gtfsPlusValidation");
+        if (gtfsPlusValidationDocument == null) return null;
+        List<ValidationIssue> issues = null;
+        if (gtfsPlusValidationDocument.containsKey("issues") && gtfsPlusValidationDocument.get("issues") != null) {
+            List<Document> issueDocs = gtfsPlusValidationDocument.getList("issues", Document.class);
+            if (issueDocs != null) {
+                issues = new ArrayList<>();
+                for (Document doc : issueDocs) {
+                    issues.add(mapper.convertValue(doc, ValidationIssue.class));
+                }
+            }
+        }
+        boolean published = false;
+        if (gtfsPlusValidationDocument.getBoolean("published") != null) {
+            published = gtfsPlusValidationDocument.getBoolean("published");
+        }
+        return new GtfsPlusValidation(published, issues);
     }
 
     /**

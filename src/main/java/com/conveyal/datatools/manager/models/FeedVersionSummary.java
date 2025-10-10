@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
+import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -30,7 +31,7 @@ public class FeedVersionSummary extends Model implements Serializable {
     private PartialValidationSummary validationSummary;
     public Date processedByExternalPublisher;
     public Date sentToExternalPublisher;
-    public boolean hasGtfsPlusValidationIssues;
+    public GtfsPlusValidation gtfsPlusValidation;
 
     public PartialValidationSummary getValidationSummary() {
         if (validationSummary == null) {
