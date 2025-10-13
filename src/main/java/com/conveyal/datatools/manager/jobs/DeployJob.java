@@ -24,6 +24,7 @@ import com.amazonaws.services.s3.transfer.Upload;
 import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.CloseableHttpURLConnection;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.EC2ValidationResult;
@@ -519,15 +520,8 @@ public class DeployJob extends MonitorableJob {
             }
 
             // grab them synchronously, so that we only take down one OTP server at a time
-            HttpURLConnection conn = null;
-            try {
-                try {
-                    conn = (HttpURLConnection) url.openConnection();
-                } catch (IOException e) {
-                    status.fail(String.format("Unable to open URL of OTP server %s", url), e);
-                    return false;
-                }
-
+            try (CloseableHttpURLConnection closeableCon = new CloseableHttpURLConnection(url)) {
+                HttpURLConnection conn = closeableCon.getConnection();
                 conn.addRequestProperty("Content-Type", "application/zip");
                 conn.setDoOutput(true);
                 // graph build can take a long time but not more than an hour, I should think
@@ -601,12 +595,10 @@ public class DeployJob extends MonitorableJob {
                 } catch (IOException e) {
                     status.fail(String.format("Could not finish request to server %s", url), e);
                 }
-            } finally {
-                if (conn != null) {
-                    conn.disconnect();
-                }
+            } catch (IOException e) {
+                status.fail(String.format("Unable to open URL of OTP server %s", url), e);
+                return false;
             }
-
             status.numServersCompleted++;
             tasksCompleted++;
             status.percentComplete = 100.0 * (double) tasksCompleted / totalTasks;

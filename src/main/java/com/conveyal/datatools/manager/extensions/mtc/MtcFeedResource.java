@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.extensions.mtc;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.conveyal.datatools.common.utils.CloseableHttpURLConnection;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
@@ -83,9 +84,8 @@ public class MtcFeedResource implements ExternalFeedResource {
             throw ex;
         }
 
-        HttpURLConnection conn = null;
-        try {
-            conn = (HttpURLConnection) url.openConnection();
+        try (CloseableHttpURLConnection closeableCon = new CloseableHttpURLConnection(url)) {
+            HttpURLConnection conn = closeableCon.getConnection();
             //add request header
             conn.setRequestProperty("User-Agent", "User-Agent");
             // add auth header
@@ -135,10 +135,6 @@ public class MtcFeedResource implements ExternalFeedResource {
         } catch(Exception ex) {
             LOG.error("Could not read feeds from MTC RTD API");
             throw ex;
-        } finally {
-            if (conn != null) {
-                conn.disconnect();
-            }
         }
     }
 
@@ -228,13 +224,12 @@ public class MtcFeedResource implements ExternalFeedResource {
      * Update or create a carrier and its properties with an HTTP request to the RTD.
      */
     private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) throws IOException {
-        HttpURLConnection connection = null;
-        try {
+        URL rtdUrl = new URL(rtdApi + "/Carrier/" + (createNew ? "" : carrier.AgencyId));
+        try (CloseableHttpURLConnection closeableCon = new CloseableHttpURLConnection(rtdUrl)) {
             String carrierJson = carrier.toJson();
 
-            URL rtdUrl = new URL(rtdApi + "/Carrier/" + (createNew ? "" : carrier.AgencyId));
             LOG.info("Writing to RTD URL: {} JSON >>>{}", rtdUrl, carrierJson);
-            connection = (HttpURLConnection) rtdUrl.openConnection();
+            HttpURLConnection connection = closeableCon.getConnection();
 
             connection.setRequestMethod(createNew ? "POST" : "PUT");
             connection.setDoOutput(true);
@@ -255,10 +250,6 @@ public class MtcFeedResource implements ExternalFeedResource {
         } catch (Exception e) {
             LOG.error("Error writing to RTD", e);
             throw e;
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
         }
     }
 
