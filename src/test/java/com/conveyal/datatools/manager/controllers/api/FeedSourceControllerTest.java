@@ -403,7 +403,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromLatestDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
         assertEquals(feedVersionFromLatestDeployment.gtfsPlusValidation.issues.size(), feedSourceSummaries.get(0).latestGtfsPlusValidation.issues.size());
         assertEquals(feedVersionFromLatestDeployment.gtfsPlusValidation.published, feedSourceSummaries.get(0).latestGtfsPlusValidation.published);
-
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.publishedVersionId, feedSourceSummaries.get(0).latestPublishedVersionId);
     }
 
     @Test
@@ -442,6 +442,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromPinnedDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
         assertEquals(feedVersionFromPinnedDeployment.gtfsPlusValidation.issues.size(), feedSourceSummaries.get(0).latestGtfsPlusValidation.issues.size());
         assertEquals(feedVersionFromPinnedDeployment.gtfsPlusValidation.published, feedSourceSummaries.get(0).latestGtfsPlusValidation.published);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.publishedVersionId, feedSourceSummaries.get(0).latestPublishedVersionId);
     }
 
     private static FeedSource createFeedSource(String name, URL url, Project project) {
@@ -472,6 +473,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSource.projectId = project.id;
         feedSource.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
         feedSource.url = url;
+        feedSource.publishedVersionId = "published-version-id-1";
         if (labels != null) feedSource.labelIds = labels;
         if (notes != null) feedSource.noteIds = notes;
         if (persist) Persistence.feedSources.create(feedSource);

@@ -81,6 +81,8 @@ public class FeedSourceSummary {
 
     public GtfsPlusValidation latestGtfsPlusValidation;
 
+    public String latestPublishedVersionId;
+
     public FeedSourceSummary() {
     }
 
@@ -124,6 +126,7 @@ public class FeedSourceSummary {
                 this.latestProcessedByExternalPublisher = feedVersionSummary.processedByExternalPublisher;
                 this.latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
                 this.latestGtfsPlusValidation = feedVersionSummary.gtfsPlusValidation;
+                this.latestPublishedVersionId = feedVersionSummary.publishedVersionId;
             }
         }
     }
@@ -215,6 +218,7 @@ public class FeedSourceSummary {
                 {
                     $group: {
                         _id: "$_id",
+                        publishedVersionId: { $first: "$publishedVersionId" },
                         doc: {
                             $max: {
                                 version: "$feedVersions.version",
@@ -239,6 +243,7 @@ public class FeedSourceSummary {
             unwind("$feedVersions"),
             group(
                 "$_id",
+                Accumulators.first("publishedVersionId", "$publishedVersionId"),
                 Accumulators.last("feedVersionId", "$feedVersions._id"),
                 Accumulators.last("firstCalendarDate", "$feedVersions.validationResult.firstCalendarDate"),
                 Accumulators.last("lastCalendarDate", "$feedVersions.validationResult.lastCalendarDate"),
@@ -486,6 +491,7 @@ public class FeedSourceSummary {
             feedVersionSummary.processedByExternalPublisher = feedVersionDocument.getDate("processedByExternalPublisher");
             feedVersionSummary.sentToExternalPublisher = feedVersionDocument.getDate("sentToExternalPublisher");
             feedVersionSummary.gtfsPlusValidation = getGtfsPlusValidation(feedVersionDocument);
+            feedVersionSummary.publishedVersionId = feedVersionDocument.getString("publishedVersionId");
             feedVersionSummary.validationResult = getValidationResult(hasChildValidationResultDocument, feedVersionDocument);
             feedVersionSummaries.put(feedVersionDocument.getString(feedSourceKey), feedVersionSummary);
         }
