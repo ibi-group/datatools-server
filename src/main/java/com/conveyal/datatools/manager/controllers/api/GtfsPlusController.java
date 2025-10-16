@@ -246,13 +246,22 @@ public class GtfsPlusController {
     }
 
     /**
-     * HTTP endpoint that validates GTFS+ tables for a specific feed version (or its saved/edited GTFS+).
+     * HTTP endpoint that validates GTFS+ tables for a specific feed version (or its saved/edited GTFS+). If the feed
+     * version already has GTFS+ validation results, those will be returned instead of re-validating.
      */
     private static GtfsPlusValidation getGtfsPlusValidation(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         GtfsPlusValidation gtfsPlusValidation = null;
         try {
+            FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
+            if (feedVersion != null && feedVersion.gtfsPlusValidation != null) {
+                return feedVersion.gtfsPlusValidation;
+            }
             gtfsPlusValidation = GtfsPlusValidation.validate(feedVersionId);
+            if (feedVersion != null) {
+                feedVersion.gtfsPlusValidation = gtfsPlusValidation;
+                Persistence.feedVersions.replace(feedVersion.id, feedVersion);
+            }
         } catch(Exception e) {
             logMessageAndHalt(req, 500, "Could not read GTFS+ zip file", e);
         }
