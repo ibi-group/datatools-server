@@ -95,21 +95,21 @@ public class FeedStore {
             String key = S3Utils.makeGtfsFolderObjectKey(id);
             String uri = S3Utils.getDefaultBucketUriForKey(key);
             LOG.info("Downloading feed from {}", uri);
-            InputStream objectData;
-            try {
+            try (
                 S3Object object = S3Utils.getDefaultS3Client().getObject(
-                    new GetObjectRequest(S3Utils.DEFAULT_BUCKET, key));
-                objectData = object.getObjectContent();
-            } catch (AmazonServiceException | CheckedAWSException e) {
+                    new GetObjectRequest(S3Utils.DEFAULT_BUCKET, key)
+                );
+                InputStream objectData = object.getObjectContent();
+            ) {
+                try {
+                    return createTempFile(id, objectData);
+                } catch (IOException e) {
+                    // TODO: Log to bugsnag?
+                    LOG.error("Error creating temp file", e);
+                }
+            } catch (AmazonServiceException | CheckedAWSException | IOException e) {
                 LOG.error("Error downloading " + uri, e);
                 return null;
-            }
-
-            try {
-                return createTempFile(id, objectData);
-            } catch (IOException e) {
-                // TODO: Log to bugsnag?
-                LOG.error("Error creating temp file", e);
             }
         }
         return null;
@@ -166,7 +166,9 @@ public class FeedStore {
         // FIXME: Figure out how to manage temp files created here. Currently, we just call deleteOnExit, but
         //  this will only delete the file once the java process stops.
         tempFile.deleteOnExit();
-        ByteStreams.copy(in, new FileOutputStream(tempFile));
+        try (FileOutputStream outputStream = new FileOutputStream(tempFile)) {
+            ByteStreams.copy(in, outputStream);
+        }
         return tempFile;
     }
 

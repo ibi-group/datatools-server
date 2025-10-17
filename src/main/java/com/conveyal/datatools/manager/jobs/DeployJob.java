@@ -24,6 +24,7 @@ import com.amazonaws.services.s3.transfer.Upload;
 import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.CloseableHttpURLConnection;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.EC2ValidationResult;
@@ -55,7 +56,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -475,9 +475,9 @@ public class DeployJob extends MonitorableJob {
             LOG.info("Uploading router-config.json to s3 bucket");
             // Write router config to temp file.
             File routerConfigFile = File.createTempFile("router-config", ".json");
-            FileOutputStream out = new FileOutputStream(routerConfigFile);
-            out.write(routerConfigAsBytes);
-            out.close();
+            try (FileOutputStream out = new FileOutputStream(routerConfigFile)) {
+                out.write(routerConfigAsBytes);
+            }
             // Upload router config.
             transferManager
                 .upload(bucket, getS3FolderURI().getKey() + "/" + ROUTER_CONFIG_FILENAME, routerConfigFile)
@@ -520,92 +520,85 @@ public class DeployJob extends MonitorableJob {
             }
 
             // grab them synchronously, so that we only take down one OTP server at a time
-            HttpURLConnection conn;
-            try {
-                conn = (HttpURLConnection) url.openConnection();
+            try (CloseableHttpURLConnection closeableCon = new CloseableHttpURLConnection(url)) {
+                HttpURLConnection conn = closeableCon.getConnection();
+                conn.addRequestProperty("Content-Type", "application/zip");
+                conn.setDoOutput(true);
+                // graph build can take a long time but not more than an hour, I should think
+                conn.setConnectTimeout(60 * 60 * 1000);
+                conn.setFixedLengthStreamingMode(deploymentTempFile.length());
+
+                // this makes it a post request so that we can upload our file
+                WritableByteChannel post;
+                try {
+                    post = Channels.newChannel(conn.getOutputStream());
+                } catch (IOException e) {
+                    status.fail(String.format("Could not open channel to OTP server %s", url), e);
+                    return false;
+                }
+
+                // retrieveById the input file
+                try (
+                    FileInputStream fileInputStream = new FileInputStream(deploymentTempFile);
+                    FileChannel input = fileInputStream.getChannel()
+                ) {
+                    try {
+                        conn.connect();
+                    } catch (IOException e) {
+                        status.fail(String.format("Unable to open connection to OTP server %s", url), e);
+                        return false;
+                    }
+
+                    // copy
+                    try {
+                        input.transferTo(0, Long.MAX_VALUE, post);
+                    } catch (IOException e) {
+                        status.fail(String.format("Unable to transfer deployment to server %s", url), e);
+                        return false;
+                    }
+
+                    try {
+                        post.close();
+                    } catch (IOException e) {
+                        status.fail(String.format("Error finishing connection to server %s", url), e);
+                        return false;
+                    }
+                } catch (IOException e) {
+                    status.fail("Internal error: could not read dumped deployment!", e);
+                    return false;
+                }
+
+                status.uploading = false;
+
+                // wait for the server to build the graph
+                // TODO: timeouts?
+                try {
+                    int code = conn.getResponseCode();
+                    if (code != HttpURLConnection.HTTP_CREATED) {
+                        // Get input/error stream from connection response.
+                        try (
+                            InputStream stream = code < HttpURLConnection.HTTP_BAD_REQUEST
+                                ? conn.getInputStream()
+                                : conn.getErrorStream()
+                        ) {
+                            String response;
+                            try (Scanner scanner = new Scanner(stream)) {
+                                scanner.useDelimiter("\\Z");
+                                response = scanner.next();
+                            }
+                            status.fail(String.format("Got response code %d from server due to %s", code, response));
+                            // Skip deploying to any other servers.
+                            // There is no reason to take out the rest of the servers, it's going to have the same result.
+                            return false;
+                        }
+                    }
+                } catch (IOException e) {
+                    status.fail(String.format("Could not finish request to server %s", url), e);
+                }
             } catch (IOException e) {
                 status.fail(String.format("Unable to open URL of OTP server %s", url), e);
                 return false;
             }
-
-            conn.addRequestProperty("Content-Type", "application/zip");
-            conn.setDoOutput(true);
-            // graph build can take a long time but not more than an hour, I should think
-            conn.setConnectTimeout(60 * 60 * 1000);
-            conn.setFixedLengthStreamingMode(deploymentTempFile.length());
-
-            // this makes it a post request so that we can upload our file
-            WritableByteChannel post;
-            try {
-                post = Channels.newChannel(conn.getOutputStream());
-            } catch (IOException e) {
-                status.fail(String.format("Could not open channel to OTP server %s", url), e);
-                return false;
-            }
-
-            // retrieveById the input file
-            FileChannel input;
-            try {
-                input = new FileInputStream(deploymentTempFile).getChannel();
-            } catch (FileNotFoundException e) {
-                status.fail("Internal error: could not read dumped deployment!", e);
-                return false;
-            }
-
-            try {
-                conn.connect();
-            } catch (IOException e) {
-                status.fail(String.format("Unable to open connection to OTP server %s", url), e);
-                return false;
-            }
-
-            // copy
-            try {
-                input.transferTo(0, Long.MAX_VALUE, post);
-            } catch (IOException e) {
-                status.fail(String.format("Unable to transfer deployment to server %s", url), e);
-                return false;
-            }
-
-            try {
-                post.close();
-            } catch (IOException e) {
-                status.fail(String.format("Error finishing connection to server %s", url), e);
-                return false;
-            }
-
-            try {
-                input.close();
-            } catch (IOException e) {
-                // do nothing
-                LOG.warn("Could not close input stream for deployment file.");
-            }
-
-            status.uploading = false;
-
-            // wait for the server to build the graph
-            // TODO: timeouts?
-            try {
-                int code = conn.getResponseCode();
-                if (code != HttpURLConnection.HTTP_CREATED) {
-                    // Get input/error stream from connection response.
-                    InputStream stream = code < HttpURLConnection.HTTP_BAD_REQUEST
-                        ? conn.getInputStream()
-                        : conn.getErrorStream();
-                    String response;
-                    try (Scanner scanner = new Scanner(stream)) {
-                        scanner.useDelimiter("\\Z");
-                        response = scanner.next();
-                    }
-                    status.fail(String.format("Got response code %d from server due to %s", code, response));
-                    // Skip deploying to any other servers.
-                    // There is no reason to take out the rest of the servers, it's going to have the same result.
-                    return false;
-                }
-            } catch (IOException e) {
-                status.fail(String.format("Could not finish request to server %s", url), e);
-            }
-
             status.numServersCompleted++;
             tasksCompleted++;
             status.percentComplete = 100.0 * (double) tasksCompleted / totalTasks;

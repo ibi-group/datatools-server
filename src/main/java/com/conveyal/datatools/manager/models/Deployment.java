@@ -42,10 +42,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -325,99 +323,83 @@ public class Deployment extends Model implements Serializable {
      */
     public void dump (File output, boolean includeManifest, boolean includeOsm, boolean includeOtpConfig) throws IOException {
         // Create the zipfile.
-        ZipOutputStream out;
-        try {
-            out = new ZipOutputStream(new FileOutputStream(output));
+        try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(output))) {
+            if (includeManifest) {
+                // save the manifest at the beginning of the file, for read/seek efficiency
+                ZipEntry manifestEntry = new ZipEntry("manifest.json");
+                out.putNextEntry(manifestEntry);
+                // create the json manifest
+                JsonManager<Deployment> jsonManifest = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
+                // this mixin gives us full feed validation results, not summarized
+                jsonManifest.addMixin(Deployment.class, DeploymentFullFeedVersionMixin.class);
+                byte[] manifest = jsonManifest.write(this).getBytes();
+                // Write manifest and close entry.
+                out.write(manifest);
+                out.closeEntry();
+            }
+
+            // Write each of the feed version GTFS files into the zip.
+            for (FeedVersion v : this.retrieveFullFeedVersions()) {
+                File gtfsFile = v.retrieveGtfsFile();
+                try (FileInputStream in = new FileInputStream(gtfsFile)) {
+                    // Determine the entry name for the zip file.
+                    String entryName = getFeedSourceBundleFilename(v, gtfsFile);
+                    ZipEntry e = new ZipEntry(entryName);
+                    out.putNextEntry(e);
+                    ByteStreams.copy(in, out);
+                    out.closeEntry();
+                } catch (FileNotFoundException e1) {
+                    LOG.error("Could not retrieve file for {}", v.name);
+                    throw new RuntimeException(e1);
+                } catch (IOException e1) {
+                    LOG.warn("Error processing GTFS file input stream {}", gtfsFile.getName());
+                    e1.printStackTrace();
+                }
+            }
+
+            if (includeOsm) {
+                // Extract OSM and insert it into the deployment bundle
+                ZipEntry e = new ZipEntry("osm.pbf");
+                out.putNextEntry(e);
+                try (InputStream is = downloadOsmExtract()) {
+                    ByteStreams.copy(is, out);
+                }
+                out.closeEntry();
+            }
+
+            if (includeOtpConfig) {
+                // Write build-config.json and router-config.json into zip file.
+                // Use custom build config if it is not null, otherwise default to project build config.
+                byte[] buildConfigAsBytes = generateBuildConfig();
+                if (buildConfigAsBytes != null) {
+                    // Include build config if not null.
+                    ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
+                    out.putNextEntry(buildConfigEntry);
+                    out.write(buildConfigAsBytes);
+                    out.closeEntry();
+                }
+                // Use custom router config if it is not null, otherwise default to project router config.
+                byte[] routerConfigAsBytes = generateRouterConfig();
+                if (routerConfigAsBytes != null) {
+                    // Include router config if not null.
+                    ZipEntry routerConfigEntry = new ZipEntry("router-config.json");
+                    out.putNextEntry(routerConfigEntry);
+                    out.write(routerConfigAsBytes);
+                    out.closeEntry();
+                }
+            }
+
+            // Include shared_stops.csv, if present
+            if (parentProject().sharedStopsConfig != null) {
+                byte[] sharedStopsConfigAsBytes = parentProject().sharedStopsConfig.getBytes(StandardCharsets.UTF_8);
+                ZipEntry sharedStopsEntry = new ZipEntry("shared_stops.csv");
+                out.putNextEntry(sharedStopsEntry);
+                out.write(sharedStopsConfigAsBytes);
+                out.closeEntry();
+            }
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         }
-
-        if (includeManifest) {
-            // save the manifest at the beginning of the file, for read/seek efficiency
-            ZipEntry manifestEntry = new ZipEntry("manifest.json");
-            out.putNextEntry(manifestEntry);
-            // create the json manifest
-            JsonManager<Deployment> jsonManifest = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
-            // this mixin gives us full feed validation results, not summarized
-            jsonManifest.addMixin(Deployment.class, DeploymentFullFeedVersionMixin.class);
-            byte[] manifest = jsonManifest.write(this).getBytes();
-            // Write manifest and close entry.
-            out.write(manifest);
-            out.closeEntry();
-        }
-
-        // Write each of the feed version GTFS files into the zip.
-        for (FeedVersion v : this.retrieveFullFeedVersions()) {
-            File gtfsFile = v.retrieveGtfsFile();
-            FileInputStream in;
-            try {
-                in = new FileInputStream(gtfsFile);
-            } catch (FileNotFoundException e1) {
-                LOG.error("Could not retrieve file for {}", v.name);
-                throw new RuntimeException(e1);
-            }
-            // Determine the entry name for the zip file.
-            String entryName = getFeedSourceBundleFilename(v, gtfsFile);
-            ZipEntry e = new ZipEntry(entryName);
-            out.putNextEntry(e);
-            ByteStreams.copy(in, out);
-            try {
-                in.close();
-            } catch (IOException e1) {
-                LOG.warn("Could not close GTFS file input stream {}", gtfsFile.getName());
-                e1.printStackTrace();
-            }
-            out.closeEntry();
-        }
-
-        if (includeOsm) {
-            // Extract OSM and insert it into the deployment bundle
-            ZipEntry e = new ZipEntry("osm.pbf");
-            out.putNextEntry(e);
-            InputStream is = downloadOsmExtract();
-            ByteStreams.copy(is, out);
-            try {
-                is.close();
-            } catch (IOException e1) {
-                LOG.warn("Could not close OSM input stream");
-                e1.printStackTrace();
-            }
-            out.closeEntry();
-        }
-
-        if (includeOtpConfig) {
-            // Write build-config.json and router-config.json into zip file.
-            // Use custom build config if it is not null, otherwise default to project build config.
-            byte[] buildConfigAsBytes = generateBuildConfig();
-            if (buildConfigAsBytes != null) {
-                // Include build config if not null.
-                ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
-                out.putNextEntry(buildConfigEntry);
-                out.write(buildConfigAsBytes);
-                out.closeEntry();
-            }
-            // Use custom router config if it is not null, otherwise default to project router config.
-            byte[] routerConfigAsBytes = generateRouterConfig();
-            if (routerConfigAsBytes != null) {
-                // Include router config if not null.
-                ZipEntry routerConfigEntry = new ZipEntry("router-config.json");
-                out.putNextEntry(routerConfigEntry);
-                out.write(routerConfigAsBytes);
-                out.closeEntry();
-            }
-        }
-
-        // Include shared_stops.csv, if present
-        if (parentProject().sharedStopsConfig != null) {
-            byte[] sharedStopsConfigAsBytes = parentProject().sharedStopsConfig.getBytes(StandardCharsets.UTF_8);
-            ZipEntry sharedStopsEntry = new ZipEntry("shared_stops.csv");
-            out.putNextEntry(sharedStopsEntry);
-            out.write(sharedStopsConfigAsBytes);
-            out.closeEntry();
-        }
-
-        // Finally close the zip output stream. The dump file is now complete.
-        out.close();
     }
 
     /**
@@ -523,6 +505,7 @@ public class Deployment extends Model implements Serializable {
             throw new IllegalArgumentException("Cannot download OSM extract. Extract URL is invalid.");
         }
         LOG.info("Getting OSM extract at {}", extractUrl.toString());
+        // Http URL connection must be closed by calling method.
         HttpURLConnection conn = (HttpURLConnection) extractUrl.openConnection();
         conn.connect();
         return conn.getInputStream();

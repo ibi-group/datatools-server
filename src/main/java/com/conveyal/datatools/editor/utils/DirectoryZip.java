@@ -1,6 +1,5 @@
 package com.conveyal.datatools.editor.utils;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -18,35 +17,34 @@ public class DirectoryZip {
 
     public static void zip(File directory, File zipfile) throws IOException {
         URI base = directory.toURI();
-        Deque<File> queue = new LinkedList<File>();
+        Deque<File> queue = new LinkedList<>();
         queue.push(directory);
-        OutputStream out = new FileOutputStream(zipfile);
-        Closeable res = out;
-        try {
-          ZipOutputStream zout = new ZipOutputStream(out);
-          res = zout;
-          while (!queue.isEmpty()) {
-            directory = queue.pop();
-            for (File kid : directory.listFiles()) {
-              String name = base.relativize(kid.toURI()).getPath();
-              if (kid.isDirectory()) {
-                queue.push(kid);
-                name = name.endsWith("/") ? name : name + "/";
-                zout.putNextEntry(new ZipEntry(name));
-              } else {
-                zout.putNextEntry(new ZipEntry(name));
-                copy(kid, zout);
-                zout.closeEntry();
-              }
+
+        try (
+            FileOutputStream out = new FileOutputStream(zipfile);
+            ZipOutputStream zout = new ZipOutputStream(out)
+        ) {
+            while (!queue.isEmpty()) {
+                directory = queue.pop();
+                for (File kid : directory.listFiles()) {
+                    String name = base.relativize(kid.toURI()).getPath();
+                    if (kid.isDirectory()) {
+                        queue.push(kid);
+                        name = name.endsWith("/") ? name : name + "/";
+                        zout.putNextEntry(new ZipEntry(name));
+                    } else {
+                        zout.putNextEntry(new ZipEntry(name));
+                        copy(kid, zout);
+                    }
+                    // Explicitly close directory entry to ensure ZIP structure is valid; omitting this may corrupt the
+                    // archive.
+                    zout.closeEntry();
+                }
             }
-          }
-        } finally {
-          res.close();
         }
-      }
+    }
 
-
-     private static void copy(InputStream in, OutputStream out) throws IOException {
+    private static void copy(InputStream in, OutputStream out) throws IOException {
         byte[] buffer = new byte[1024];
         while (true) {
           int readCount = in.read(buffer);
@@ -57,22 +55,9 @@ public class DirectoryZip {
         }
       }
 
-     private static void copy(File file, OutputStream out) throws IOException {
-        InputStream in = new FileInputStream(file);
-        try {
-          copy(in, out);
-        } finally {
-          in.close();
+    private static void copy(File file, OutputStream out) throws IOException {
+        try (InputStream in = new FileInputStream(file)) {
+            copy(in, out);
         }
-      }
-
-      private static void copy(InputStream in, File file) throws IOException {
-        OutputStream out = new FileOutputStream(file);
-        try {
-          copy(in, out);
-        } finally {
-          out.close();
-        }
-      }
-
+    }
 }

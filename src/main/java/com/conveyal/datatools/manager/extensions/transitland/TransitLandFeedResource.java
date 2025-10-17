@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.extensions.transitland;
 
+import com.conveyal.datatools.common.utils.CloseableHttpURLConnection;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
@@ -67,8 +68,8 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                 throw ex;
             }
 
-            try {
-                HttpURLConnection con = (HttpURLConnection) url.openConnection();
+            try (CloseableHttpURLConnection closeableCon = new CloseableHttpURLConnection(url)) {
+                HttpURLConnection con = closeableCon.getConnection();
 
                 // optional default is GET
                 con.setRequestMethod("GET");
@@ -80,15 +81,14 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                 LOG.info("Sending 'GET' request to URL : " + url);
                 LOG.info("Response Code : " + responseCode);
 
-                BufferedReader in = new BufferedReader(
-                        new InputStreamReader(con.getInputStream()));
-                String inputLine;
-                StringBuffer response = new StringBuffer();
+                StringBuilder response = new StringBuilder();
+                try (BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()))) {
+                    String inputLine;
 
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
+                    while ((inputLine = in.readLine()) != null) {
+                        response.append(inputLine);
+                    }
                 }
-                in.close();
 
                 String json = response.toString();
                 JsonNode node = mapper.readTree(json);

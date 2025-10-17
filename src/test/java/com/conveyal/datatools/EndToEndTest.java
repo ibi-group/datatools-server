@@ -69,21 +69,21 @@ public class EndToEndTest {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command("bash", "-c", command);
         Process process = processBuilder.start();
+        String line;
 
         // capture and log output
         LOG.info("stdout:");
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-
-        String line;
-        while ((line = reader.readLine()) != null) {
-            LOG.info(line);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            while ((line = reader.readLine()) != null) {
+                LOG.info(line);
+            }
         }
 
         LOG.info("stderr:");
-        reader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-
-        while ((line = reader.readLine()) != null) {
-            LOG.error(line);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+            while ((line = reader.readLine()) != null) {
+                LOG.error(line);
+            }
         }
 
         int exitVal = process.waitFor();

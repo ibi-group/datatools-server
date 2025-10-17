@@ -258,13 +258,12 @@ public class SparkUtils {
      * multipart form handling code also caches the request body.
      */
     public static void copyRequestStreamIntoFile(Request req, File file) {
-        try {
+        try (
             ServletInputStream inputStream = ((ServletRequestWrapper) req.raw()).getRequest().getInputStream();
             FileOutputStream fileOutputStream = new FileOutputStream(file);
+        ) {
             // Guava's ByteStreams.copy uses a 4k buffer (no need to wrap output stream), but does not close streams.
             ByteStreams.copy(inputStream, fileOutputStream);
-            fileOutputStream.close();
-            inputStream.close();
             if (file.length() == 0) {
                 // Throw IO exception to be caught and returned to user via halt.
                 throw new IOException("No file found in request body.");
@@ -299,10 +298,13 @@ public class SparkUtils {
 
             extension = "." + part.getContentType().split("/", 0)[1];
             tempFile = File.createTempFile(part.getName() + "_" + uploadType, extension);
-            InputStream inputStream;
-            inputStream = part.getInputStream();
-            FileOutputStream out = new FileOutputStream(tempFile);
-            IOUtils.copy(inputStream, out);
+
+            try (
+                InputStream inputStream = part.getInputStream();
+                FileOutputStream out = new FileOutputStream(tempFile)
+            ) {
+                IOUtils.copy(inputStream, out);
+            }
         } catch (IOException | ServletException e) {
             e.printStackTrace();
             logMessageAndHalt(req, 400, "Unable to read uploaded file");

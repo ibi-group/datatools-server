@@ -31,9 +31,10 @@ public class FeedStoreTest extends UnitTest {
     public void canCreateTempGtfsFile() throws IOException {
         final String gtfsFileName = "gtfs.zip";
         File gtfsFile = new File(getGtfsResourcePath("bart_new.zip"));
-        FileInputStream fileInputStream = new FileInputStream(gtfsFile);
-        File tempFile = FeedVersion.feedStore.createTempFile(gtfsFileName, fileInputStream);
-        LOG.info("Feed store wrote temp file to: {}", tempFile.getAbsolutePath());
-        assertEquals(tempFile.getName(), gtfsFileName);
+        try (FileInputStream fileInputStream = new FileInputStream(gtfsFile)) {
+            File tempFile = FeedVersion.feedStore.createTempFile(gtfsFileName, fileInputStream);
+            LOG.info("Feed store wrote temp file to: {}", tempFile.getAbsolutePath());
+            assertEquals(tempFile.getName(), gtfsFileName);
+        }
     }
 }
