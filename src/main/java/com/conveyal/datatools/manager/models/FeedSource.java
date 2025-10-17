@@ -283,6 +283,7 @@ public class FeedSource extends Model implements Cloneable {
         LOG.info("Fetching from {}", url.toString());
 
         // make the request, using the proper HTTP caching headers to prevent refetch, if applicable
+        // Http URL connection must be closed by calling method.
         HttpURLConnection conn;
         try {
             conn = (HttpURLConnection) url.openConnection();

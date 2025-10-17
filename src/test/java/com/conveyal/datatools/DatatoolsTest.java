@@ -119,16 +119,18 @@ public abstract class DatatoolsTest {
             // load template file contents
             LOG.info("Loading YAML config templates");
             String envTemplateFile = "configurations/default/env.yml.tmp";
-
-            Map envConfig = yaml.load(
-                new FileInputStream(new File(envTemplateFile))
-            );
-
             String serverTemplateFile = "configurations/default/server.yml.tmp";
-            Map serverConfig = yaml.load(
-                new FileInputStream(new File(serverTemplateFile))
-            );
 
+            Map envConfig;
+            Map serverConfig;
+
+            try (
+                FileInputStream envStream = new FileInputStream(envTemplateFile);
+                FileInputStream serverStream = new FileInputStream(serverTemplateFile)
+            ) {
+                envConfig = yaml.load(envStream);
+                serverConfig = yaml.load(serverStream);
+            }
             // write sensitive info to the config files
             // env.yml
             String[] envVars = {

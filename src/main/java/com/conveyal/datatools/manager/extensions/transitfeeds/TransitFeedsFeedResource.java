@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.extensions.transitfeeds;
 
+import com.conveyal.datatools.common.utils.CloseableHttpURLConnection;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
@@ -59,10 +60,10 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
             }
 
 
-            StringBuffer response = new StringBuffer();
+            StringBuilder response = new StringBuilder();
 
-            try {
-                HttpURLConnection con = (HttpURLConnection) url.openConnection();
+            try (CloseableHttpURLConnection closeableCon = new CloseableHttpURLConnection(url)) {
+                HttpURLConnection con = closeableCon.getConnection();
 
                 // optional default is GET
                 con.setRequestMethod("GET");
@@ -74,14 +75,13 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 System.out.println("\nSending 'GET' request to URL : " + url);
                 System.out.println("Response Code : " + responseCode);
 
-                BufferedReader in = new BufferedReader(
-                        new InputStreamReader(con.getInputStream()));
-                String inputLine;
+                try (BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()))) {
+                    String inputLine;
 
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
+                    while ((inputLine = in.readLine()) != null) {
+                        response.append(inputLine);
+                    }
                 }
-                in.close();
             } catch (IOException ex) {
                 LOG.error("Could not read from Transit Feeds API");
                 throw ex;

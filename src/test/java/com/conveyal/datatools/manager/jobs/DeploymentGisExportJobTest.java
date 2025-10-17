@@ -5,7 +5,6 @@ import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.google.common.io.Files;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -14,6 +13,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -29,7 +30,8 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
 
     /** Unzip the shapefile into a temp directory and return a list of its files (folders in the Deployment test case). */
     private File[] getFoldersFromZippedShapefile(File zipFile) throws IOException {
-        File destDir = Files.createTempDir();
+        Path tempDirPath = Files.createTempDirectory("");
+        File destDir = tempDirPath.toFile();
         ZipFile zippedFolder = new ZipFile(zipFile);
         Enumeration<? extends ZipEntry> e = zippedFolder.entries();
         while (e.hasMoreElements()) {

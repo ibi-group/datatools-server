@@ -40,15 +40,16 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
         try (FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null)) {
             // Convert csv data to input stream.
-            InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));
-            Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
-            // Set transform type according to whether target file exists.
-            TransformType type = Files.exists(targetTxtFilePath)
-                ? TransformType.TABLE_REPLACED
-                : TransformType.TABLE_ADDED;
-            // Copy csv input stream into the zip file, replacing it if it already exists.
-            Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
+            try (InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8))) {
+                Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
+                // Set transform type according to whether target file exists.
+                TransformType type = Files.exists(targetTxtFilePath)
+                    ? TransformType.TABLE_REPLACED
+                    : TransformType.TABLE_ADDED;
+                // Copy csv input stream into the zip file, replacing it if it already exists.
+                Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+                zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
+            }
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }

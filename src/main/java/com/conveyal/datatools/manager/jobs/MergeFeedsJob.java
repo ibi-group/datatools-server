@@ -360,8 +360,8 @@ public class MergeFeedsJob extends FeedSourceJob {
     private void storeMergedFeed() {
         if (mergedVersion != null) {
             // Store the zip file for the merged feed version.
-            try {
-                mergedVersion.newGtfsFile(new FileInputStream(mergedTempFile));
+            try (FileInputStream fileInputStream = new FileInputStream(mergedTempFile)) {
+                mergedVersion.newGtfsFile(fileInputStream);
             } catch (IOException e) {
                 logAndReportToBugsnag(e, "Could not store merged feed for new version");
             }
@@ -381,8 +381,8 @@ public class MergeFeedsJob extends FeedSourceJob {
                 }
                 LOG.info("Storing merged project feed at {}", S3Utils.getDefaultBucketUriForKey(s3Key));
             } else {
-                try {
-                    FeedVersion.feedStore.newFeed(filename, new FileInputStream(mergedTempFile), null);
+                try (FileInputStream fileInputStream = new FileInputStream(mergedTempFile)) {
+                    FeedVersion.feedStore.newFeed(filename, fileInputStream, null);
                 } catch (IOException e) {
                     String message = "Could not store feed for project " + filename;
                     logAndReportToBugsnag(e, message);

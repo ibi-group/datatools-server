@@ -10,8 +10,6 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.SqlAssert;
-import com.google.common.base.Strings;
-import com.google.common.io.Files;
 import org.junit.jupiter.api.AfterAll;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.MultiLineString;
@@ -36,6 +34,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Date;
@@ -267,25 +267,28 @@ public class GisExportJobTest extends UnitTest {
 
     /** Unzip the shapefile into a temp directory and return a list of its files. */
     public File[] getFilesFromZippedShapefile(File zipFile) throws IOException {
-        File destDir = Files.createTempDir();
+        Path tempDirPath = Files.createTempDirectory("");
+        File destDir = tempDirPath.toFile();
         byte[] buffer = new byte[1024];
-        ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile));
-        ZipEntry zipEntry = zis.getNextEntry();
-        while (zipEntry != null) {
-            File newFile = new File(destDir, zipEntry.getName());
-            if (!newFile.toPath().normalize().startsWith(destDir.toPath().normalize())) {
-                throw new RuntimeException("Bad zip entry");
+
+        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
+            ZipEntry zipEntry = zis.getNextEntry();
+            while (zipEntry != null) {
+                File newFile = new File(destDir, zipEntry.getName());
+                // Security check to prevent Zip Slip vulnerability
+                if (!newFile.toPath().normalize().startsWith(destDir.toPath().normalize())) {
+                    throw new RuntimeException("Bad zip entry");
+                }
+                try (FileOutputStream fos = new FileOutputStream(newFile)) {
+                    int len;
+                    while ((len = zis.read(buffer)) > 0) {
+                        fos.write(buffer, 0, len);
+                    }
+                }
+                zipEntry = zis.getNextEntry();
             }
-            FileOutputStream fos = new FileOutputStream(newFile);
-            int len;
-            while ((len = zis.read(buffer)) > 0) {
-                fos.write(buffer, 0, len);
-            }
-            fos.close();
-            zipEntry = zis.getNextEntry();
+            zis.closeEntry(); // Optional: safe to call, but not strictly necessary here
         }
-        zis.closeEntry();
-        zis.close();
         return destDir.listFiles();
     }
 

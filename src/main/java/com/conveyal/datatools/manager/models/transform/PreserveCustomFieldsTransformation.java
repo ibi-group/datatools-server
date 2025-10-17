@@ -87,7 +87,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                 CsvMapReader customFileReader = new CsvMapReader(new StringReader(csvData), CsvPreference.STANDARD_PREFERENCE);
                 CsvMapReader editorFileReader = new CsvMapReader(new InputStreamReader(is), CsvPreference.STANDARD_PREFERENCE);
                 CsvMapWriter writer = new CsvMapWriter(new FileWriter(output), CsvPreference.STANDARD_PREFERENCE);
-            ){
+            ) {
 
                 String[] customHeaders = customFileReader.getHeader(true);
                 String[] editorHeaders = editorFileReader.getHeader(true);
