@@ -463,8 +463,10 @@ public class FeedVersion extends Model implements Serializable {
             status.update("MobilityData Analysis...", 80);
             // Read generated report and save to Mongo.
             String json;
-            try (FileReader fr = new FileReader(validatorOutputDirectory + "report.json")) {
-                BufferedReader in = new BufferedReader(fr);
+            try (
+                FileReader fr = new FileReader(validatorOutputDirectory + "report.json");
+                BufferedReader in = new BufferedReader(fr)
+            ) {
                 json = in.lines().collect(Collectors.joining(System.lineSeparator()));
             }
 

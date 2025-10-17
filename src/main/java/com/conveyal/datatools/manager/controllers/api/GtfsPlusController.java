@@ -100,10 +100,9 @@ public class GtfsPlusController {
             gtfsPlusTables.add(tableNode.get("name").asText());
         }
 
-        try {
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile))) {
             // create a new zip file to only contain the GTFS+ tables
             gtfsPlusFile = File.createTempFile(version.id + "_gtfsplus", ".zip");
-            ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile));
 
             // iterate through the existing GTFS file, copying any GTFS+ tables
             ZipFile gtfsFile = new ZipFile(version.retrieveGtfsFile());
@@ -116,15 +115,14 @@ public class GtfsPlusController {
                 // create a new empty ZipEntry and copy the contents
                 ZipEntry newEntry = new ZipEntry(entry.getName());
                 zos.putNextEntry(newEntry);
-                InputStream in = gtfsFile.getInputStream(entry);
-                while (0 < in.available()){
-                    int read = in.read(buffer);
-                    zos.write(buffer,0,read);
+                try (InputStream in = gtfsFile.getInputStream(entry)) {
+                    while (0 < in.available()) {
+                        int read = in.read(buffer);
+                        zos.write(buffer, 0, read);
+                    }
                 }
-                in.close();
                 zos.closeEntry();
             }
-            zos.close();
         } catch (IOException e) {
             logMessageAndHalt(req, 500, "An error occurred while trying to create a gtfs file", e);
         }
@@ -177,10 +175,9 @@ public class GtfsPlusController {
 
         File newFeed = null;
 
-        try {
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed))) {
             // First, create a new zip file to only contain the GTFS+ tables
             newFeed = File.createTempFile(feedVersionId + "_new", ".zip");
-            ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed));
 
             // Next, iterate through the existing GTFS file, copying all non-GTFS+ tables.
             ZipFile gtfsFile = new ZipFile(feedVersion.retrieveGtfsFile());
@@ -194,12 +191,12 @@ public class GtfsPlusController {
                 // create a new empty ZipEntry and copy the contents
                 ZipEntry newEntry = new ZipEntry(entry.getName());
                 zos.putNextEntry(newEntry);
-                InputStream in = gtfsFile.getInputStream(entry);
-                while (0 < in.available()){
-                    int read = in.read(buffer);
-                    zos.write(buffer,0,read);
+                try (InputStream in = gtfsFile.getInputStream(entry)) {
+                    while (0 < in.available()) {
+                        int read = in.read(buffer);
+                        zos.write(buffer, 0, read);
+                    }
                 }
-                in.close();
                 zos.closeEntry();
             }
 
@@ -211,23 +208,22 @@ public class GtfsPlusController {
 
                 ZipEntry newEntry = new ZipEntry(entry.getName());
                 zos.putNextEntry(newEntry);
-                InputStream in = plusZipFile.getInputStream(entry);
-                while (0 < in.available()){
-                    int read = in.read(buffer);
-                    zos.write(buffer,0,read);
+                try (InputStream in = plusZipFile.getInputStream(entry)) {
+                    while (0 < in.available()) {
+                        int read = in.read(buffer);
+                        zos.write(buffer, 0, read);
+                    }
                 }
-                in.close();
                 zos.closeEntry();
             }
-            zos.close();
         } catch (IOException e) {
             logMessageAndHalt(req, 500, "Error creating combined GTFS/GTFS+ file", e);
         }
         // Create a new feed version to represent the published GTFS+.
         FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource(), PRODUCED_IN_HOUSE_GTFS_PLUS);
         File newGtfsFile = null;
-        try {
-            newGtfsFile = newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
+        try (FileInputStream fis = new FileInputStream(newFeed)) {
+            newGtfsFile = newFeedVersion.newGtfsFile(fis);
         } catch (IOException e) {
             e.printStackTrace();
             logMessageAndHalt(req, 500, "Error reading GTFS file input stream", e);

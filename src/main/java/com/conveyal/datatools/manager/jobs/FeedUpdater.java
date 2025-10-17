@@ -407,10 +407,13 @@ public class FeedUpdater {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
         S3Object object = S3Utils.getDefaultS3Client().getObject(feedBucket, keyName);
-        InputStream in = object.getObjectContent();
         File file = new File(FeedStore.basePath, filename);
-        OutputStream out = new FileOutputStream(file);
-        ByteStreams.copy(in, out);
+        try (
+            InputStream in = object.getObjectContent();
+            OutputStream out = new FileOutputStream(file);
+        ) {
+            ByteStreams.copy(in, out);
+        }
         String md5 = HashUtils.hashFile(file);
         Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
         LOG.info("Searching for md5 {} across {} versions for {} ({})", md5, versions.size(), feedSource.name, feedSource.id);
