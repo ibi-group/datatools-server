@@ -10,7 +10,6 @@ import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.IOUtils;
-import org.apache.http.HttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -186,9 +185,9 @@ public class TestUtils {
      * @throws IOException
      */
     private static void compressZipfile(String sourceDir, String outputFile, boolean nestDirectory) throws IOException {
-        ZipOutputStream zipFile = new ZipOutputStream(new FileOutputStream(outputFile));
-        compressDirectoryToZipfile(sourceDir, sourceDir, zipFile, nestDirectory);
-        IOUtils.closeQuietly(zipFile);
+        try (ZipOutputStream zipFile = new ZipOutputStream(new FileOutputStream(outputFile))) {
+            compressDirectoryToZipfile(sourceDir, sourceDir, zipFile, nestDirectory);
+        }
     }
 
     /**
@@ -217,9 +216,9 @@ public class TestUtils {
                 ZipEntry entry = new ZipEntry(zipEntryName);
                 out.putNextEntry(entry);
 
-                FileInputStream in = new FileInputStream(file.getAbsolutePath());
-                IOUtils.copy(in, out);
-                IOUtils.closeQuietly(in);
+                try (FileInputStream in = new FileInputStream(file.getAbsolutePath())) {
+                    IOUtils.copy(in, out);
+                }
             }
         }
     }
