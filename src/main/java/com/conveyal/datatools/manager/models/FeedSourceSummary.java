@@ -83,6 +83,10 @@ public class FeedSourceSummary {
 
     public String latestPublishedVersionId;
 
+    public String latestNamespace;
+
+    public FeedValidationResultSummary publishedValidationSummary;
+
     public FeedSourceSummary() {
     }
 
@@ -126,7 +130,12 @@ public class FeedSourceSummary {
                 this.latestProcessedByExternalPublisher = feedVersionSummary.processedByExternalPublisher;
                 this.latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
                 this.latestGtfsPlusValidation = feedVersionSummary.gtfsPlusValidation;
+                this.latestNamespace = feedVersionSummary.namespace;
                 this.latestPublishedVersionId = feedVersionSummary.publishedVersionId;
+                this.publishedValidationSummary = new FeedValidationResultSummary();
+                this.publishedValidationSummary.errorCount = feedVersionSummary.publishedFeedVersionErrorCount;
+                this.publishedValidationSummary.startDate = feedVersionSummary.publishedFeedVersionStartDate;
+                this.publishedValidationSummary.endDate = feedVersionSummary.publishedFeedVersionEndDate;
             }
         }
     }
@@ -213,13 +222,25 @@ public class FeedSourceSummary {
                     }
                 },
                 {
-                    $unwind: "$feedVersions"
+                    $lookup: {
+                        from: "FeedVersion",
+                        localField: "publishedVersionId",
+                        foreignField: "namespace",
+                        as: "publishedFeedVersion"
+                    }
+                },
+                {
+                    $unwind: "$feedVersions",
+                    $unwind: "$publishedFeedVersion",
                 },
                 {
                     $group: {
                         _id: "$_id",
                         publishedVersionId: { $first: "$publishedVersionId" },
-                        doc: {
+                        publishedFeedVersionErrorCount: { $first: "$publishedFeedVersion.validationResult.errorCount"},
+                        publishedFeedVersionStartDate: { $first: "$publishedFeedVersion.validationResult.firstCalendarDate"},
+                        publishedFeedVersionEndDate: { $first: "$publishedFeedVersion.validationResult.lastCalendarDate"},
+                        feedVersion: {
                             $max: {
                                 version: "$feedVersions.version",
                                 feedVersionId: "$feedVersions._id",
@@ -228,7 +249,8 @@ public class FeedSourceSummary {
                                 errorCount: "$feedVersions.validationResult.errorCount",
                                 processedByExternalPublisher: "$feedVersions.processedByExternalPublisher",
                                 sentToExternalPublisher: "$feedVersions.sentToExternalPublisher",
-                                gtfsPlusValidation: "$feedVersions.gtfsPlusValidation"
+                                gtfsPlusValidation: "$feedVersions.gtfsPlusValidation",
+                                namespace: "$feedVersions.namespace"
                             }
                         }
                     }
@@ -240,17 +262,23 @@ public class FeedSourceSummary {
                 in("projectId", projectId)
             ),
             lookup("FeedVersion", "_id", "feedSourceId", "feedVersions"),
+            lookup("FeedVersion", "publishedVersionId", "namespace", "publishedFeedVersion"),
             unwind("$feedVersions"),
+            unwind("$publishedFeedVersion"),
             group(
                 "$_id",
                 Accumulators.first("publishedVersionId", "$publishedVersionId"),
+                Accumulators.first("publishedFeedVersionErrorCount", "$publishedFeedVersion.validationResult.errorCount"),
+                Accumulators.first("publishedFeedVersionStartDate", "$publishedFeedVersion.validationResult.firstCalendarDate"),
+                Accumulators.first("publishedFeedVersionEndDate", "$publishedFeedVersion.validationResult.lastCalendarDate"),
                 Accumulators.last("feedVersionId", "$feedVersions._id"),
                 Accumulators.last("firstCalendarDate", "$feedVersions.validationResult.firstCalendarDate"),
                 Accumulators.last("lastCalendarDate", "$feedVersions.validationResult.lastCalendarDate"),
                 Accumulators.last("errorCount", "$feedVersions.validationResult.errorCount"),
                 Accumulators.last("processedByExternalPublisher", "$feedVersions.processedByExternalPublisher"),
                 Accumulators.last("sentToExternalPublisher", "$feedVersions.sentToExternalPublisher"),
-                Accumulators.last("gtfsPlusValidation", "$feedVersions.gtfsPlusValidation")
+                Accumulators.last("gtfsPlusValidation", "$feedVersions.gtfsPlusValidation"),
+                Accumulators.last("namespace", "$feedVersions.namespace")
             )
         );
         return extractFeedVersionSummaries(
@@ -485,14 +513,30 @@ public class FeedSourceSummary {
         List<Bson> stages
     ) {
         Map<String, FeedVersionSummary> feedVersionSummaries = new HashMap<>();
-        for (Document feedVersionDocument : Persistence.getDocuments(collection, stages)) {
+        Document feedVersionDocument = Persistence.getDocuments(collection, stages).first();
+        if (feedVersionDocument != null) {
+            // Only expected one or zero documents to be returned.
             FeedVersionSummary feedVersionSummary = new FeedVersionSummary();
             feedVersionSummary.id = feedVersionDocument.getString(feedVersionKey);
             feedVersionSummary.processedByExternalPublisher = feedVersionDocument.getDate("processedByExternalPublisher");
             feedVersionSummary.sentToExternalPublisher = feedVersionDocument.getDate("sentToExternalPublisher");
             feedVersionSummary.gtfsPlusValidation = getGtfsPlusValidation(feedVersionDocument);
-            feedVersionSummary.publishedVersionId = feedVersionDocument.getString("publishedVersionId");
+            feedVersionSummary.namespace = feedVersionDocument.getString("namespace");
             feedVersionSummary.validationResult = getValidationResult(hasChildValidationResultDocument, feedVersionDocument);
+
+            // The feed source's published version id.
+            feedVersionSummary.publishedVersionId = feedVersionDocument.getString("publishedVersionId");
+
+            // The feed source's published feed version. Feed source's publishedVersionId mapped to feed version's namespace.
+            feedVersionSummary.publishedFeedVersionErrorCount = feedVersionDocument.get("publishedFeedVersionErrorCount") != null
+                ? feedVersionDocument.getInteger("publishedFeedVersionErrorCount")
+                : 0;
+            feedVersionSummary.publishedFeedVersionStartDate = feedVersionDocument.get("publishedFeedVersionStartDate") != null
+                ? getDateFromString(feedVersionDocument.getString("publishedFeedVersionStartDate"))
+                : null;
+            feedVersionSummary.publishedFeedVersionEndDate = feedVersionDocument.get("publishedFeedVersionEndDate") != null
+                ? getDateFromString(feedVersionDocument.getString("publishedFeedVersionEndDate"))
+                : null;
             feedVersionSummaries.put(feedVersionDocument.getString(feedSourceKey), feedVersionSummary);
         }
         return feedVersionSummaries;
