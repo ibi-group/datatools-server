@@ -4,6 +4,8 @@ import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.gtfsplus.ValidationIssue;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.error.NewGTFSErrorType;
+import com.conveyal.gtfs.graphql.fetchers.ErrorCountFetcher;
 import com.conveyal.gtfs.validator.ValidationResult;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,7 +17,13 @@ import com.mongodb.client.model.Projections;
 import com.mongodb.client.model.Sorts;
 import org.bson.Document;
 import org.bson.conversions.Bson;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -25,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
 import static com.mongodb.client.model.Aggregates.group;
 import static com.mongodb.client.model.Aggregates.limit;
 import static com.mongodb.client.model.Aggregates.lookup;
@@ -36,6 +45,7 @@ import static com.mongodb.client.model.Aggregates.unwind;
 import static com.mongodb.client.model.Filters.in;
 
 public class FeedSourceSummary {
+    private static final Logger LOG = LoggerFactory.getLogger(FeedSourceSummary.class);
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
     public String projectId;
@@ -87,6 +97,8 @@ public class FeedSourceSummary {
 
     public FeedValidationResultSummary publishedValidationSummary;
 
+    public List<ErrorCountFetcher.ErrorCount> latestErrorCounts = new ArrayList<>();
+
     public FeedSourceSummary() {
     }
 
@@ -131,6 +143,7 @@ public class FeedSourceSummary {
                 this.latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
                 this.latestGtfsPlusValidation = feedVersionSummary.gtfsPlusValidation;
                 this.latestNamespace = feedVersionSummary.namespace;
+                this.latestErrorCounts = feedVersionSummary.errorCounts;
                 this.latestPublishedVersionId = feedVersionSummary.publishedVersionId;
                 this.publishedValidationSummary = new FeedValidationResultSummary();
                 this.publishedValidationSummary.errorCount = feedVersionSummary.publishedFeedVersionErrorCount;
@@ -522,6 +535,10 @@ public class FeedSourceSummary {
             feedVersionSummary.sentToExternalPublisher = feedVersionDocument.getDate("sentToExternalPublisher");
             feedVersionSummary.gtfsPlusValidation = getGtfsPlusValidation(feedVersionDocument);
             feedVersionSummary.namespace = feedVersionDocument.getString("namespace");
+            if (feedVersionSummary.namespace != null) {
+                ErrorCountFetcher errorCountFetcher = new ErrorCountFetcher();
+                feedVersionSummary.errorCounts = errorCountFetcher.getErrorCounts(feedVersionSummary.namespace);
+            }
             feedVersionSummary.validationResult = getValidationResult(hasChildValidationResultDocument, feedVersionDocument);
 
             // The feed source's published version id.

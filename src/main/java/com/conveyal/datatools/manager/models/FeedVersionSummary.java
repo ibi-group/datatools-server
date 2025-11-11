@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
+import com.conveyal.gtfs.graphql.fetchers.ErrorCountFetcher;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -9,7 +10,9 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import java.io.Serializable;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 /**
  * Includes summary data (a subset of fields) for a feed version.
@@ -36,6 +39,7 @@ public class FeedVersionSummary extends Model implements Serializable {
     public int publishedFeedVersionErrorCount;
     public LocalDate publishedFeedVersionStartDate;
     public LocalDate publishedFeedVersionEndDate;
+    public List<ErrorCountFetcher.ErrorCount> errorCounts = new ArrayList<>();
 
     public PartialValidationSummary getValidationSummary() {
         if (validationSummary == null) {

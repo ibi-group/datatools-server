@@ -6,6 +6,7 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.gtfsplus.ValidationIssue;
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -19,6 +20,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
+import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.validator.ValidationResult;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -34,12 +36,15 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
+import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.mongodb.client.model.Filters.eq;
 import static org.eclipse.jetty.http.HttpStatus.BAD_REQUEST_400;
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
@@ -70,6 +75,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
+        ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = false;
 
         project = new Project();
         project.name = "ProjectOne";
@@ -128,6 +134,14 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             deployedEndDate,
             null
         );
+
+        FeedVersion feedVersionFromGtfsZip = createFeedVersionFromGtfsZip(feedSourceWithLatestDeploymentFeedVersion, "bart_old.zip");
+        // Update the feed version namespace to match that created from the import.
+        feedVersionFromLatestDeployment.namespace = feedVersionFromGtfsZip.namespace;
+
+        Persistence.feedVersions.removeById(feedVersionFromGtfsZip.id);
+        Persistence.feedVersions.replace(feedVersionFromLatestDeployment.id, feedVersionFromLatestDeployment);
+
         feedVersionPublishedFromLatestDeployment = createFeedVersion(
             "published-feed-version-from-latest-deployment",
             // Set to null so the relationship to feed source is via the published version id.
@@ -208,6 +222,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             Persistence.labels.removeById(adminOnlyLabel.id);
         }
         tearDownDeployedFeedVersion();
+        ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = true;
     }
 
     /**
@@ -216,8 +231,11 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * FeedSource#getFeedVersionFromPinnedDeployment to be tested.
      */
     private static void tearDownDeployedFeedVersion() {
+        if (feedVersionFromLatestDeployment != null) {
+            feedVersionFromLatestDeployment.delete();
+        }
         if (projectWithPinnedDeployment != null) {
-            Persistence.projects.removeById(projectWithPinnedDeployment.id);
+            projectWithPinnedDeployment.delete();
         }
         if (projectWithLatestDeployment != null) {
             Persistence.projects.removeById(projectWithLatestDeployment.id);
@@ -227,9 +245,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         }
         if (feedSourceWithPinnedDeploymentFeedVersion != null) {
             Persistence.feedSources.removeById(feedSourceWithPinnedDeploymentFeedVersion.id);
-        }
-        if (feedVersionFromLatestDeployment != null) {
-            Persistence.feedVersions.removeById(feedVersionFromLatestDeployment.id);
         }
         if (feedVersionPublishedFromLatestDeployment != null) {
             Persistence.feedVersions.removeById(feedVersionPublishedFromLatestDeployment.id);
@@ -418,6 +433,10 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromLatestDeployment.gtfsPlusValidation.issues.size(), feedSourceSummaries.get(0).latestGtfsPlusValidation.issues.size());
         assertEquals(feedVersionFromLatestDeployment.gtfsPlusValidation.published, feedSourceSummaries.get(0).latestGtfsPlusValidation.published);
         assertEquals(feedVersionFromLatestDeployment.namespace, feedSourceSummaries.get(0).latestNamespace);
+        assertFalse(feedSourceSummaries.get(0).latestErrorCounts.isEmpty());
+        assertEquals(NewGTFSErrorType.CONDITIONALLY_REQUIRED, feedSourceSummaries.get(0).latestErrorCounts.get(0).type);
+        assertEquals(NewGTFSErrorType.FEED_TRAVEL_TIMES_ROUNDED, feedSourceSummaries.get(0).latestErrorCounts.get(1).type);
+        assertEquals(NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS, feedSourceSummaries.get(0).latestErrorCounts.get(2).type);
 
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.publishedVersionId, feedSourceSummaries.get(0).latestPublishedVersionId);
 
