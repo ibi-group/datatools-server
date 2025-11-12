@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.jobs.AutoDeployType;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.graphql.fetchers.ErrorCountFetcher;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -174,9 +175,13 @@ public class Project extends Model {
             // No pinned deployments, instead, get the deployed feed versions from the latest deployment.
             deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
         }
+        ErrorCountFetcher errorCountFetcher = new ErrorCountFetcher();
         for (FeedSourceSummary feedSourceSummary : feedSourceSummaries) {
             feedSourceSummary.setFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id), false);
             feedSourceSummary.setFeedVersion(deployedFeedVersions.get(feedSourceSummary.id), true);
+            if (feedSourceSummary.latestNamespace != null) {
+                feedSourceSummary.latestErrorCounts = errorCountFetcher.getErrorCounts(feedSourceSummary.latestNamespace);
+            }
         }
         return feedSourceSummaries;
     }
