@@ -22,8 +22,13 @@ db.getCollection('FeedSource').aggregate([
         }
     },
     {
-        $unwind: "$feedVersions",
-        $unwind: "$publishedFeedVersion",
+        $unwind: "$feedVersions"
+    },
+    {
+        $unwind: {
+            path: "$publishedFeedVersion",
+            preserveNullAndEmptyArrays: true
+        }
     },
     {
         $group: {

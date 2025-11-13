@@ -11,6 +11,7 @@ import com.google.common.collect.Lists;
 import com.mongodb.client.model.Accumulators;
 import com.mongodb.client.model.Projections;
 import com.mongodb.client.model.Sorts;
+import com.mongodb.client.model.UnwindOptions;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 
@@ -178,7 +179,7 @@ public class FeedSourceSummary {
             lookup("FeedVersion", "_id", "feedSourceId", "feedVersions"),
             lookup("FeedVersion", "publishedVersionId", "namespace", "publishedFeedVersion"),
             unwind("$feedVersions"),
-            unwind("$publishedFeedVersion"),
+            unwind("$publishedFeedVersion", new UnwindOptions().preserveNullAndEmptyArrays(true)),
             group(
                 "$_id",
                 Accumulators.first("publishedVersionId", "$publishedVersionId"),
