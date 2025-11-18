@@ -168,17 +168,21 @@ public class Project extends Model {
      * Get all feed source summaries for this project.
      */
     public Collection<FeedSourceSummary> retrieveFeedSourceSummaries() {
+        ErrorCountFetcher errorCountFetcher = new ErrorCountFetcher();
+
         List<FeedSourceSummary> feedSourceSummaries = FeedSourceSummary.getFeedSourceSummaries(id, organizationId);
         Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedSourceSummary.getLatestFeedVersionForFeedSources(id);
-        Map<String, FeedVersionSummary> deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromPinnedDeployment(id);
-        if (deployedFeedVersions.isEmpty()) {
-            // No pinned deployments, instead, get the deployed feed versions from the latest deployment.
-            deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
-        }
-        ErrorCountFetcher errorCountFetcher = new ErrorCountFetcher();
+        Map<String, FeedVersionSummary> pinnedDeploymentFeedVersions = FeedSourceSummary.getFeedVersionsFromPinnedDeployment(id);
+        Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
+
         for (FeedSourceSummary feedSourceSummary : feedSourceSummaries) {
-            feedSourceSummary.setFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id), false);
-            feedSourceSummary.setFeedVersion(deployedFeedVersions.get(feedSourceSummary.id), true);
+            feedSourceSummary.setFeedVersionValues(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
+            FeedVersionSummary deployedVersion = pinnedDeploymentFeedVersions.getOrDefault(
+                feedSourceSummary.id,
+                latestDeploymentDeployedFeedVersions.get(feedSourceSummary.id)
+            );
+            feedSourceSummary.setDeployedFeedVersionValues(deployedVersion);
+
             if (feedSourceSummary.latestNamespace != null) {
                 feedSourceSummary.latestErrorCounts = errorCountFetcher.getErrorCounts(feedSourceSummary.latestNamespace);
             }

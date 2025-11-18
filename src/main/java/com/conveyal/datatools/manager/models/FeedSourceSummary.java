@@ -8,6 +8,7 @@ import com.conveyal.gtfs.graphql.fetchers.ErrorCountFetcher;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.Lists;
+import com.mongodb.client.AggregateIterable;
 import com.mongodb.client.model.Accumulators;
 import com.mongodb.client.model.Projections;
 import com.mongodb.client.model.Sorts;
@@ -115,31 +116,38 @@ public class FeedSourceSummary {
     }
 
     /**
-     * Set the appropriate feed version. For consistency, if no error count is available set the related number of
+     * Set the common feed version values.
+     */
+    public void setFeedVersionValues(FeedVersionSummary feedVersionSummary) {
+        if (feedVersionSummary == null) {
+            return;
+        }
+        latestValidation = new LatestValidationResult(feedVersionSummary);
+        latestProcessedByExternalPublisher = feedVersionSummary.processedByExternalPublisher;
+        latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
+        latestGtfsPlusValidation = feedVersionSummary.gtfsPlusValidation;
+        latestNamespace = feedVersionSummary.namespace;
+        latestPublishedVersionId = feedVersionSummary.publishedVersionId;
+        publishedValidationSummary = new FeedValidationResultSummary();
+        publishedValidationSummary.errorCount = feedVersionSummary.publishedFeedVersionErrorCount;
+        publishedValidationSummary.startDate = feedVersionSummary.publishedFeedVersionStartDate;
+        publishedValidationSummary.endDate = feedVersionSummary.publishedFeedVersionEndDate;
+    }
+
+    /**
+     * Set the deployed feed version values. For consistency, if no error count is available set the related number of
      * issues to zero.
      */
-    public void setFeedVersion(FeedVersionSummary feedVersionSummary, boolean isDeployed) {
-        if (feedVersionSummary != null) {
-            if (isDeployed) {
-                deployedFeedVersionId = feedVersionSummary.id;
-                deployedFeedVersionStartDate = feedVersionSummary.validationResult.firstCalendarDate;
-                deployedFeedVersionEndDate = feedVersionSummary.validationResult.lastCalendarDate;
-                deployedFeedVersionIssues = (feedVersionSummary.validationResult.errorCount == -1)
-                    ? 0
-                    : feedVersionSummary.validationResult.errorCount;
-            } else {
-                latestValidation = new LatestValidationResult(feedVersionSummary);
-                latestProcessedByExternalPublisher = feedVersionSummary.processedByExternalPublisher;
-                latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
-                latestGtfsPlusValidation = feedVersionSummary.gtfsPlusValidation;
-                latestNamespace = feedVersionSummary.namespace;
-                latestPublishedVersionId = feedVersionSummary.publishedVersionId;
-                publishedValidationSummary = new FeedValidationResultSummary();
-                publishedValidationSummary.errorCount = feedVersionSummary.publishedFeedVersionErrorCount;
-                publishedValidationSummary.startDate = feedVersionSummary.publishedFeedVersionStartDate;
-                publishedValidationSummary.endDate = feedVersionSummary.publishedFeedVersionEndDate;
-            }
+    public void setDeployedFeedVersionValues(FeedVersionSummary feedVersionSummary) {
+        if (feedVersionSummary == null) {
+            return;
         }
+        deployedFeedVersionId = feedVersionSummary.id;
+        deployedFeedVersionStartDate = feedVersionSummary.validationResult.firstCalendarDate;
+        deployedFeedVersionEndDate = feedVersionSummary.validationResult.lastCalendarDate;
+        deployedFeedVersionIssues = (feedVersionSummary.validationResult.errorCount == -1)
+            ? 0
+            : feedVersionSummary.validationResult.errorCount;
     }
 
     /**
@@ -301,14 +309,10 @@ public class FeedSourceSummary {
         List<Bson> stages
     ) {
         Map<String, FeedVersionSummary> feedVersionSummaries = new HashMap<>();
-        Document feedVersionDocument = Persistence.getDocuments(collection, stages).first();
-        if (feedVersionDocument != null) {
-            FeedVersionSummary feedVersionSummary = new FeedVersionSummary(
-                feedVersionKey,
-                hasChildValidationResultDocument,
-                feedVersionDocument
-            );
-            feedVersionSummaries.put(feedVersionDocument.getString(feedSourceKey), feedVersionSummary);
+        AggregateIterable<Document> feedVersions = Persistence.getDocuments(collection, stages);
+        for (Document feedVersion : feedVersions) {
+            FeedVersionSummary feedVersionSummary = new FeedVersionSummary(feedVersionKey, hasChildValidationResultDocument, feedVersion);
+            feedVersionSummaries.put(feedVersion.getString(feedSourceKey), feedVersionSummary);
         }
         return feedVersionSummaries;
     }
