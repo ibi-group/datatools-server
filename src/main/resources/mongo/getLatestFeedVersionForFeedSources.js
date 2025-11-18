@@ -31,6 +31,11 @@ db.getCollection('FeedSource').aggregate([
         }
     },
     {
+        $sort: {
+            "feedVersions.dateCreated": -1
+        }
+    },
+    {
         $group: {
             _id: "$_id",
             publishedVersionId: { $first: "$publishedVersionId" },
@@ -38,7 +43,7 @@ db.getCollection('FeedSource').aggregate([
             publishedFeedVersionStartDate: { $first: "$publishedFeedVersion.validationResult.firstCalendarDate"},
             publishedFeedVersionEndDate: { $first: "$publishedFeedVersion.validationResult.lastCalendarDate"},
             feedVersion: {
-                $max: {
+                $last: {
                     version: "$feedVersions.version",
                     feedVersionId: "$feedVersions._id",
                     firstCalendarDate: "$feedVersions.validationResult.firstCalendarDate",

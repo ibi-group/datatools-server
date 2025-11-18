@@ -188,6 +188,7 @@ public class FeedSourceSummary {
             lookup("FeedVersion", "publishedVersionId", "namespace", "publishedFeedVersion"),
             unwind("$feedVersions"),
             unwind("$publishedFeedVersion", new UnwindOptions().preserveNullAndEmptyArrays(true)),
+            sort(Sorts.descending("feedVersions.dateCreated")),
             group(
                 "$_id",
                 Accumulators.first("publishedVersionId", "$publishedVersionId"),
