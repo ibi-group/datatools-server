@@ -1,7 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
-import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.extensions.ExternalPropertiesRetriever;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -35,9 +35,7 @@ import static com.mongodb.client.model.Aggregates.project;
 import static com.mongodb.client.model.Aggregates.replaceRoot;
 import static com.mongodb.client.model.Aggregates.sort;
 import static com.mongodb.client.model.Aggregates.unwind;
-import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.in;
-import static com.mongodb.client.model.Filters.eq;
 
 public class FeedSourceSummary {
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -112,7 +110,7 @@ public class FeedSourceSummary {
             hasConfigProperty("modules.gtfsapi.use_extension") &&
             isExtensionEnabled(getConfigPropertyAsText("modules.gtfsapi.use_extension"))
         ) {
-            externalProperties = retrieveExternalProperties();
+            externalProperties = new ExternalPropertiesRetriever().retrieveFeedSourceExternalProperties(this.id);
         }
     }
 
@@ -133,23 +131,6 @@ public class FeedSourceSummary {
                 this.latestValidation = new LatestValidationResult(feedVersionSummary);
             }
         }
-    }
-
-    public Map<String, Map<String, String>> retrieveExternalProperties() {
-
-        Map<String, Map<String, String>> resourceTable = new HashMap<>();
-
-        for(String resourceType : DataManager.feedResources.keySet()) {
-            Map<String, String> propTable = new HashMap<>();
-
-            // Get all external properties for the feed source/resource type and fill prop table.
-            Persistence.externalFeedSourceProperties
-                .getFiltered(and(eq("feedSourceId", this.id), eq("resourceType", resourceType)))
-                .forEach(prop -> propTable.put(prop.name, prop.value));
-
-            resourceTable.put(resourceType, propTable);
-        }
-        return resourceTable;
     }
 
     /**
