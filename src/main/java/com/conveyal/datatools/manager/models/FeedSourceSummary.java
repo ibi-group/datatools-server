@@ -1,8 +1,10 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.validator.ValidationResult;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.Lists;
@@ -21,6 +23,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
+import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
+import static com.conveyal.datatools.manager.DataManager.isModuleEnabled;
 import static com.mongodb.client.model.Aggregates.group;
 import static com.mongodb.client.model.Aggregates.limit;
 import static com.mongodb.client.model.Aggregates.lookup;
@@ -29,7 +35,9 @@ import static com.mongodb.client.model.Aggregates.project;
 import static com.mongodb.client.model.Aggregates.replaceRoot;
 import static com.mongodb.client.model.Aggregates.sort;
 import static com.mongodb.client.model.Aggregates.unwind;
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.in;
+import static com.mongodb.client.model.Filters.eq;
 
 public class FeedSourceSummary {
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -71,6 +79,9 @@ public class FeedSourceSummary {
 
     public String organizationId;
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Map<String, Map<String, String>> externalProperties;
+
     public FeedSourceSummary() {
     }
 
@@ -94,6 +105,15 @@ public class FeedSourceSummary {
         this.url = feedSourceDocument.getString("url");
         // Get optional filename.
         this.filename = feedSourceDocument.getString("filename");
+
+        // Optional external properties, if enabled by config.
+        if (
+            isModuleEnabled("gtfsapi") &&
+            hasConfigProperty("modules.gtfsapi.use_extension") &&
+            isExtensionEnabled(getConfigPropertyAsText("modules.gtfsapi.use_extension"))
+        ) {
+            externalProperties = retrieveExternalProperties();
+        }
     }
 
     /**
@@ -113,6 +133,23 @@ public class FeedSourceSummary {
                 this.latestValidation = new LatestValidationResult(feedVersionSummary);
             }
         }
+    }
+
+    public Map<String, Map<String, String>> retrieveExternalProperties() {
+
+        Map<String, Map<String, String>> resourceTable = new HashMap<>();
+
+        for(String resourceType : DataManager.feedResources.keySet()) {
+            Map<String, String> propTable = new HashMap<>();
+
+            // Get all external properties for the feed source/resource type and fill prop table.
+            Persistence.externalFeedSourceProperties
+                .getFiltered(and(eq("feedSourceId", this.id), eq("resourceType", resourceType)))
+                .forEach(prop -> propTable.put(prop.name, prop.value));
+
+            resourceTable.put(resourceType, propTable);
+        }
+        return resourceTable;
     }
 
     /**
