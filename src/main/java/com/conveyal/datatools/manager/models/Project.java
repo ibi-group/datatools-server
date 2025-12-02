@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.jobs.AutoDeployType;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.FeedSourceErrorCountBroker;
 import com.conveyal.gtfs.graphql.fetchers.ErrorCountFetcher;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -11,11 +12,10 @@ import com.mongodb.client.model.Projections;
 import org.bson.Document;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.bson.conversions.Bson;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +41,6 @@ import static com.mongodb.client.model.Filters.or;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
-    private static final Logger LOG = LoggerFactory.getLogger(Project.class);
 
     /** The name of this project, e.g. NYSDOT. */
     public String name;
@@ -168,26 +167,40 @@ public class Project extends Model {
      * Get all feed source summaries for this project.
      */
     public Collection<FeedSourceSummary> retrieveFeedSourceSummaries() {
-        ErrorCountFetcher errorCountFetcher = new ErrorCountFetcher();
-
         List<FeedSourceSummary> feedSourceSummaries = FeedSourceSummary.getFeedSourceSummaries(id, organizationId);
+        assignDeployedVersion(feedSourceSummaries);
+        assignErrorCounts(feedSourceSummaries);
+        return feedSourceSummaries;
+    }
+
+    /**
+     * Assign error counts to feed source summaries. This must happen after deployed versions are assigned.
+     */
+    private void assignErrorCounts(List<FeedSourceSummary> feedSourceSummaries) {
+        HashMap<String, List<ErrorCountFetcher.ErrorCount>> feedSourceErrorCounts = FeedSourceErrorCountBroker.getErrorCountsForFeedSources(
+            feedSourceSummaries
+        );
+        feedSourceSummaries.forEach(feedSourceSummary ->
+            feedSourceSummary.latestErrorCounts = feedSourceErrorCounts.getOrDefault(feedSourceSummary.id, null)
+        );
+    }
+
+    /**
+     * Assign deployed feed version. Prioritise pinned deployment feed version over latest deployment deployed feed version.
+     */
+    private void assignDeployedVersion(List<FeedSourceSummary> feedSourceSummaries) {
         Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedSourceSummary.getLatestFeedVersionForFeedSources(id);
         Map<String, FeedVersionSummary> pinnedDeploymentFeedVersions = FeedSourceSummary.getFeedVersionsFromPinnedDeployment(id);
         Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
 
-        for (FeedSourceSummary feedSourceSummary : feedSourceSummaries) {
+        feedSourceSummaries.forEach(feedSourceSummary -> {
             feedSourceSummary.setFeedVersionValues(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
             FeedVersionSummary deployedVersion = pinnedDeploymentFeedVersions.getOrDefault(
                 feedSourceSummary.id,
                 latestDeploymentDeployedFeedVersions.get(feedSourceSummary.id)
             );
             feedSourceSummary.setDeployedFeedVersionValues(deployedVersion);
-
-            if (feedSourceSummary.latestNamespace != null) {
-                feedSourceSummary.latestErrorCounts = errorCountFetcher.getErrorCounts(feedSourceSummary.latestNamespace);
-            }
-        }
-        return feedSourceSummaries;
+        });
     }
 
     // TODO: Does this need to be returned with JSON API response
