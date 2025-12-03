@@ -3,7 +3,7 @@ name: Create and publish a Docker image
 
 on:
   push:
-    branches: ['dev', 'master', 'dev-flex', 'mtc-deploy', 'html-js-module']
+    branches: ['dev', 'master', 'dev-flex', 'mtc-deploy', 'html-js-module-flex']
 
 env:
   REGISTRY: ghcr.io
