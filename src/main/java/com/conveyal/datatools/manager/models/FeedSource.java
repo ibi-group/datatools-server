@@ -515,7 +515,7 @@ public class FeedSource extends Model implements Cloneable {
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("externalProperties")
     public Map<String, Map<String, String>> externalProperties() {
-        return new ExternalPropertiesRetriever().retrieveFeedSourceExternalProperties(this.id);
+        return ExternalPropertiesRetriever.retrieveFeedSourceExternalProperties(id);
     }
 
     /**

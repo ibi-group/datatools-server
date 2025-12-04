@@ -110,7 +110,7 @@ public class FeedSourceSummary {
             hasConfigProperty("modules.gtfsapi.use_extension") &&
             isExtensionEnabled(getConfigPropertyAsText("modules.gtfsapi.use_extension"))
         ) {
-            externalProperties = new ExternalPropertiesRetriever().retrieveFeedSourceExternalProperties(this.id);
+            externalProperties = ExternalPropertiesRetriever.retrieveFeedSourceExternalProperties(id);
         }
     }
 

@@ -13,11 +13,16 @@ import static com.mongodb.client.model.Filters.eq;
  * Class for retrieving external properties for a feed source.
  */
 public class ExternalPropertiesRetriever {
-    public Map<String, Map<String, String>> retrieveFeedSourceExternalProperties(String feedSourceId) {
+
+    private ExternalPropertiesRetriever() {
+        // This hides the public constructor.
+    }
+
+    public static Map<String, Map<String, String>> retrieveFeedSourceExternalProperties(String feedSourceId) {
 
         Map<String, Map<String, String>> resourceTable = new HashMap<>();
 
-        for(String resourceType : DataManager.feedResources.keySet()) {
+        for (String resourceType : DataManager.feedResources.keySet()) {
             Map<String, String> propTable = new HashMap<>();
 
             // Get all external properties for the feed source/resource type and fill prop table.
