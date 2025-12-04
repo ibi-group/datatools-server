@@ -73,7 +73,7 @@ public class GtfsPlusController {
      */
     private static HttpServletResponse getGtfsPlusFile(Request req, Response res) {
         String feedVersionId = req.params("versionid");
-        LOG.info("Downloading GTFS+ file for FeedVersion " + feedVersionId);
+        LOG.info("Downloading GTFS+ file for FeedVersion {}", feedVersionId);
 
         // check for saved
         File file = gtfsPlusStore.getFeed(feedVersionId);
@@ -161,7 +161,7 @@ public class GtfsPlusController {
     private static String publishGtfsPlusFile(Request req, Response res) {
         Auth0UserProfile profile = req.attribute("user");
         String feedVersionId = req.params("versionid");
-        LOG.info("Publishing GTFS+ for " + feedVersionId);
+        LOG.info("Publishing GTFS+ for {}", feedVersionId);
         File plusFile = gtfsPlusStore.getFeed(feedVersionId);
         if (plusFile == null || !plusFile.exists()) {
             logMessageAndHalt(req, 400, "No saved GTFS+ data for version");
