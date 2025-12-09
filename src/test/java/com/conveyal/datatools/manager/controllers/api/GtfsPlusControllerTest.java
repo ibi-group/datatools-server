@@ -62,12 +62,21 @@ class GtfsPlusControllerTest extends UnitTest {
      * Make sure the gtfsplus endpoint can retrieve files.
      */
     @Test
-    void canRetrieveExistingGtfsPlusFile() {
-        LOG.info("Making gtfsplus file request");
+    void canRetrieveAndPublishGtfsPlusFile() {
         feedVersion.persistFeedVersionAfterValidation(true);
-        Response response = gtfsPlusFileRequest(feedVersion.id);
-        // Assert that the call succeeded.
-        assertEquals(200, response.getStatusCode());
+        LOG.info("Making gtfsplus file request");
+        Response downloadResponse = gtfsPlusFileRequest(feedVersion.id);
+        assertEquals(200, downloadResponse.getStatusCode());
+
+        // Upload (same file should be ok)
+        LOG.info("Making gtfsplus upload request");
+        Response uploadResponse = uploadGtfsPlusFile(feedVersion.id, downloadResponse.asByteArray());
+        assertEquals(200, uploadResponse.getStatusCode());
+
+        // Attempt to publish file
+        LOG.info("Making gtfsplus publish request");
+        Response publishResponse = gtfsPlusPublishRequest(feedVersion.id);
+        assertEquals(200, publishResponse.getStatusCode());
     }
 
     /**
@@ -78,6 +87,33 @@ class GtfsPlusControllerTest extends UnitTest {
         return given()
             .port(DataManager.PORT)
             .get(path)
+            .then()
+            .extract()
+            .response();
+    }
+
+    /**
+     * Perform retrieval of an existing GTFS+ file on the feed source ID.
+     */
+    private static Response uploadGtfsPlusFile(String versionId, byte[] bytes) {
+        String path = String.format("/api/manager/secure/gtfsplus/%s", versionId);
+        return given()
+            .port(DataManager.PORT)
+            .body(bytes)
+            .post(path)
+            .then()
+            .extract()
+            .response();
+    }
+
+    /**
+     * Perform retrieval of an existing GTFS+ file on the feed source ID.
+     */
+    private static Response gtfsPlusPublishRequest(String versionId) {
+        String path = String.format("/api/manager/secure/gtfsplus/%s/publish", versionId);
+        return given()
+            .port(DataManager.PORT)
+            .post(path)
             .then()
             .extract()
             .response();
