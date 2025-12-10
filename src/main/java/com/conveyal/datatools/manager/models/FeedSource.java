@@ -10,6 +10,7 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.extensions.ExternalPropertiesRetriever;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
@@ -43,7 +44,6 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -532,20 +532,7 @@ public class FeedSource extends Model implements Cloneable {
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("externalProperties")
     public Map<String, Map<String, String>> externalProperties() {
-
-        Map<String, Map<String, String>> resourceTable = new HashMap<>();
-
-        for(String resourceType : DataManager.feedResources.keySet()) {
-            Map<String, String> propTable = new HashMap<>();
-
-            // Get all external properties for the feed source/resource type and fill prop table.
-            Persistence.externalFeedSourceProperties
-                .getFiltered(and(eq("feedSourceId", this.id), eq("resourceType", resourceType)))
-                .forEach(prop -> propTable.put(prop.name, prop.value));
-
-            resourceTable.put(resourceType, propTable);
-        }
-        return resourceTable;
+        return ExternalPropertiesRetriever.retrieveFeedSourceExternalProperties(id);
     }
 
     /**
