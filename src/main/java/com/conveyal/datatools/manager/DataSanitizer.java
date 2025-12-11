@@ -35,7 +35,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
 import static com.conveyal.datatools.manager.DataManager.initializeApplication;
@@ -171,7 +170,7 @@ public class DataSanitizer {
 
         int keepCount = 0;
         int deleteCount = 0;
-        
+
         for (FeedVersion feedVersion : feedVersions) {
             if (keepCount < numberOfVersionsToKeep) {
                 keepCount++;
@@ -232,7 +231,7 @@ public class DataSanitizer {
      * Group orphaned schemas and optionally delete.
      */
     public static void sanitizeDBSchemas(boolean delete) {
-        Set<String> orphanedSchemas = getOrphanedDBSchemas(getActiveDBSchemas());
+        Set<String> orphanedSchemas = getOrphanedDBSchemas(getFieldFromDocument("namespace", "FeedVersion"));
         if (orphanedSchemas.isEmpty()) {
             System.out.println("No orphaned DB schemas found!");
 
@@ -246,18 +245,6 @@ public class DataSanitizer {
         if (delete && !orphanedSchemas.isEmpty()) {
             System.out.println("Total orphaned DB schemas deleted: " + deleteOrphanedDBSchemas(orphanedSchemas));
         }
-    }
-
-    /**
-     * Get all active namespaces/schemas from feed sources and feed versions.
-     */
-    public static Set<String> getActiveDBSchemas() {
-        return Stream
-            .concat(
-                getFieldFromDocument("namespace", "FeedVersion").stream(),
-                getFieldFromDocument("editorNamespace", "FeedSource").stream()
-            )
-            .collect(Collectors.toSet());
     }
 
     /**
@@ -296,7 +283,7 @@ public class DataSanitizer {
     }
 
     /**
-     * Get all qualifying schemas that are not associated with a feed version or feed source.
+     * Get all qualifying schemas that are not associated with a feed version.
      */
     public static Set<String> getOrphanedDBSchemas(Set<String> associatedSchemas) {
         String whereClause = associatedSchemas.isEmpty() ? "" : String.format(" WHERE nspname NOT IN (%s)", associatedSchemas

@@ -1,5 +1,6 @@
 package com.conveyal.datatools;
 
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.DataSanitizer;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
@@ -9,12 +10,14 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.GTFS;
+import com.conveyal.gtfs.util.InvalidNamespaceException;
 import com.mongodb.client.model.Sorts;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.HashSet;
@@ -51,7 +54,6 @@ class DataSanitizerTest {
         FeedSource feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSource);
         feedSourceParent = new FeedSource(appendDate("Test Feed 2"), project.id, MANUALLY_UPLOADED);
-        feedSourceParent.editorNamespace = "active-editor-namespace";
         Persistence.feedSources.create(feedSourceParent);
         feedSourceWithObsoleteFeedVersion = new FeedSource(appendDate("Test Feed 3"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSourceWithObsoleteFeedVersion);
@@ -82,7 +84,7 @@ class DataSanitizerTest {
     }
 
     @AfterAll
-    static void tearDown() {
+    static void tearDown() throws SQLException, InvalidNamespaceException, CheckedAWSException {
         Auth0Connection.setAuthDisabled(false);
         ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = true;
         project.delete();
@@ -93,7 +95,7 @@ class DataSanitizerTest {
         try {
             GTFS.delete(orphanedDBSchema, DataManager.GTFS_DATA_SOURCE);
         } catch (Exception e) {
-          // Do nothing. Schema removed in unit test.
+            // Do nothing. Schema removed in unit test.
         }
     }
 
@@ -116,13 +118,6 @@ class DataSanitizerTest {
         // Other schemas will exist. For this test, just make sure the list contains the test orphaned schema.
         Set<String> orphanedSchemas = DataSanitizer.getOrphanedDBSchemas(new HashSet<>());
         assertTrue(orphanedSchemas.contains(orphanedDBSchema));
-    }
-
-    @Test
-    void canIdentifyActiveDBSchemas() {
-        // Other schemas will exist. For this test, just make sure the list contains the feed source editor namespace.
-        Set<String> activeDBSchemas = DataSanitizer.getActiveDBSchemas();
-        assertTrue(activeDBSchemas.contains(feedSourceParent.editorNamespace));
     }
 
     @Test
