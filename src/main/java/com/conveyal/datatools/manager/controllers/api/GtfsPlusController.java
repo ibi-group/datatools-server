@@ -73,7 +73,7 @@ public class GtfsPlusController {
      */
     private static HttpServletResponse getGtfsPlusFile(Request req, Response res) {
         String feedVersionId = req.params("versionid");
-        LOG.info("Downloading GTFS+ file for FeedVersion " + feedVersionId);
+        LOG.info("Downloading GTFS+ file for FeedVersion {}", feedVersionId);
 
         // check for saved
         File file = gtfsPlusStore.getFeed(feedVersionId);
@@ -100,28 +100,31 @@ public class GtfsPlusController {
             gtfsPlusTables.add(tableNode.get("name").asText());
         }
 
-        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile))) {
+        try {
             // create a new zip file to only contain the GTFS+ tables
             gtfsPlusFile = File.createTempFile(version.id + "_gtfsplus", ".zip");
+            try (
+                ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile));
+                ZipFile gtfsFile = new ZipFile(version.retrieveGtfsFile())
+            ) {
+                // iterate through the existing GTFS file, copying any GTFS+ tables
+                final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
+                byte[] buffer = new byte[512];
+                while (entries.hasMoreElements()) {
+                    final ZipEntry entry = entries.nextElement();
+                    if (!gtfsPlusTables.contains(entry.getName())) continue;
 
-            // iterate through the existing GTFS file, copying any GTFS+ tables
-            ZipFile gtfsFile = new ZipFile(version.retrieveGtfsFile());
-            final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
-            byte[] buffer = new byte[512];
-            while (entries.hasMoreElements()) {
-                final ZipEntry entry = entries.nextElement();
-                if (!gtfsPlusTables.contains(entry.getName())) continue;
-
-                // create a new empty ZipEntry and copy the contents
-                ZipEntry newEntry = new ZipEntry(entry.getName());
-                zos.putNextEntry(newEntry);
-                try (InputStream in = gtfsFile.getInputStream(entry)) {
-                    while (0 < in.available()) {
-                        int read = in.read(buffer);
-                        zos.write(buffer, 0, read);
+                    // create a new empty ZipEntry and copy the contents
+                    ZipEntry newEntry = new ZipEntry(entry.getName());
+                    zos.putNextEntry(newEntry);
+                    try (InputStream in = gtfsFile.getInputStream(entry)) {
+                        while (0 < in.available()) {
+                            int read = in.read(buffer);
+                            zos.write(buffer, 0, read);
+                        }
                     }
+                    zos.closeEntry();
                 }
-                zos.closeEntry();
             }
         } catch (IOException e) {
             logMessageAndHalt(req, 500, "An error occurred while trying to create a gtfs file", e);
@@ -158,7 +161,7 @@ public class GtfsPlusController {
     private static String publishGtfsPlusFile(Request req, Response res) {
         Auth0UserProfile profile = req.attribute("user");
         String feedVersionId = req.params("versionid");
-        LOG.info("Publishing GTFS+ for " + feedVersionId);
+        LOG.info("Publishing GTFS+ for {}", feedVersionId);
         File plusFile = gtfsPlusStore.getFeed(feedVersionId);
         if (plusFile == null || !plusFile.exists()) {
             logMessageAndHalt(req, 400, "No saved GTFS+ data for version");
@@ -175,46 +178,50 @@ public class GtfsPlusController {
 
         File newFeed = null;
 
-        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed))) {
+        try {
             // First, create a new zip file to only contain the GTFS+ tables
             newFeed = File.createTempFile(feedVersionId + "_new", ".zip");
+            try (
+                ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed));
+                ZipFile gtfsFile = new ZipFile(feedVersion.retrieveGtfsFile())
+            ) {
+                // Next, iterate through the existing GTFS file, copying all non-GTFS+ tables.
+                final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
+                byte[] buffer = new byte[512];
+                while (entries.hasMoreElements()) {
+                    final ZipEntry entry = entries.nextElement();
+                    // skip GTFS+ and non-standard tables
+                    if (gtfsPlusTables.contains(entry.getName()) || entry.getName().startsWith("_")) continue;
 
-            // Next, iterate through the existing GTFS file, copying all non-GTFS+ tables.
-            ZipFile gtfsFile = new ZipFile(feedVersion.retrieveGtfsFile());
-            final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
-            byte[] buffer = new byte[512];
-            while (entries.hasMoreElements()) {
-                final ZipEntry entry = entries.nextElement();
-                // skip GTFS+ and non-standard tables
-                if (gtfsPlusTables.contains(entry.getName()) || entry.getName().startsWith("_")) continue;
+                    // create a new empty ZipEntry and copy the contents
+                    ZipEntry newEntry = new ZipEntry(entry.getName());
+                    zos.putNextEntry(newEntry);
+                    try (InputStream in = gtfsFile.getInputStream(entry)) {
+                        while (0 < in.available()) {
+                            int read = in.read(buffer);
+                            zos.write(buffer, 0, read);
+                        }
+                    }
+                    zos.closeEntry();
+                }
 
-                // create a new empty ZipEntry and copy the contents
-                ZipEntry newEntry = new ZipEntry(entry.getName());
-                zos.putNextEntry(newEntry);
-                try (InputStream in = gtfsFile.getInputStream(entry)) {
-                    while (0 < in.available()) {
-                        int read = in.read(buffer);
-                        zos.write(buffer, 0, read);
+                // iterate through the GTFS+ file, copying all entries
+                try (ZipFile plusZipFile = new ZipFile(plusFile)) {
+                    final Enumeration<? extends ZipEntry> plusEntries = plusZipFile.entries();
+                    while (plusEntries.hasMoreElements()) {
+                        final ZipEntry entry = plusEntries.nextElement();
+
+                        ZipEntry newEntry = new ZipEntry(entry.getName());
+                        zos.putNextEntry(newEntry);
+                        try (InputStream in = plusZipFile.getInputStream(entry)) {
+                            while (0 < in.available()) {
+                                int read = in.read(buffer);
+                                zos.write(buffer, 0, read);
+                            }
+                        }
+                        zos.closeEntry();
                     }
                 }
-                zos.closeEntry();
-            }
-
-            // iterate through the GTFS+ file, copying all entries
-            ZipFile plusZipFile = new ZipFile(plusFile);
-            final Enumeration<? extends ZipEntry> plusEntries = plusZipFile.entries();
-            while (plusEntries.hasMoreElements()) {
-                final ZipEntry entry = plusEntries.nextElement();
-
-                ZipEntry newEntry = new ZipEntry(entry.getName());
-                zos.putNextEntry(newEntry);
-                try (InputStream in = plusZipFile.getInputStream(entry)) {
-                    while (0 < in.available()) {
-                        int read = in.read(buffer);
-                        zos.write(buffer, 0, read);
-                    }
-                }
-                zos.closeEntry();
             }
         } catch (IOException e) {
             logMessageAndHalt(req, 500, "Error creating combined GTFS/GTFS+ file", e);
