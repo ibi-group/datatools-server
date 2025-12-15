@@ -40,10 +40,7 @@ public class FeedVersionSummary extends Model implements Serializable {
     public Date processedByExternalPublisher;
     public Date sentToExternalPublisher;
     public GtfsPlusValidation gtfsPlusValidation;
-    public String publishedVersionId;
-    public int publishedFeedVersionErrorCount;
-    public LocalDate publishedFeedVersionStartDate;
-    public LocalDate publishedFeedVersionEndDate;
+    public String feedSourcePublishedVersionId;
 
     public PartialValidationSummary getValidationSummary() {
         if (validationSummary == null) {
@@ -69,19 +66,8 @@ public class FeedVersionSummary extends Model implements Serializable {
         namespace = feedVersionDocument.getString("namespace");
         validationResult = getValidationResult(hasChildValidationResultDocument, feedVersionDocument);
 
-        // The feed source's published version id.
-        publishedVersionId = feedVersionDocument.getString("publishedVersionId");
-
         // The feed source's published feed version. Feed source's publishedVersionId mapped to feed version's namespace.
-        publishedFeedVersionErrorCount = feedVersionDocument.get("publishedFeedVersionErrorCount") != null
-            ? feedVersionDocument.getInteger("publishedFeedVersionErrorCount")
-            : 0;
-        publishedFeedVersionStartDate = feedVersionDocument.get("publishedFeedVersionStartDate") != null
-            ? getDateFromString(feedVersionDocument.getString("publishedFeedVersionStartDate"))
-            : null;
-        publishedFeedVersionEndDate = feedVersionDocument.get("publishedFeedVersionEndDate") != null
-            ? getDateFromString(feedVersionDocument.getString("publishedFeedVersionEndDate"))
-            : null;
+        feedSourcePublishedVersionId = feedVersionDocument.getString("publishedVersionId");
     }
 
     /**

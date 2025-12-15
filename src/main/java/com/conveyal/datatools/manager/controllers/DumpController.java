@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.controllers;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;

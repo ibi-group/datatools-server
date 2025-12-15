@@ -8,7 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This job handles the Gtfs+ validation of a given feed version. If the version is not new, it will simply
+ * This job handles the GTFS+ validation of a given feed version. If the version is not new, it will simply
  * replace the existing version with the version object that has updated validation info.
  */
 public class ValidateGtfsPlusFeedJob extends FeedVersionJob {
@@ -18,10 +18,10 @@ public class ValidateGtfsPlusFeedJob extends FeedVersionJob {
     private final boolean isNewVersion;
 
     public ValidateGtfsPlusFeedJob(FeedVersion version, Auth0UserProfile owner, boolean isNewVersion) {
-        super(owner, "Validating Gtfs+", JobType.VALIDATE_FEED);
+        super(owner, "Validating GTFS+", JobType.VALIDATE_FEED);
         feedVersion = version;
         this.isNewVersion = isNewVersion;
-        status.update("Waiting to begin Gtfs+ validation...", 0);
+        status.update("Waiting to begin GTFS+ validation...", 0);
     }
 
     @Override
@@ -42,7 +42,7 @@ public class ValidateGtfsPlusFeedJob extends FeedVersionJob {
                 // the version won't get loaded into MongoDB (even though it exists in postgres).
                 feedVersion.persistFeedVersionAfterValidation(isNewVersion);
             }
-            status.completeSuccessfully("Gtfs+ validation finished!");
+            status.completeSuccessfully("GTFS+ validation finished!");
         } else {
             // If the version was not stored successfully, call FeedVersion#delete to reset things to before the version
             // was uploaded/fetched. Note: delete calls made to MongoDB on the version ID will not succeed, but that is

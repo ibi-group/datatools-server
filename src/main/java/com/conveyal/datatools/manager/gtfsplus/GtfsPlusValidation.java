@@ -62,8 +62,17 @@ public class GtfsPlusValidation implements Serializable {
      * Overload method to retrieve the feed version.
      */
     public static GtfsPlusValidation validate(String feedVersionId) throws Exception {
+        GtfsPlusValidation gtfsPlusValidation = null;
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
-        return validate(feedVersion);
+        if (feedVersion != null) {
+            if (feedVersion.gtfsPlusValidation != null) {
+                return feedVersion.gtfsPlusValidation;
+            }
+            gtfsPlusValidation = validate(feedVersion);
+            feedVersion.gtfsPlusValidation = gtfsPlusValidation;
+            Persistence.feedVersions.replace(feedVersion.id, feedVersion);
+        }
+        return gtfsPlusValidation;
     }
 
     /**

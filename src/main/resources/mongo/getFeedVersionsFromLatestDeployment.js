@@ -2,7 +2,7 @@ db.getCollection('Project').aggregate([
     {
         // Match provided project id.
         $match: {
-            _id: "project-with-latest-deployment"
+            _id: "<projectId>"
         }
     },
     {

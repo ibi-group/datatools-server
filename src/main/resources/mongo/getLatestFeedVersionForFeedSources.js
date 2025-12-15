@@ -2,7 +2,7 @@ db.getCollection('FeedSource').aggregate([
     {
         // Match provided project id.
         $match: {
-            projectId: "project-with-latest-deployment"
+            projectId: "<projectId>"
         }
     },
     {
@@ -39,9 +39,6 @@ db.getCollection('FeedSource').aggregate([
         $group: {
             _id: "$_id",
             publishedVersionId: { $first: "$publishedVersionId" },
-            publishedFeedVersionErrorCount: { $first: "$publishedFeedVersion.validationResult.errorCount"},
-            publishedFeedVersionStartDate: { $first: "$publishedFeedVersion.validationResult.firstCalendarDate"},
-            publishedFeedVersionEndDate: { $first: "$publishedFeedVersion.validationResult.lastCalendarDate"},
             feedVersion: {
                 $last: {
                     version: "$feedVersions.version",

@@ -12,19 +12,23 @@ import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedSourceSummary;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.FeedVersionSummary;
 import com.conveyal.datatools.manager.models.FetchFrequency;
 import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.PublishState;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.validator.ValidationResult;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -32,16 +36,17 @@ import java.net.URL;
 import java.time.LocalDate;
 import java.time.Month;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.mongodb.client.model.Filters.eq;
 import static org.eclipse.jetty.http.HttpStatus.BAD_REQUEST_400;
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -373,21 +378,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.startDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.endDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
-        assertEquals(feedVersionFromLatestDeployment.processedByExternalPublisher, feedSourceSummaries.get(0).latestProcessedByExternalPublisher);
         assertEquals(feedVersionFromLatestDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
-        assertEquals(feedVersionFromLatestDeployment.gtfsPlusValidation.issues.size(), feedSourceSummaries.get(0).latestGtfsPlusValidation.issues.size());
-        assertEquals(feedVersionFromLatestDeployment.gtfsPlusValidation.published, feedSourceSummaries.get(0).latestGtfsPlusValidation.published);
-        assertEquals(feedVersionFromLatestDeployment.namespace, feedSourceSummaries.get(0).latestNamespace);
-        assertFalse(feedSourceSummaries.get(0).latestErrorCounts.isEmpty());
-        assertEquals(NewGTFSErrorType.CONDITIONALLY_REQUIRED, feedSourceSummaries.get(0).latestErrorCounts.get(0).type);
-        assertEquals(NewGTFSErrorType.FEED_TRAVEL_TIMES_ROUNDED, feedSourceSummaries.get(0).latestErrorCounts.get(1).type);
-        assertEquals(NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS, feedSourceSummaries.get(0).latestErrorCounts.get(2).type);
-
-        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.publishedVersionId, feedSourceSummaries.get(0).latestPublishedVersionId);
-
-        assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.errorCount, feedSourceSummaries.get(0).publishedValidationSummary.errorCount);
-        assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.firstCalendarDate, feedSourceSummaries.get(0).publishedValidationSummary.startDate);
-        assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.lastCalendarDate, feedSourceSummaries.get(0).publishedValidationSummary.endDate);
+        assertEquals(PublishState.PUBLISH_BLOCKED, feedSourceSummaries.get(0).publishState);
     }
 
     @Test
@@ -422,10 +414,87 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.startDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.endDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
-        assertEquals(feedVersionFromPinnedDeployment.processedByExternalPublisher, feedSourceSummaries.get(0).latestProcessedByExternalPublisher);
         assertEquals(feedVersionFromPinnedDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
-        assertEquals(feedVersionFromPinnedDeployment.gtfsPlusValidation.issues.size(), feedSourceSummaries.get(0).latestGtfsPlusValidation.issues.size());
-        assertEquals(feedVersionFromPinnedDeployment.gtfsPlusValidation.published, feedSourceSummaries.get(0).latestGtfsPlusValidation.published);
+        assertEquals(PublishState.PUBLISH_BLOCKED, feedSourceSummaries.get(0).publishState);
+    }
+
+    @ParameterizedTest
+    @MethodSource("createPublishStates")
+    void canDeterminePublishState(
+        boolean isPublished,
+        boolean isPublishing,
+        boolean isPublishBlocked,
+        boolean isFeedLoading,
+        PublishState expectedPublishState
+    ) {
+        FeedSourceSummary feedSourceSummary = new FeedSourceSummary();
+        FeedVersionSummary feedVersionSummary = new FeedVersionSummary();
+        FeedVersion.setDateOverrideForTesting(LocalDate.now());
+        FeedSourceSummary.setHasBlockingIssueForPublishingOverrideForTesting(false);
+
+        if (isPublished) {
+            feedVersionSummary.namespace = feedVersionSummary.feedSourcePublishedVersionId = "namespace";
+        }
+        if (isPublishing) {
+            feedVersionSummary.sentToExternalPublisher = new Date();
+            feedVersionSummary.processedByExternalPublisher = null;
+        }
+        if (isPublishBlocked) {
+            feedVersionSummary.gtfsPlusValidation = new GtfsPlusValidation();
+            feedVersionSummary.gtfsPlusValidation.issues = List.of(new ValidationIssue());
+            feedVersionSummary.gtfsPlusValidation.published = false;
+            feedVersionSummary.validationResult = new ValidationResult();
+            FeedSourceSummary.setHasBlockingIssueForPublishingOverrideForTesting(true);
+        }
+        if (isFeedLoading) {
+            passPublishBlockedCheck(feedVersionSummary);
+
+            feedVersionSummary.validationResult.errorCount = 1;
+            feedVersionSummary.id = "feed-source-id";
+            feedSourceSummary.id = "feed-source-id";
+        }
+        if (!isPublished && !isPublishing && !isPublishBlocked && !isFeedLoading) {
+            // Ready to publish case.
+            passPublishBlockedCheck(feedVersionSummary);
+
+            feedVersionSummary.validationResult.errorCount = 1;
+            feedVersionSummary.id = "feed-version-id";
+            feedSourceSummary.id = "feed-source-id";
+        }
+        PublishState publishState = feedSourceSummary.getPublishState(feedVersionSummary);
+        assertEquals(expectedPublishState, publishState);
+    }
+
+    /**
+     * Set up a feed version summary to pass the publish blocked check.
+     */
+    private static void passPublishBlockedCheck(FeedVersionSummary feedVersionSummary) {
+        feedVersionSummary.gtfsPlusValidation = new GtfsPlusValidation();
+        feedVersionSummary.gtfsPlusValidation.issues = new ArrayList<>();
+        feedVersionSummary.gtfsPlusValidation.published = true;
+        feedVersionSummary.validationResult = new ValidationResult();
+        feedVersionSummary.validationResult.lastCalendarDate = LocalDate.now().plusDays(1);
+        FeedVersion.setDateOverrideForTesting(LocalDate.now());
+    }
+
+    private static Stream<Arguments> createPublishStates() {
+        return Stream.of(
+            Arguments.of(
+                true, false, false, false, PublishState.PUBLISHED
+            ),
+            Arguments.of(
+                false, true, false, false, PublishState.PUBLISHING
+            ),
+            Arguments.of(
+                false, false, true, false, PublishState.PUBLISH_BLOCKED
+            ),
+            Arguments.of(
+                false, false, false, true, PublishState.FEED_LOADING
+            ),
+            Arguments.of(
+                false, false, false, false, PublishState.READY_TO_PUBLISH
+            )
+        );
     }
 
     private static Project createProject(String name, boolean autoFetchFeeds) {

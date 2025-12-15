@@ -481,7 +481,7 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * Produce Gtfs+ validation results for this feed version if GTFS+ module is enabled.
+     * Produce GTFS+ validation results for this feed version if GTFS+ module is enabled.
      */
     public void validateGtfsPlus(MonitorableJob.Status status) {
 
@@ -537,6 +537,10 @@ public class FeedVersion extends Model implements Serializable {
     @JsonIgnore
     @BsonIgnore
     public boolean hasExpired() {
+        return hasExpired(validationResult);
+    }
+
+    public static boolean hasExpired(ValidationResult validationResult) {
         return validationResult.lastCalendarDate == null ||
             getNowAsLocalDate().isAfter(validationResult.lastCalendarDate);
     }
@@ -555,14 +559,22 @@ public class FeedVersion extends Model implements Serializable {
      */
     private boolean hasHighSeverityErrorTypes() {
         return hasSpecificErrorTypes(Stream.of(NewGTFSErrorType.values())
-            .filter(type -> type.priority == Priority.HIGH));
+            .filter(type -> type.priority == Priority.HIGH), namespace, name);
     }
 
     /**
      * Checks for issues that block feed publishing, consistent with UI.
      */
     public boolean hasBlockingIssuesForPublishing() {
-        if (this.validationResult.fatalException != null) return true;
+        return hasBlockingIssuesForPublishing(validationResult, namespace, name);
+    }
+
+    public static boolean hasBlockingIssuesForPublishing(
+        ValidationResult validationResult,
+        String namespace,
+        String name
+    ) {
+        if (validationResult.fatalException != null) return true;
 
         return hasSpecificErrorTypes(Stream.of(
             NewGTFSErrorType.ILLEGAL_FIELD_VALUE,
@@ -575,13 +587,13 @@ public class FeedVersion extends Model implements Serializable {
             NewGTFSErrorType.TABLE_IN_SUBDIRECTORY,
             NewGTFSErrorType.TABLE_MISSING_COLUMN_HEADERS,
             NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS
-        ));
+        ), namespace, name);
     }
 
     /**
      * Determines whether this feed has specific error types.
      */
-    private boolean hasSpecificErrorTypes(Stream<NewGTFSErrorType> errorTypes) {
+    private static boolean hasSpecificErrorTypes(Stream<NewGTFSErrorType> errorTypes, String namespace, String name) {
         Set<String> highSeverityErrorTypes = errorTypes
             .map(NewGTFSErrorType::toString)
             .collect(Collectors.toSet());

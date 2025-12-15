@@ -2,8 +2,6 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.jobs.AutoDeployType;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.utils.FeedSourceErrorCountBroker;
-import com.conveyal.gtfs.graphql.fetchers.ErrorCountFetcher;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -15,7 +13,6 @@ import org.bson.conversions.Bson;
 
 import java.util.Collection;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -169,20 +166,7 @@ public class Project extends Model {
     public Collection<FeedSourceSummary> retrieveFeedSourceSummaries() {
         List<FeedSourceSummary> feedSourceSummaries = FeedSourceSummary.getFeedSourceSummaries(id, organizationId);
         assignDeployedVersion(feedSourceSummaries);
-        assignErrorCounts(feedSourceSummaries);
         return feedSourceSummaries;
-    }
-
-    /**
-     * Assign error counts to feed source summaries. This must happen after deployed versions are assigned.
-     */
-    private void assignErrorCounts(List<FeedSourceSummary> feedSourceSummaries) {
-        HashMap<String, List<ErrorCountFetcher.ErrorCount>> feedSourceErrorCounts = FeedSourceErrorCountBroker.getErrorCountsForFeedSources(
-            feedSourceSummaries
-        );
-        feedSourceSummaries.forEach(feedSourceSummary ->
-            feedSourceSummary.latestErrorCounts = feedSourceErrorCounts.getOrDefault(feedSourceSummary.id, null)
-        );
     }
 
     /**

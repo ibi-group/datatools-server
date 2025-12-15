@@ -1,9 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
-import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.gtfs.graphql.fetchers.ErrorCountFetcher;
 import com.conveyal.datatools.manager.extensions.ExternalPropertiesRetriever;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -24,6 +22,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
@@ -81,22 +80,14 @@ public class FeedSourceSummary {
 
     public String organizationId;
 
-    public Date latestProcessedByExternalPublisher;
-
     public Date latestSentToExternalPublisher;
 
-    public GtfsPlusValidation latestGtfsPlusValidation;
-
-    public String latestPublishedVersionId;
-
-    public String latestNamespace;
-
-    public FeedValidationResultSummary publishedValidationSummary;
-
-    public List<ErrorCountFetcher.ErrorCount> latestErrorCounts = new ArrayList<>();
+    public PublishState publishState;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public Map<String, Map<String, String>> externalProperties;
+
+    public static Boolean hasBlockingIssueForPublishingForTesting = null;
 
     public FeedSourceSummary() {
     }
@@ -138,16 +129,79 @@ public class FeedSourceSummary {
         if (feedVersionSummary == null) {
             return;
         }
-        latestValidation = new LatestValidationResult(feedVersionSummary);
-        latestProcessedByExternalPublisher = feedVersionSummary.processedByExternalPublisher;
         latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
-        latestGtfsPlusValidation = feedVersionSummary.gtfsPlusValidation;
-        latestNamespace = feedVersionSummary.namespace;
-        latestPublishedVersionId = feedVersionSummary.publishedVersionId;
-        publishedValidationSummary = new FeedValidationResultSummary();
-        publishedValidationSummary.errorCount = feedVersionSummary.publishedFeedVersionErrorCount;
-        publishedValidationSummary.startDate = feedVersionSummary.publishedFeedVersionStartDate;
-        publishedValidationSummary.endDate = feedVersionSummary.publishedFeedVersionEndDate;
+        publishState = getPublishState(feedVersionSummary);
+        latestValidation = new LatestValidationResult(feedVersionSummary);
+    }
+
+    /**
+     * Determine the published state of the feed version.
+     */
+    public PublishState getPublishState(FeedVersionSummary feedVersionSummary) {
+        if (isPublished(feedVersionSummary)) {
+            return PublishState.PUBLISHED;
+        } else if (isPublishing(feedVersionSummary)) {
+            return PublishState.PUBLISHING;
+        } else if (isPublishBlocked(feedVersionSummary)) {
+            return PublishState.PUBLISH_BLOCKED;
+        } else if (isFeedLoading(feedVersionSummary)) {
+            return PublishState.FEED_LOADING;
+        }
+        return PublishState.READY_TO_PUBLISH;
+    }
+
+    /**
+     * Determine the published state of the feed version.
+     */
+    private boolean isPublished(FeedVersionSummary feedVersionSummary) {
+        return feedVersionSummary.namespace != null && feedVersionSummary.namespace.equals(feedVersionSummary.feedSourcePublishedVersionId);
+    }
+
+    /**
+     * Deemed to be publishing if it has been sent to external publisher but not yet processed.
+     */
+    private boolean isPublishing(FeedVersionSummary feedVersionSummary) {
+        return feedVersionSummary.sentToExternalPublisher != null && feedVersionSummary.processedByExternalPublisher == null;
+    }
+
+    /**
+     * Determine if publishing is blocked due to validation, expiration, or blocking issues.
+     */
+    private boolean isPublishBlocked(FeedVersionSummary feedVersionSummary) {
+        return
+            feedVersionSummary.gtfsPlusValidation == null ||
+            feedVersionSummary.gtfsPlusValidation.issues == null ||
+            !feedVersionSummary.gtfsPlusValidation.issues.isEmpty() ||
+            !feedVersionSummary.gtfsPlusValidation.published ||
+            FeedVersion.hasExpired(feedVersionSummary.validationResult) ||
+            hasBlockingIssuesForPublishing(feedVersionSummary);
+    }
+
+    /**
+     * Determine if there are blocking issues for publishing.
+     */
+    private boolean hasBlockingIssuesForPublishing(FeedVersionSummary feedVersionSummary) {
+        return Objects.requireNonNullElseGet(hasBlockingIssueForPublishingForTesting, () -> FeedVersion.hasBlockingIssuesForPublishing(
+            feedVersionSummary.validationResult,
+            feedVersionSummary.namespace,
+            feedVersionSummary.name
+        ));
+    }
+
+    public static void setHasBlockingIssueForPublishingOverrideForTesting(Boolean value) {
+        hasBlockingIssueForPublishingForTesting = value;
+    }
+
+    /**
+     * Determine if the feed is still being imported/validated.
+     */
+    private boolean isFeedLoading(FeedVersionSummary feedVersionSummary) {
+        return
+            feedVersionSummary.gtfsPlusValidation == null ||
+            feedVersionSummary.validationResult == null ||
+            // Job processing this version.
+            // TODO: This follows the UI, but not sure if the same logic works here.
+            (feedVersionSummary.id != null && feedVersionSummary.id.equals(id));
     }
 
     /**
@@ -167,7 +221,8 @@ public class FeedSourceSummary {
     }
 
     /**
-     * Get all feed source summaries matching the project id.
+     * Get all feed source summaries matching the project id. For equivalent Mongo query, see
+     * <a href="src/main/resources/mongo/getFeedSourceSummaries.js">getFeedSourceSummaries.js</a>.
      */
     public static List<FeedSourceSummary> getFeedSourceSummaries(String projectId, String organizationId) {
         List<Bson> stages = Lists.newArrayList(
@@ -193,7 +248,8 @@ public class FeedSourceSummary {
     }
 
     /**
-     * Get the latest feed version from all feed sources for this project.
+     * Get the latest feed version from all feed sources for this project. For equivalent Mongo query, see
+     * <a href="src/main/resources/mongo/getLatestFeedVersionForFeedSources.js">getLatestFeedVersionForFeedSources.js</a>.
      */
     public static Map<String, FeedVersionSummary> getLatestFeedVersionForFeedSources(String projectId) {
         List<Bson> stages = Lists.newArrayList(
@@ -208,9 +264,6 @@ public class FeedSourceSummary {
             group(
                 "$_id",
                 Accumulators.first("publishedVersionId", "$publishedVersionId"),
-                Accumulators.first("publishedFeedVersionErrorCount", "$publishedFeedVersion.validationResult.errorCount"),
-                Accumulators.first("publishedFeedVersionStartDate", "$publishedFeedVersion.validationResult.firstCalendarDate"),
-                Accumulators.first("publishedFeedVersionEndDate", "$publishedFeedVersion.validationResult.lastCalendarDate"),
                 Accumulators.last("feedVersionId", "$feedVersions._id"),
                 Accumulators.last("firstCalendarDate", "$feedVersions.validationResult.firstCalendarDate"),
                 Accumulators.last("lastCalendarDate", "$feedVersions.validationResult.lastCalendarDate"),
@@ -231,7 +284,8 @@ public class FeedSourceSummary {
     }
 
     /**
-     * Get the deployed feed versions from the latest deployment for this project.
+     * Get the deployed feed versions from the latest deployment for this project. For equivalent Mongo query, see
+     * <a href="src/main/resources/mongo/getFeedVersionsFromLatestDeployment.js">getFeedVersionsFromLatestDeployment.js</a>.
      */
     public static Map<String, FeedVersionSummary> getFeedVersionsFromLatestDeployment(String projectId) {
         List<Bson> stages = Lists.newArrayList(
@@ -265,7 +319,8 @@ public class FeedSourceSummary {
     }
 
     /**
-     * Get the deployed feed version from the pinned deployment for this feed source.
+     * Get the deployed feed version from the pinned deployment for this feed source. For equivalent Mongo query, see
+     * <a href="src/main/resources/mongo/getFeedVersionsFromPinnedDeployment.js">getFeedVersionsFromPinnedDeployment.js</a>.
      */
     public static Map<String, FeedVersionSummary> getFeedVersionsFromPinnedDeployment(String projectId) {
         List<Bson> stages = Lists.newArrayList(
@@ -326,10 +381,11 @@ public class FeedSourceSummary {
         List<Bson> stages
     ) {
         Map<String, FeedVersionSummary> feedVersionSummaries = new HashMap<>();
-        AggregateIterable<Document> feedVersions = Persistence.getDocuments(collection, stages);
-        for (Document feedVersion : feedVersions) {
-            FeedVersionSummary feedVersionSummary = new FeedVersionSummary(feedVersionKey, hasChildValidationResultDocument, feedVersion);
-            feedVersionSummaries.put(feedVersion.getString(feedSourceKey), feedVersionSummary);
+        for (Document feedVersion : Persistence.getDocuments(collection, stages)) {
+            feedVersionSummaries.put(
+                feedVersion.getString(feedSourceKey),
+                new FeedVersionSummary(feedVersionKey, hasChildValidationResultDocument, feedVersion)
+            );
         }
         return feedVersionSummaries;
     }
