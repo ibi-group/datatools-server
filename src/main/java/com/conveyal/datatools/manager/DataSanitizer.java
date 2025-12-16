@@ -296,7 +296,7 @@ public class DataSanitizer {
     }
 
     /**
-     * Get all qualifying schemas that are not associated with a feed version or feed source.
+     * Get all qualifying schemas that are not associated with a feed version or a GTFS Editor for a feed source.
      */
     public static Set<String> getOrphanedDBSchemas(Set<String> associatedSchemas) {
         String whereClause = associatedSchemas.isEmpty() ? "" : String.format(" WHERE nspname NOT IN (%s)", associatedSchemas
