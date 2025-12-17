@@ -38,7 +38,7 @@ public class GtfsPlusValidation implements Serializable {
     private static final String REALTIME_ROUTES_TXT = "realtime_routes.txt";
 
     // Public fields to appear in validation JSON.
-    public String feedVersionId;
+    public final String feedVersionId;
     /** Indicates whether GTFS+ validation applies to user-edited feed or original published GTFS feed */
     public boolean published;
     public long lastModified;
@@ -49,12 +49,14 @@ public class GtfsPlusValidation implements Serializable {
         this.feedVersionId = feedVersionId;
     }
 
-    public GtfsPlusValidation(boolean published, List<ValidationIssue> issues) {
+    public GtfsPlusValidation(String feedVersionId, boolean published, List<ValidationIssue> issues) {
+        this(feedVersionId);
         this.published = published;
         this.issues = issues;
     }
 
     public GtfsPlusValidation() {
+        this(null);
         // Empty constructor for serialization
     }
 
@@ -62,17 +64,17 @@ public class GtfsPlusValidation implements Serializable {
      * Overload method to retrieve the feed version.
      */
     public static GtfsPlusValidation validate(String feedVersionId) throws Exception {
-        GtfsPlusValidation gtfsPlusValidation = null;
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
         if (feedVersion != null) {
             if (feedVersion.gtfsPlusValidation != null) {
                 return feedVersion.gtfsPlusValidation;
             }
-            gtfsPlusValidation = validate(feedVersion);
+            GtfsPlusValidation gtfsPlusValidation = validate(feedVersion);
             feedVersion.gtfsPlusValidation = gtfsPlusValidation;
             Persistence.feedVersions.replace(feedVersion.id, feedVersion);
+            return gtfsPlusValidation;
         }
-        return gtfsPlusValidation;
+        return null;
     }
 
     /**

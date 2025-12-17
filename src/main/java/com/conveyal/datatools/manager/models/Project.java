@@ -178,7 +178,7 @@ public class Project extends Model {
         Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
 
         feedSourceSummaries.forEach(feedSourceSummary -> {
-            feedSourceSummary.setFeedVersionValues(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
+            feedSourceSummary.updatePublishAndValidationState(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
             FeedVersionSummary deployedVersion = pinnedDeploymentFeedVersions.getOrDefault(
                 feedSourceSummary.id,
                 latestDeploymentDeployedFeedVersions.get(feedSourceSummary.id)

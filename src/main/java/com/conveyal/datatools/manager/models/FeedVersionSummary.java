@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -24,6 +25,7 @@ public class FeedVersionSummary extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+    public static Boolean hasBlockingIssueForPublishingForTesting = null;
 
     public FeedRetrievalMethod retrievalMethod;
     public int version;
@@ -62,7 +64,7 @@ public class FeedVersionSummary extends Model implements Serializable {
         id = feedVersionDocument.getString(feedVersionKey);
         processedByExternalPublisher = feedVersionDocument.getDate("processedByExternalPublisher");
         sentToExternalPublisher = feedVersionDocument.getDate("sentToExternalPublisher");
-        gtfsPlusValidation = getGtfsPlusValidation(feedVersionDocument);
+        gtfsPlusValidation = getGtfsPlusValidation(id, feedVersionDocument);
         namespace = feedVersionDocument.getString("namespace");
         validationResult = getValidationResult(hasChildValidationResultDocument, feedVersionDocument);
 
@@ -96,7 +98,7 @@ public class FeedVersionSummary extends Model implements Serializable {
     /**
      * Build GtfsPlusValidation object from feed version document.
      */
-    private static GtfsPlusValidation getGtfsPlusValidation(Document feedVersionDocument) {
+    private static GtfsPlusValidation getGtfsPlusValidation(String feedVersionId, Document feedVersionDocument) {
         Document gtfsPlusValidationDocument = getDocumentChild(feedVersionDocument, "gtfsPlusValidation");
         if (gtfsPlusValidationDocument == null) {
             return null;
@@ -110,7 +112,7 @@ public class FeedVersionSummary extends Model implements Serializable {
                 .collect(Collectors.toList());
         }
         boolean published = Boolean.TRUE.equals(gtfsPlusValidationDocument.getBoolean("published"));
-        return new GtfsPlusValidation(published, issues);
+        return new GtfsPlusValidation(feedVersionId, published, issues);
     }
 
     /**
@@ -182,5 +184,61 @@ public class FeedVersionSummary extends Model implements Serializable {
      */
     private static int getErrorCount(Document document) {
         return getDocumentChild(document, "validationResult").getInteger("errorCount");
+    }
+
+    /**
+     * Determine the published state of the feed version.
+     */
+    public PublishState getPublishState() {
+        if (isPublished()) {
+            return PublishState.PUBLISHED;
+        } else if (isPublishing()) {
+            return PublishState.PUBLISHING;
+        } else if (isPublishBlocked()) {
+            return PublishState.PUBLISH_BLOCKED;
+        }
+        return PublishState.READY_TO_PUBLISH;
+    }
+
+    /**
+     * Determine the published state of the feed version.
+     */
+    private boolean isPublished() {
+        return namespace != null && namespace.equals(feedSourcePublishedVersionId);
+    }
+
+    /**
+     * Deemed to be publishing if it has been sent to external publisher but not yet processed.
+     */
+    private boolean isPublishing() {
+        return sentToExternalPublisher != null && processedByExternalPublisher == null;
+    }
+
+    /**
+     * Determine if publishing is blocked due to validation, expiration, blocking issues or loading.
+     */
+    private boolean isPublishBlocked() {
+        return
+            gtfsPlusValidation == null ||
+            gtfsPlusValidation.issues == null ||
+            !gtfsPlusValidation.issues.isEmpty() ||
+            !gtfsPlusValidation.published ||
+            FeedVersion.hasExpired(validationResult) ||
+            hasBlockingIssuesForPublishing();
+    }
+
+    /**
+     * Determine if there are blocking issues for publishing.
+     */
+    private boolean hasBlockingIssuesForPublishing() {
+        return Objects.requireNonNullElseGet(hasBlockingIssueForPublishingForTesting, () -> FeedVersion.hasBlockingIssuesForPublishing(
+            validationResult,
+            namespace,
+            name
+        ));
+    }
+
+    public static void setHasBlockingIssueForPublishingOverrideForTesting(Boolean value) {
+        hasBlockingIssueForPublishingForTesting = value;
     }
 }

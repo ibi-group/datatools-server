@@ -7,6 +7,5 @@ public enum PublishState {
     PUBLISHED,
     PUBLISHING,
     PUBLISH_BLOCKED,
-    FEED_LOADING,
     READY_TO_PUBLISH
 }

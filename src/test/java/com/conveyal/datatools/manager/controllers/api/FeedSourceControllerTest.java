@@ -430,7 +430,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         FeedSourceSummary feedSourceSummary = new FeedSourceSummary();
         FeedVersionSummary feedVersionSummary = new FeedVersionSummary();
         FeedVersion.setDateOverrideForTesting(LocalDate.now());
-        FeedSourceSummary.setHasBlockingIssueForPublishingOverrideForTesting(false);
 
         if (isPublished) {
             feedVersionSummary.namespace = feedVersionSummary.feedSourcePublishedVersionId = "namespace";
@@ -440,29 +439,20 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             feedVersionSummary.processedByExternalPublisher = null;
         }
         if (isPublishBlocked) {
-            feedVersionSummary.gtfsPlusValidation = new GtfsPlusValidation();
-            feedVersionSummary.gtfsPlusValidation.issues = List.of(new ValidationIssue());
-            feedVersionSummary.gtfsPlusValidation.published = false;
-            feedVersionSummary.validationResult = new ValidationResult();
-            FeedSourceSummary.setHasBlockingIssueForPublishingOverrideForTesting(true);
-        }
-        if (isFeedLoading) {
-            passPublishBlockedCheck(feedVersionSummary);
-
-            feedVersionSummary.validationResult.errorCount = 1;
-            feedVersionSummary.id = "feed-source-id";
-            feedSourceSummary.id = "feed-source-id";
+            feedVersionSummary.gtfsPlusValidation = null;
         }
         if (!isPublished && !isPublishing && !isPublishBlocked && !isFeedLoading) {
             // Ready to publish case.
+            FeedVersionSummary.setHasBlockingIssueForPublishingOverrideForTesting(false);
             passPublishBlockedCheck(feedVersionSummary);
 
             feedVersionSummary.validationResult.errorCount = 1;
             feedVersionSummary.id = "feed-version-id";
             feedSourceSummary.id = "feed-source-id";
         }
-        PublishState publishState = feedSourceSummary.getPublishState(feedVersionSummary);
+        PublishState publishState = feedVersionSummary.getPublishState();
         assertEquals(expectedPublishState, publishState);
+        FeedVersionSummary.setHasBlockingIssueForPublishingOverrideForTesting(null);
     }
 
     /**
@@ -487,9 +477,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             ),
             Arguments.of(
                 false, false, true, false, PublishState.PUBLISH_BLOCKED
-            ),
-            Arguments.of(
-                false, false, false, true, PublishState.FEED_LOADING
             ),
             Arguments.of(
                 false, false, false, false, PublishState.READY_TO_PUBLISH
@@ -583,7 +570,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             new ValidationIssue("Test issue 1", "stops.txt", 1, "stop_id"),
             new ValidationIssue("Test issue 2", "stops.txt", 2, "stop_id")
         );
-        feedVersion.gtfsPlusValidation = new GtfsPlusValidation(true, issues);
+        feedVersion.gtfsPlusValidation = new GtfsPlusValidation(id, true, issues);
         feedVersion.namespace = namespace != null ? namespace : "feed-version-namespace";
         Persistence.feedVersions.create(feedVersion);
         return feedVersion;
