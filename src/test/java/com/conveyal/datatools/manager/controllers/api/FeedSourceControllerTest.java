@@ -61,7 +61,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static Label adminOnlyLabel = null;
     private static Project projectWithLatestDeployment = null;
     private static FeedSource feedSourceWithLatestDeploymentFeedVersion = null;
-    private static FeedVersion feedVersionFromLatestDeployment = null;
+    private static FeedVersion feedVersionFromLatestDeploymentVersion2 = null;
     private static FeedVersion feedVersionPublishedFromLatestDeployment = null;
 
     private static Project projectWithPinnedDeployment = null;
@@ -117,12 +117,22 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         LocalDate deployedSuperseded = LocalDate.of(2020, Month.MARCH, 12);
         LocalDate deployedEndDate = LocalDate.of(2021, Month.MARCH, 12);
         LocalDate deployedStartDate = LocalDate.of(2021, Month.MARCH, 1);
-        feedVersionFromLatestDeployment = createFeedVersion(
-            "feed-version-from-latest-deployment",
+        // Create feed version 1 to be superseded by feed version 2 to confirm that the newer version is the one retrieved.
+        createFeedVersion(
+            "feed-version-from-latest-deployment-1",
             feedSourceWithLatestDeploymentFeedVersion.id,
             deployedStartDate,
             deployedEndDate,
-            null
+            null,
+            1
+        );
+        feedVersionFromLatestDeploymentVersion2 = createFeedVersion(
+            "feed-version-from-latest-deployment-2",
+            feedSourceWithLatestDeploymentFeedVersion.id,
+            deployedStartDate,
+            deployedEndDate,
+            null,
+            2
         );
 
         FeedVersion feedVersionFromGtfsZip = createFeedVersionFromGtfsZip(
@@ -130,11 +140,11 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             "bart_old.zip"
         );
         // Update the feed version namespace to match that created from the import.
-        feedVersionFromLatestDeployment.namespace = feedVersionFromGtfsZip.namespace;
+        feedVersionFromLatestDeploymentVersion2.namespace = feedVersionFromGtfsZip.namespace;
 
         // Remove the imported feed version so it does not conflict with the latest deployment feed version.
         Persistence.feedVersions.removeById(feedVersionFromGtfsZip.id);
-        Persistence.feedVersions.replace(feedVersionFromLatestDeployment.id, feedVersionFromLatestDeployment);
+        Persistence.feedVersions.replace(feedVersionFromLatestDeploymentVersion2.id, feedVersionFromLatestDeploymentVersion2);
 
         feedVersionPublishedFromLatestDeployment = createFeedVersion(
             "published-feed-version-from-latest-deployment",
@@ -142,18 +152,19 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             null,
             LocalDate.of(2022, Month.NOVEMBER, 2),
             LocalDate.of(2022, Month.NOVEMBER, 3),
-            feedSourceWithLatestDeploymentFeedVersion.publishedVersionId
+            feedSourceWithLatestDeploymentFeedVersion.publishedVersionId,
+            0
         );
         createDeployment(
             "deployment-superseded",
             projectWithLatestDeployment,
-            feedVersionFromLatestDeployment.id,
+            feedVersionFromLatestDeploymentVersion2.id,
             deployedSuperseded
         );
         createDeployment(
             "deployment-latest",
             projectWithLatestDeployment,
-            feedVersionFromLatestDeployment.id,
+            feedVersionFromLatestDeploymentVersion2.id,
             deployedEndDate
         );
     }
@@ -370,15 +381,15 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.url.toString(), feedSourceSummaries.get(0).url);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.noteIds, feedSourceSummaries.get(0).noteIds);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.organizationId(), feedSourceSummaries.get(0).organizationId);
-        assertEquals(feedVersionFromLatestDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
-        assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
-        assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
-        assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).deployedFeedVersionIssues);
-        assertEquals(feedVersionFromLatestDeployment.id, feedSourceSummaries.get(0).latestValidation.feedVersionId);
-        assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.startDate);
-        assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.endDate);
-        assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
-        assertEquals(feedVersionFromLatestDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.id, feedSourceSummaries.get(0).deployedFeedVersionId);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().errorCount, feedSourceSummaries.get(0).deployedFeedVersionIssues);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.id, feedSourceSummaries.get(0).latestValidation.feedVersionId);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.startDate);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.endDate);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
         assertEquals(PublishState.PUBLISH_BLOCKED, feedSourceSummaries.get(0).publishState);
     }
 
@@ -549,13 +560,20 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Helper method to create a feed version with no start date.
      */
     private static FeedVersion createFeedVersion(String id, String feedSourceId, LocalDate endDate) {
-        return createFeedVersion(id, feedSourceId, null, endDate, null);
+        return createFeedVersion(id, feedSourceId, null, endDate, null, 0);
     }
 
     /**
      * Helper method to create a feed version.
      */
-    private static FeedVersion createFeedVersion(String id, String feedSourceId, LocalDate startDate, LocalDate endDate, String namespace) {
+    private static FeedVersion createFeedVersion(
+        String id,
+        String feedSourceId,
+        LocalDate startDate,
+        LocalDate endDate,
+        String namespace,
+        int version
+    ) {
         FeedVersion feedVersion = new FeedVersion();
         feedVersion.id = id;
         feedVersion.feedSourceId = feedSourceId;
@@ -572,6 +590,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         );
         feedVersion.gtfsPlusValidation = new GtfsPlusValidation(id, true, issues);
         feedVersion.namespace = namespace != null ? namespace : "feed-version-namespace";
+        feedVersion.version = version;
         Persistence.feedVersions.create(feedVersion);
         return feedVersion;
     }

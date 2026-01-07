@@ -32,7 +32,7 @@ db.getCollection('FeedSource').aggregate([
     },
     {
         $sort: {
-            "feedVersions.dateCreated": -1
+            "feedVersions.version": -1
         }
     },
     {
@@ -40,7 +40,7 @@ db.getCollection('FeedSource').aggregate([
             _id: "$_id",
             publishedVersionId: { $first: "$publishedVersionId" },
             feedVersion: {
-                $last: {
+                $first: {
                     version: "$feedVersions.version",
                     feedVersionId: "$feedVersions._id",
                     firstCalendarDate: "$feedVersions.validationResult.firstCalendarDate",

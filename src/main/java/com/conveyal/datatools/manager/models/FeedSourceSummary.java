@@ -187,18 +187,18 @@ public class FeedSourceSummary {
             lookup("FeedVersion", "publishedVersionId", "namespace", "publishedFeedVersion"),
             unwind("$feedVersions"),
             unwind("$publishedFeedVersion", new UnwindOptions().preserveNullAndEmptyArrays(true)),
-            sort(Sorts.descending("feedVersions.dateCreated")),
+            sort(Sorts.descending("feedVersions.version")),
             group(
                 "$_id",
                 Accumulators.first("publishedVersionId", "$publishedVersionId"),
-                Accumulators.last("feedVersionId", "$feedVersions._id"),
-                Accumulators.last("firstCalendarDate", "$feedVersions.validationResult.firstCalendarDate"),
-                Accumulators.last("lastCalendarDate", "$feedVersions.validationResult.lastCalendarDate"),
-                Accumulators.last("errorCount", "$feedVersions.validationResult.errorCount"),
-                Accumulators.last("processedByExternalPublisher", "$feedVersions.processedByExternalPublisher"),
-                Accumulators.last("sentToExternalPublisher", "$feedVersions.sentToExternalPublisher"),
-                Accumulators.last("gtfsPlusValidation", "$feedVersions.gtfsPlusValidation"),
-                Accumulators.last("namespace", "$feedVersions.namespace")
+                Accumulators.first("feedVersionId", "$feedVersions._id"),
+                Accumulators.first("firstCalendarDate", "$feedVersions.validationResult.firstCalendarDate"),
+                Accumulators.first("lastCalendarDate", "$feedVersions.validationResult.lastCalendarDate"),
+                Accumulators.first("errorCount", "$feedVersions.validationResult.errorCount"),
+                Accumulators.first("processedByExternalPublisher", "$feedVersions.processedByExternalPublisher"),
+                Accumulators.first("sentToExternalPublisher", "$feedVersions.sentToExternalPublisher"),
+                Accumulators.first("gtfsPlusValidation", "$feedVersions.gtfsPlusValidation"),
+                Accumulators.first("namespace", "$feedVersions.namespace")
             )
         );
         return extractFeedVersionSummaries(
