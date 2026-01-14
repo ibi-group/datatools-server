@@ -80,6 +80,8 @@ public class FeedSourceSummary {
 
     public Date latestSentToExternalPublisher;
 
+    public FeedValidationResultSummary publishedValidationSummary;
+
     public PublishState publishState;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -126,6 +128,10 @@ public class FeedSourceSummary {
             return;
         }
         latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
+        publishedValidationSummary = new FeedValidationResultSummary();
+        publishedValidationSummary.errorCount = feedVersionSummary.publishedFeedVersionErrorCount;
+        publishedValidationSummary.startDate = feedVersionSummary.publishedFeedVersionStartDate;
+        publishedValidationSummary.endDate = feedVersionSummary.publishedFeedVersionEndDate;
         publishState = feedVersionSummary.getPublishState();
         latestValidation = new LatestValidationResult(feedVersionSummary);
     }
@@ -149,7 +155,8 @@ public class FeedSourceSummary {
     /**
      * Get all feed source summaries matching the project id. For equivalent Mongo query, see
      * <a href="src/main/resources/mongo/getFeedSourceSummaries.js">getFeedSourceSummaries.js</a>.
-     *  For equivalent Mongo query, @see src/main/resources/mongo/getFeedSourceSummaries.js
+     * For equivalent Mongo query, @see src/main/resources/mongo/getFeedSourceSummaries.js.
+     * If this is updated, be sure to also update the matching Mongo query.
      */
     public static List<FeedSourceSummary> getFeedSourceSummaries(String projectId, String organizationId) {
         List<Bson> stages = Lists.newArrayList(
@@ -177,6 +184,7 @@ public class FeedSourceSummary {
     /**
      * Get the latest feed version from all feed sources for this project. For equivalent Mongo query, see
      * <a href="src/main/resources/mongo/getLatestFeedVersionForFeedSources.js">getLatestFeedVersionForFeedSources.js</a>.
+     * If this is updated, be sure to also update the matching Mongo query.
      */
     public static Map<String, FeedVersionSummary> getLatestFeedVersionForFeedSources(String projectId) {
         List<Bson> stages = Lists.newArrayList(
@@ -190,6 +198,9 @@ public class FeedSourceSummary {
             sort(Sorts.descending("feedVersions.version")),
             group(
                 "$_id",
+                Accumulators.first("publishedFeedVersionErrorCount", "$publishedFeedVersion.validationResult.errorCount"),
+                Accumulators.first("publishedFeedVersionStartDate", "$publishedFeedVersion.validationResult.firstCalendarDate"),
+                Accumulators.first("publishedFeedVersionEndDate", "$publishedFeedVersion.validationResult.lastCalendarDate"),
                 Accumulators.first("publishedVersionId", "$publishedVersionId"),
                 Accumulators.first("feedVersionId", "$feedVersions._id"),
                 Accumulators.first("firstCalendarDate", "$feedVersions.validationResult.firstCalendarDate"),
@@ -213,6 +224,7 @@ public class FeedSourceSummary {
     /**
      * Get the deployed feed versions from the latest deployment for this project. For equivalent Mongo query, see
      * <a href="src/main/resources/mongo/getFeedVersionsFromLatestDeployment.js">getFeedVersionsFromLatestDeployment.js</a>.
+     * If this is updated, be sure to also update the matching Mongo query.
      */
     public static Map<String, FeedVersionSummary> getFeedVersionsFromLatestDeployment(String projectId) {
         List<Bson> stages = Lists.newArrayList(

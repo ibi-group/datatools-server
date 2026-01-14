@@ -39,6 +39,9 @@ db.getCollection('FeedSource').aggregate([
         $group: {
             _id: "$_id",
             publishedVersionId: { $first: "$publishedVersionId" },
+            publishedFeedVersionErrorCount: { $first: "$publishedFeedVersion.validationResult.errorCount"},
+            publishedFeedVersionStartDate: { $first: "$publishedFeedVersion.validationResult.firstCalendarDate"},
+            publishedFeedVersionEndDate: { $first: "$publishedFeedVersion.validationResult.lastCalendarDate"},
             feedVersion: {
                 $first: {
                     version: "$feedVersions.version",
