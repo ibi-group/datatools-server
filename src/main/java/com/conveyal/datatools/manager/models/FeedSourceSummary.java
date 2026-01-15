@@ -35,6 +35,7 @@ import static com.mongodb.client.model.Aggregates.replaceRoot;
 import static com.mongodb.client.model.Aggregates.sort;
 import static com.mongodb.client.model.Aggregates.unwind;
 import static com.mongodb.client.model.Filters.in;
+import static java.util.Objects.requireNonNullElse;
 
 /**
  *  For explicit mongo queries (matching the queries defined in this class) see resources/mongo and README.md for
@@ -129,7 +130,7 @@ public class FeedSourceSummary {
         }
         latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
         publishedValidationSummary = new FeedValidationResultSummary();
-        publishedValidationSummary.errorCount = feedVersionSummary.publishedFeedVersionErrorCount;
+        publishedValidationSummary.errorCount = requireNonNullElse(feedVersionSummary.publishedFeedVersionErrorCount, -1);
         publishedValidationSummary.startDate = feedVersionSummary.publishedFeedVersionStartDate;
         publishedValidationSummary.endDate = feedVersionSummary.publishedFeedVersionEndDate;
         publishState = feedVersionSummary.getPublishState();
