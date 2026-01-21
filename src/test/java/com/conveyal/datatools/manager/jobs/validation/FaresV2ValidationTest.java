@@ -63,10 +63,12 @@ public class FaresV2ValidationTest {
         List<String> files = summary.getList("files", String.class);
         assertTrue(files.contains("areas.txt"));
         assertTrue(files.contains("fare_leg_rules.txt"));
+        assertTrue(files.contains("fare_leg_join_rules.txt"));
         assertTrue(files.contains("fare_media.txt"));
         assertTrue(files.contains("fare_products.txt"));
         assertTrue(files.contains("fare_transfer_rules.txt"));
         assertTrue(files.contains("networks.txt"));
+        assertTrue(files.contains("rider_categories.txt"));
         assertTrue(files.contains("route_networks.txt"));
         assertTrue(files.contains("stop_areas.txt"));
         assertTrue(files.contains("timeframes.txt"));
