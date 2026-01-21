@@ -222,6 +222,7 @@ public class EditorControllerTest extends UnitTest {
             "{" +
                 "\"fare_product_id\":\"" + fareProductId + "\"," +
                 "\"fare_product_name\":\"Portland Aerial Tram Single Round Trip\"," +
+                "\"rider_category_id\":\"HONORED_CITIZEN\"," +
                 "\"fare_media_id\":\"1\"," +
                 "\"amount\":\"13.5\"," +
                 "\"currency\":\"USD\"" +
