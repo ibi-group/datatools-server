@@ -75,15 +75,9 @@ public class FeedVersionSummary extends Model implements Serializable {
         // The feed source's published feed version. Feed source's publishedVersionId mapped to feed version's namespace.
         feedSourcePublishedVersionId = feedVersionDocument.getString("publishedVersionId");
 
-        publishedFeedVersionErrorCount = feedVersionDocument.get("publishedFeedVersionErrorCount") != null
-            ? feedVersionDocument.getInteger("publishedFeedVersionErrorCount")
-            : null;
-        publishedFeedVersionStartDate = feedVersionDocument.get("publishedFeedVersionStartDate") != null
-            ? getDateFromString(feedVersionDocument.getString("publishedFeedVersionStartDate"))
-            : null;
-        publishedFeedVersionEndDate = feedVersionDocument.get("publishedFeedVersionEndDate") != null
-            ? getDateFromString(feedVersionDocument.getString("publishedFeedVersionEndDate"))
-            : null;
+        publishedFeedVersionErrorCount = feedVersionDocument.getInteger("publishedFeedVersionErrorCount");
+        publishedFeedVersionStartDate = getDateFromString(feedVersionDocument.getString("publishedFeedVersionStartDate"));
+        publishedFeedVersionEndDate = getDateFromString(feedVersionDocument.getString("publishedFeedVersionEndDate"));
     }
 
     /**
@@ -118,7 +112,7 @@ public class FeedVersionSummary extends Model implements Serializable {
             return null;
         }
         List<ValidationIssue> issues = null;
-        if (gtfsPlusValidationDocument.containsKey("issues") && gtfsPlusValidationDocument.get("issues") != null) {
+        if (gtfsPlusValidationDocument.get("issues") != null) {
             List<Document> issueDocs = gtfsPlusValidationDocument.getList("issues", Document.class);
             issues = issueDocs
                 .stream()

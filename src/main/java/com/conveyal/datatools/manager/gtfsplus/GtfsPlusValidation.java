@@ -57,7 +57,7 @@ public class GtfsPlusValidation implements Serializable {
 
     public GtfsPlusValidation() {
         this(null);
-        // Empty constructor for serialization
+        // Constructor for serialization.
     }
 
     /**
