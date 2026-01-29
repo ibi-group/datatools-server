@@ -44,7 +44,7 @@ class DataSanitizerTest {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
-        ProcessSingleFeedJob.VALIDATE_MOBILITY_DATA = false;
+        ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = false;
         project = new Project();
         project.name = appendDate("Test");
         Persistence.projects.create(project);
@@ -84,7 +84,7 @@ class DataSanitizerTest {
     @AfterAll
     static void tearDown() {
         Auth0Connection.setAuthDisabled(false);
-        ProcessSingleFeedJob.VALIDATE_MOBILITY_DATA = true;
+        ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = true;
         project.delete();
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionOrphan.id);
         if (feedVersion != null) {

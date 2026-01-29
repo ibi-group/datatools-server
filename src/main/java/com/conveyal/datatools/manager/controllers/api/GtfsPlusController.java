@@ -249,17 +249,17 @@ public class GtfsPlusController {
     }
 
     /**
-     * HTTP endpoint that validates GTFS+ tables for a specific feed version (or its saved/edited GTFS+).
+     * HTTP endpoint that validates GTFS+ tables for a specific feed version (or its saved/edited GTFS+). If the feed
+     * version already has GTFS+ validation results, those will be returned instead of re-validating.
      */
     private static GtfsPlusValidation getGtfsPlusValidation(Request req, Response res) {
-        String feedVersionId = req.params("versionid");
-        GtfsPlusValidation gtfsPlusValidation = null;
         try {
-            gtfsPlusValidation = GtfsPlusValidation.validate(feedVersionId);
+            String feedVersionId = req.params("versionid");
+            return GtfsPlusValidation.validate(feedVersionId);
         } catch(Exception e) {
             logMessageAndHalt(req, 500, "Could not read GTFS+ zip file", e);
         }
-        return gtfsPlusValidation;
+        return null;
     }
 
     /**

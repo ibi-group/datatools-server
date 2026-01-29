@@ -49,22 +49,47 @@ public class GtfsPlusValidation implements Serializable {
         this.feedVersionId = feedVersionId;
     }
 
+    public GtfsPlusValidation(String feedVersionId, boolean published, List<ValidationIssue> issues) {
+        this(feedVersionId);
+        this.published = published;
+        this.issues = issues;
+    }
+
+    public GtfsPlusValidation() {
+        this(null);
+        // Constructor for serialization.
+    }
+
     /**
-     * Validate a GTFS+ feed and return a list of issues encountered.
-     * FIXME: For now this uses the MapDB-backed GTFSFeed class. Which actually suggests that this might
-     *   should be contained within a MonitorableJob.
+     * Overload method to retrieve the feed version.
      */
     public static GtfsPlusValidation validate(String feedVersionId) throws Exception {
-        GtfsPlusValidation validation = new GtfsPlusValidation(feedVersionId);
+        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
+        if (feedVersion != null) {
+            if (feedVersion.gtfsPlusValidation != null) {
+                return feedVersion.gtfsPlusValidation;
+            }
+            GtfsPlusValidation gtfsPlusValidation = validate(feedVersion);
+            feedVersion.gtfsPlusValidation = gtfsPlusValidation;
+            Persistence.feedVersions.replace(feedVersion.id, feedVersion);
+            return gtfsPlusValidation;
+        }
+        return null;
+    }
+
+    /**
+     * Validate a GTFS+ feed and return a list of issues encountered.
+     */
+    public static GtfsPlusValidation validate(FeedVersion feedVersion) throws Exception {
         if (!DataManager.isModuleEnabled("gtfsplus")) {
             throw new IllegalStateException("GTFS+ module must be enabled in server.yml to run GTFS+ validation.");
         }
-        LOG.info("Validating GTFS+ for {}", feedVersionId);
+        GtfsPlusValidation validation = new GtfsPlusValidation(feedVersion.id);
+        LOG.info("Validating GTFS+ for {}", feedVersion.id);
 
-        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
         // Load the main GTFS file.
         // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
-        File gtfsFeedDbFile = gtfsPlusStore.getFeedFile(feedVersionId + ".db");
+        File gtfsFeedDbFile = gtfsPlusStore.getFeedFile(feedVersion.id + ".db");
         String gtfsFeedDbFilePath = gtfsFeedDbFile.getAbsolutePath();
         GTFSFeed gtfsFeed;
         try {
@@ -87,7 +112,7 @@ public class GtfsPlusValidation implements Serializable {
         }
 
         // check for saved GTFS+ data
-        File file = gtfsPlusStore.getFeed(feedVersionId);
+        File file = gtfsPlusStore.getFeed(feedVersion.id);
         if (file == null) {
             validation.published = true;
             LOG.warn("GTFS+ Validation -- Modified GTFS+ file not found, loading from main version GTFS.");
