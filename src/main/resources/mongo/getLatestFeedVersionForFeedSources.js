@@ -1,60 +1,56 @@
-db.getCollection('FeedSource').aggregate([
+db.FeedSource.aggregate([
+    { $match: { projectId: "<projectId>" } },
     {
-        // Match provided project id.
-        $match: {
-            projectId: "<projectId>"
+        $lookup: {
+            from: "FeedVersion",
+            let: { feedSourceId: "$_id" },
+            pipeline: [
+                { $match: { $expr: { $eq: ["$feedSourceId", "$$feedSourceId"] } } },
+                { $sort: { version: -1 } },
+                { $limit: 1 },
+                {
+                    $project: {
+                        version: 1,
+                        validationResult: 1,
+                        processedByExternalPublisher: 1,
+                        sentToExternalPublisher: 1,
+                        gtfsPlusValidation: 1,
+                        namespace: 1
+                    }
+                }
+            ],
+            as: "latestFeedVersion"
         }
     },
     {
         $lookup: {
             from: "FeedVersion",
-            localField: "_id",
-            foreignField: "feedSourceId",
-            as: "feedVersions"
-        }
-    },
-    {
-        $lookup: {
-            from: "FeedVersion",
-            localField: "publishedVersionId",
-            foreignField: "namespace",
+            let: { publishedVersionId: "$publishedVersionId" },
+            pipeline: [
+                { $match: { $expr: { $eq: ["$namespace", "$$publishedVersionId"] } } },
+                { $limit: 1 },
+                { $project: { validationResult: 1 } }
+            ],
             as: "publishedFeedVersion"
         }
     },
+    { $unwind: { path: "$latestFeedVersion", preserveNullAndEmptyArrays: true } },
+    { $unwind: { path: "$publishedFeedVersion", preserveNullAndEmptyArrays: true } },
     {
-        $unwind: "$feedVersions"
-    },
-    {
-        $unwind: {
-            path: "$publishedFeedVersion",
-            preserveNullAndEmptyArrays: true
-        }
-    },
-    {
-        $sort: {
-            "feedVersions.version": -1
-        }
-    },
-    {
-        $group: {
-            _id: "$_id",
-            publishedVersionId: { $first: "$publishedVersionId" },
-            publishedFeedVersionErrorCount: { $first: "$publishedFeedVersion.validationResult.errorCount"},
-            publishedFeedVersionStartDate: { $first: "$publishedFeedVersion.validationResult.firstCalendarDate"},
-            publishedFeedVersionEndDate: { $first: "$publishedFeedVersion.validationResult.lastCalendarDate"},
-            feedVersion: {
-                $first: {
-                    version: "$feedVersions.version",
-                    feedVersionId: "$feedVersions._id",
-                    firstCalendarDate: "$feedVersions.validationResult.firstCalendarDate",
-                    lastCalendarDate: "$feedVersions.validationResult.lastCalendarDate",
-                    errorCount: "$feedVersions.validationResult.errorCount",
-                    processedByExternalPublisher: "$feedVersions.processedByExternalPublisher",
-                    sentToExternalPublisher: "$feedVersions.sentToExternalPublisher",
-                    gtfsPlusValidation: "$feedVersions.gtfsPlusValidation",
-                    namespace: "$feedVersions.namespace"
-                }
-            }
+        $project: {
+            publishedVersionId: 1,
+            publishedFeedVersionErrorCount: "$publishedFeedVersion.validationResult.errorCount",
+            publishedFeedVersionStartDate: "$publishedFeedVersion.validationResult.firstCalendarDate",
+            publishedFeedVersionEndDate: "$publishedFeedVersion.validationResult.lastCalendarDate",
+            version: "$latestFeedVersion.version",
+            feedVersionId: "$latestFeedVersion._id",
+            firstCalendarDate: "$latestFeedVersion.validationResult.firstCalendarDate",
+            lastCalendarDate: "$latestFeedVersion.validationResult.lastCalendarDate",
+            errorCount: "$latestFeedVersion.validationResult.errorCount",
+            processedByExternalPublisher: "$latestFeedVersion.processedByExternalPublisher",
+            sentToExternalPublisher: "$latestFeedVersion.sentToExternalPublisher",
+            gtfsPlusValidation: "$latestFeedVersion.gtfsPlusValidation",
+            namespace: "$latestFeedVersion.namespace"
         }
     }
 ])
