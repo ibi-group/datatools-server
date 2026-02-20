@@ -7,7 +7,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.Lists;
-import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.Sorts;
 import com.mongodb.client.model.UnwindOptions;
 import com.mongodb.client.model.Variable;
@@ -39,6 +38,7 @@ import static com.mongodb.client.model.Filters.in;
 import static com.mongodb.client.model.Projections.computed;
 import static com.mongodb.client.model.Projections.fields;
 import static com.mongodb.client.model.Projections.include;
+import static com.mongodb.client.model.Sorts.descending;
 import static java.util.Objects.requireNonNullElse;
 
 /**
@@ -171,7 +171,7 @@ public class FeedSourceSummary {
 
             // Project only necessary fields early to reduce document size.
             project(
-                fields(include(
+                include(
                     "_id",
                     "name",
                     "deployable",
@@ -180,7 +180,7 @@ public class FeedSourceSummary {
                     "labelIds",
                     "url",
                     "filename",
-                    "noteIds")
+                    "noteIds"
                 )
             ),
             sort(Sorts.ascending("name"))
@@ -197,15 +197,15 @@ public class FeedSourceSummary {
     public static Map<String, FeedVersionSummary> getLatestFeedVersionForFeedSources(String projectId) {
         List<Bson> feedVersionPipeline = Arrays.asList(
             // Match FeedVersion documents where feedSourceId equals the feedSourceId passed from the outer document.
-            Aggregates.match(
+            match(
                 expr(
                     new Document("$eq", Arrays.asList("$feedSourceId", "$$feedSourceId"))
                 )
             ),
-            Aggregates.sort(Sorts.descending("version")),
-            Aggregates.limit(1),
+            sort(descending("version")),
+            limit(1),
             // Project only the fields needed from the FeedVersion to reduce payload size.
-            Aggregates.project(fields(
+            project(
                 include(
                     "version",
                     "_id",
@@ -215,14 +215,14 @@ public class FeedSourceSummary {
                     "gtfsPlusValidation",
                     "namespace"
                 )
-            ))
+            )
         );
 
         // Define the variable passed into the lookup pipeline.
         List<Variable<String>> feedSourceId = List.of(new Variable<>("feedSourceId", "$_id"));
 
         // $lookup that uses the above pipeline to produce "latestFeedVersion" (an array with at most one element).
-        Bson lookupLatestFeedVersion = Aggregates.lookup(
+        Bson lookupLatestFeedVersion = lookup(
             "FeedVersion",
             feedSourceId,
             feedVersionPipeline,
@@ -232,21 +232,21 @@ public class FeedSourceSummary {
         // Pipeline to find the published FeedVersion by namespace (or identifier stored in publishedVersionId)
         List<Bson> publishedFeedVersionPipeline = Arrays.asList(
             // Match FeedVersion documents where namespace equals the outer document's publishedVersionId.
-            Aggregates.match(
+            match(
                 expr(
                     new Document("$eq", Arrays.asList("$namespace", "$$publishedVersionId"))
                 )
             ),
-            Aggregates.limit(1),
+            limit(1),
             // Project only the validationResult because that's all that is needed later.
-            Aggregates.project(fields(include("validationResult")))
+            project(include("validationResult"))
         );
 
         // Pass publishedVersionId from the local document into the lookup pipeline.
         List<Variable<String>> publishedVersionId = List.of(new Variable<>("publishedVersionId", "$publishedVersionId"));
 
         // $lookup that uses the above pipeline to produce "publishedFeedVersion" (an array with at most one element).
-        Bson lookupPublishedFeedVersion = Aggregates.lookup(
+        Bson lookupPublishedFeedVersion = lookup(
             "FeedVersion",
             publishedVersionId,
             publishedFeedVersionPipeline,
@@ -329,19 +329,19 @@ public class FeedSourceSummary {
         )));
 
         // Sort deployments by lastUpdated descending.
-        stages.add(sort(Sorts.descending("lastUpdated")));
+        stages.add(sort(descending("lastUpdated")));
         stages.add(limit(1));
 
         List<Bson> feedVersionPipeline = Arrays.asList(
             match(expr(new Document("$in", Arrays.asList("$_id", "$$feedVersionIds")))),
-            project(fields(
+            project(
                 include(
                     "feedSourceId",
                     "validationResult.firstCalendarDate",
                     "validationResult.lastCalendarDate",
                     "validationResult.errorCount"
                 )
-            ))
+            )
         );
 
         // Use pipeline form of lookup to fetch FeedVersions matching deployment’s feedVersionIds
@@ -356,13 +356,13 @@ public class FeedSourceSummary {
         stages.add(unwind("$feedVersions", new UnwindOptions().preserveNullAndEmptyArrays(false)));
         stages.add(replaceRoot("$feedVersions"));
         // Final projection: select and compute only the fields needed for the output to minimize size.
-        stages.add(project(fields(
+        stages.add(project(
             include(
                 "_id",
                 "feedSourceId",
                 "validationResult"
             )
-        )));
+        ));
 
         return extractFeedVersionSummaries(
             "Project",
@@ -384,7 +384,7 @@ public class FeedSourceSummary {
         stages.add(match(in("_id", projectId)));
 
         // Project only pinnedDeploymentId to keep doc small.
-        stages.add(project(fields(include("pinnedDeploymentId"))));
+        stages.add(project(include("pinnedDeploymentId")));
 
         // Lookup Deployment documents by pinnedDeploymentId.
         stages.add(lookup("Deployment", "pinnedDeploymentId", "_id", "deployment"));
@@ -394,12 +394,12 @@ public class FeedSourceSummary {
 
         // Define pipeline in $lookup to filter and project FeedVersion docs.
         List<Bson> feedVersionPipeline = Arrays.asList(
-            Aggregates.match(
+            match(
                 expr(
                     new Document("$in", Arrays.asList("$_id", "$$feedVersionIds"))
                 )
             ),
-            project(fields(
+            project(
                 include(
                     "_id",
                     "feedSourceId",
@@ -407,7 +407,7 @@ public class FeedSourceSummary {
                     "validationResult.lastCalendarDate",
                     "validationResult.errorCount"
                 )
-            ))
+            )
         );
 
         // Define variable for correlated lookup on FeedVersion collection.
