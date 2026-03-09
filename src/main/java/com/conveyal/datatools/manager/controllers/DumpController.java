@@ -1,9 +1,9 @@
 package com.conveyal.datatools.manager.controllers;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
+import com.conveyal.datatools.manager.jobs.ValidateGtfsPlusFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
@@ -365,6 +365,7 @@ public class DumpController {
             } else {
                 JobUtils.heavyExecutor.execute(new ValidateFeedJob(version, systemUser, false));
                 JobUtils.heavyExecutor.execute(new ValidateMobilityDataFeedJob(version, systemUser, false));
+                JobUtils.heavyExecutor.execute(new ValidateGtfsPlusFeedJob(version, systemUser, false));
             }
         }
         // ValidateAllFeedsJob validateAllFeedsJob = new ValidateAllFeedsJob("system", force, load);

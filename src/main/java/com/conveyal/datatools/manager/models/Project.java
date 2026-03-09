@@ -10,8 +10,6 @@ import com.mongodb.client.model.Projections;
 import org.bson.Document;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.bson.conversions.Bson;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Date;
@@ -40,7 +38,6 @@ import static com.mongodb.client.model.Filters.or;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
-    private static final Logger LOG = LoggerFactory.getLogger(Project.class);
 
     /** The name of this project, e.g. NYSDOT. */
     public String name;
@@ -168,17 +165,26 @@ public class Project extends Model {
      */
     public Collection<FeedSourceSummary> retrieveFeedSourceSummaries() {
         List<FeedSourceSummary> feedSourceSummaries = FeedSourceSummary.getFeedSourceSummaries(id, organizationId);
-        Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedSourceSummary.getLatestFeedVersionForFeedSources(id);
-        Map<String, FeedVersionSummary> deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromPinnedDeployment(id);
-        if (deployedFeedVersions.isEmpty()) {
-            // No pinned deployments, instead, get the deployed feed versions from the latest deployment.
-            deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
-        }
-        for (FeedSourceSummary feedSourceSummary : feedSourceSummaries) {
-            feedSourceSummary.setFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id), false);
-            feedSourceSummary.setFeedVersion(deployedFeedVersions.get(feedSourceSummary.id), true);
-        }
+        assignDeployedVersion(feedSourceSummaries);
         return feedSourceSummaries;
+    }
+
+    /**
+     * Assign deployed feed version. Prioritise pinned deployment feed version over latest deployment deployed feed version.
+     */
+    private void assignDeployedVersion(List<FeedSourceSummary> feedSourceSummaries) {
+        Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedSourceSummary.getLatestFeedVersionForFeedSources(id);
+        Map<String, FeedVersionSummary> pinnedDeploymentFeedVersions = FeedSourceSummary.getFeedVersionsFromPinnedDeployment(id);
+        Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
+
+        feedSourceSummaries.forEach(feedSourceSummary -> {
+            feedSourceSummary.updatePublishAndValidationState(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
+            FeedVersionSummary deployedVersion = pinnedDeploymentFeedVersions.getOrDefault(
+                feedSourceSummary.id,
+                latestDeploymentDeployedFeedVersions.get(feedSourceSummary.id)
+            );
+            feedSourceSummary.setDeployedFeedVersionValues(deployedVersion);
+        });
     }
 
     // TODO: Does this need to be returned with JSON API response

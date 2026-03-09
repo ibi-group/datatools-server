@@ -5,6 +5,7 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
+import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
@@ -276,6 +277,8 @@ public class FeedVersion extends Model implements Serializable {
 
     public Document mobilityDataResult;
 
+    public GtfsPlusValidation gtfsPlusValidation;
+
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
         return format.format(this.updated);
@@ -477,6 +480,28 @@ public class FeedVersion extends Model implements Serializable {
         }
     }
 
+    /**
+     * Produce GTFS+ validation results for this feed version if GTFS+ module is enabled.
+     */
+    public void validateGtfsPlus(MonitorableJob.Status status) {
+
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
+
+        if (DataManager.isModuleEnabled("gtfsplus")) {
+            try {
+                gtfsPlusValidation = GtfsPlusValidation.validate(this);
+            } catch (Exception e) {
+                LOG.warn("Unable to validate GTFS+ validation.", e);
+                status.fail(String.format("Unable to validate feed %s", this.id), e);
+                validationResult = new ValidationResult();
+                validationResult.fatalException = "failure!";
+            }
+        } else {
+            LOG.warn("GTFS+ module not enabled, skipping GTFS+ validation.");
+        }
+    }
+
     public void validate() {
         validate(null);
     }
@@ -512,6 +537,10 @@ public class FeedVersion extends Model implements Serializable {
     @JsonIgnore
     @BsonIgnore
     public boolean hasExpired() {
+        return hasExpired(validationResult);
+    }
+
+    public static boolean hasExpired(ValidationResult validationResult) {
         return validationResult.lastCalendarDate == null ||
             getNowAsLocalDate().isAfter(validationResult.lastCalendarDate);
     }
@@ -530,14 +559,22 @@ public class FeedVersion extends Model implements Serializable {
      */
     private boolean hasHighSeverityErrorTypes() {
         return hasSpecificErrorTypes(Stream.of(NewGTFSErrorType.values())
-            .filter(type -> type.priority == Priority.HIGH));
+            .filter(type -> type.priority == Priority.HIGH), namespace, name);
     }
 
     /**
      * Checks for issues that block feed publishing, consistent with UI.
      */
     public boolean hasBlockingIssuesForPublishing() {
-        if (this.validationResult.fatalException != null) return true;
+        return hasBlockingIssuesForPublishing(validationResult, namespace, name);
+    }
+
+    public static boolean hasBlockingIssuesForPublishing(
+        ValidationResult validationResult,
+        String namespace,
+        String name
+    ) {
+        if (validationResult.fatalException != null) return true;
 
         return hasSpecificErrorTypes(Stream.of(
             NewGTFSErrorType.ILLEGAL_FIELD_VALUE,
@@ -550,13 +587,13 @@ public class FeedVersion extends Model implements Serializable {
             NewGTFSErrorType.TABLE_IN_SUBDIRECTORY,
             NewGTFSErrorType.TABLE_MISSING_COLUMN_HEADERS,
             NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS
-        ));
+        ), namespace, name);
     }
 
     /**
      * Determines whether this feed has specific error types.
      */
-    private boolean hasSpecificErrorTypes(Stream<NewGTFSErrorType> errorTypes) {
+    private static boolean hasSpecificErrorTypes(Stream<NewGTFSErrorType> errorTypes, String namespace, String name) {
         Set<String> highSeverityErrorTypes = errorTypes
             .map(NewGTFSErrorType::toString)
             .collect(Collectors.toSet());
