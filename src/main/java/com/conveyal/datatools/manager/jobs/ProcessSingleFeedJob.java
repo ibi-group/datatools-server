@@ -42,7 +42,7 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
     public static boolean ENABLE_MTC_TRANSFORMATIONS = true;
 
     // Used in testing to skip validation and speed up response times.
-    public static boolean VALIDATE_MOBILITY_DATA = true;
+    public static boolean ENABLE_ADDITIONAL_VALIDATION = true;
 
     /**
      * Create a job for the given feed version.
@@ -132,8 +132,9 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
 
         // Next, validate the feed.
         addNextJob(new ValidateFeedJob(feedVersion, owner, isNewVersion));
-        if (VALIDATE_MOBILITY_DATA) {
+        if (ENABLE_ADDITIONAL_VALIDATION) {
             addNextJob(new ValidateMobilityDataFeedJob(feedVersion, owner, isNewVersion));
+            addNextJob(new ValidateGtfsPlusFeedJob(feedVersion, owner, isNewVersion));
         }
 
         // We only need to snapshot the feed if there are transformations at the database level. In the case that there
