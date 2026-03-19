@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.utils;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.google.common.collect.Sets;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -13,13 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JobUtilsTest {
 
-    @BeforeEach
-    void setUp() {
-        JobUtils.userJobsMap.clear();
-    }
-
     @Test
     void testRemoveJobsOlderThanAWeek() {
+        JobUtils.userJobsMap.clear();
         String userId = "user-id";
         Set<MonitorableJob> jobs = Sets.newConcurrentHashSet();
 
