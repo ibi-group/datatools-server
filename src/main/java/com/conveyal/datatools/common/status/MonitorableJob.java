@@ -115,6 +115,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         Set<MonitorableJob> userJobs = JobUtils.getJobsForUser(this.owner);
         userJobs.add(this);
         JobUtils.userJobsMap.put(retrieveUserId(), userJobs);
+        JobUtils.removeJobsOlderThanAWeek();
     }
 
     @JsonProperty("owner")
