@@ -11,6 +11,8 @@ import com.mongodb.client.FindIterable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -172,5 +174,16 @@ public class JobUtils {
         heavyExecutor.execute(deployJob);
         deploymentJobsByServer.put(server.id, deployJob);
         return deployJob;
+    }
+
+    /**
+     * Removes all jobs that are older than one week.
+     */
+    public static void removeJobsOlderThanAWeek() {
+        LocalDateTime oneWeekAgo = LocalDateTime.now().minusDays(7);
+        userJobsMap.forEach((userId, jobs) ->
+            jobs.removeIf(job -> LocalDateTime.parse(job.status.modified, DateTimeFormatter.ISO_DATE_TIME)
+                .isBefore(oneWeekAgo))
+        );
     }
 }
