@@ -4,6 +4,7 @@ import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.util.CsvReaderUtil;
 import com.csvreader.CsvReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,7 +75,7 @@ public class StopsMergeLineContext extends MergeLineContext {
             int stopCodeIndex = getFieldIndex("stop_code");
             // Get special stops reader to iterate over every stop and determine if stop_code values
             // are present.
-            CsvReader stopsReader = table.getCsvReader(feed.zipFile, null);
+            CsvReader stopsReader = CsvReaderUtil.getCsvReaderAccordingToFileName(table, feed.zipFile, null);
             while (stopsReader.readRecord()) {
                 stopsCount++;
                 // Special stop records (i.e., a station, entrance, or anything with

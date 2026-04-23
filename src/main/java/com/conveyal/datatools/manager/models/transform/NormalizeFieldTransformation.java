@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.utils.GtfsUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.util.CsvReaderUtil;
 import com.csvreader.CsvReader;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.WordUtils;
@@ -199,7 +200,11 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 status.fail(String.format("Unsupported GTFS file '%s'", tableName));
                 return;
             }
-            CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
+            CsvReader csvReader = CsvReaderUtil.getCsvReaderAccordingToFileName(
+                gtfsTable,
+                new ZipFile(tempZipPath.toAbsolutePath().toString()),
+                null
+            );
             if (csvReader == null) {
                 status.fail(String.format("'Normalize Field' failed because file '%s' was not found in the GTFS archive", tableName));
                 return;
