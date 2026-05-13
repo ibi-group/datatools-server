@@ -148,8 +148,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         feedVersionPublishedFromLatestDeployment = createFeedVersion(
             "published-feed-version-from-latest-deployment",
-            // Set to null so the relationship to feed source is via the published version id.
-            null,
+            feedSourceWithLatestDeploymentFeedVersion.id,
             LocalDate.of(2022, Month.NOVEMBER, 2),
             LocalDate.of(2022, Month.NOVEMBER, 3),
             feedSourceWithLatestDeploymentFeedVersion.publishedVersionId,
