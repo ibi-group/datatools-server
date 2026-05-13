@@ -219,7 +219,8 @@ public class FeedSourceSummary {
         );
 
         // Define the variable passed into the lookup pipeline.
-        List<Variable<String>> feedSourceId = List.of(new Variable<>("feedSourceId", "$_id"));
+        Variable<String> feedSourceIdVariable = new Variable<>("feedSourceId", "$_id");
+        List<Variable<String>> feedSourceId = List.of(feedSourceIdVariable);
 
         // $lookup that uses the above pipeline to produce "latestFeedVersion" (an array with at most one element).
         Bson lookupLatestFeedVersion = lookup(
@@ -231,7 +232,14 @@ public class FeedSourceSummary {
 
         // Pipeline to find the published FeedVersion by namespace (or identifier stored in publishedVersionId)
         List<Bson> publishedFeedVersionPipeline = Arrays.asList(
-            // Match FeedVersion documents where namespace equals the outer document's publishedVersionId.
+            // Match FeedVersion documents where namespace equals the outer document's
+            // feedSourceId (important when dealing with many FeedVersions)
+            // and publishedVersionId.
+            match(
+                expr(
+                    new Document("$eq", Arrays.asList("$feedSourceId", "$$feedSourceId"))
+                )
+            ),
             match(
                 expr(
                     new Document("$eq", Arrays.asList("$namespace", "$$publishedVersionId"))
@@ -242,13 +250,16 @@ public class FeedSourceSummary {
             project(include("validationResult"))
         );
 
-        // Pass publishedVersionId from the local document into the lookup pipeline.
-        List<Variable<String>> publishedVersionId = List.of(new Variable<>("publishedVersionId", "$publishedVersionId"));
+        // Pass feedSourceId and publishedVersionId from the local document into the lookup pipeline.
+        List<Variable<String>> feedSourceIdAndPublishedVersionId = List.of(
+            feedSourceIdVariable,
+            new Variable<>("publishedVersionId", "$publishedVersionId")
+        );
 
         // $lookup that uses the above pipeline to produce "publishedFeedVersion" (an array with at most one element).
         Bson lookupPublishedFeedVersion = lookup(
             "FeedVersion",
-            publishedVersionId,
+            feedSourceIdAndPublishedVersionId,
             publishedFeedVersionPipeline,
             "publishedFeedVersion"
         );
