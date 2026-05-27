@@ -313,7 +313,7 @@ public abstract class EditorController<T extends Entity> {
                         int stopSequence = patternStop.getValue();
                         // Begin with the stop prior to the one deleted, unless at the beginning.
                         int beginWithSequence = (stopSequence != 0) ? stopSequence - 1 : stopSequence;
-                        tableWriter.normalizeStopTimesForPattern(patternStop.getKey(), beginWithSequence, false);
+                        tableWriter.normalizeStopTimesForPattern(patternStop.getKey(), beginWithSequence, false, false);
                     }
                 }
             }
@@ -407,8 +407,9 @@ public abstract class EditorController<T extends Entity> {
         try {
             int beginStopSequence = Integer.parseInt(req.queryParams("stopSequence"));
             boolean interpolateStopTimes = Boolean.parseBoolean(req.queryParams("interpolateStopTimes"));
+            boolean ignoreNonBlankStopTimes = Boolean.parseBoolean(req.queryParams("ignoreNonBlankStopTimes"));
             JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
-            int stopTimesUpdated = tableWriter.normalizeStopTimesForPattern(patternId, beginStopSequence, interpolateStopTimes);
+            int stopTimesUpdated = tableWriter.normalizeStopTimesForPattern(patternId, beginStopSequence, interpolateStopTimes, ignoreNonBlankStopTimes);
             return SparkUtils.formatJSON("updateResult", stopTimesUpdated + " stop times updated.");
         } catch (Exception e) {
             logMessageAndHalt(req, 400, "Error normalizing stop times", e);
