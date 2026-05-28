@@ -105,7 +105,7 @@ public class S3Utils {
     }
 
     public static String getDefaultBucketUrlForKey(String key) {
-        return String.format("https://s3.amazonaws.com/%s/%s", DEFAULT_BUCKET, key);
+        return String.format("https://%s.s3.amazonaws.com/%s", DEFAULT_BUCKET, key);
     }
 
     /**
