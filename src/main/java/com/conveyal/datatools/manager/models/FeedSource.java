@@ -585,8 +585,11 @@ public class FeedSource extends Model implements Cloneable {
         String versionId = this.latestVersionId();
         String latestVersionKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + versionId;
 
-        // only deploy to public if storing feeds on s3 (no mechanism for downloading/publishing
-        // them otherwise)
+        // Copy, forever, the latest stored version to the public folder, regardless of
+        // whether S3 is used to store individual feed versions (useS3 = true) or not.
+        //
+        // Note: If modules.enterprise.prefer_s3_links is not set and the feed source has a fetch URL,
+        // this method will not be called, and the feed download link will point to the fetch URL instead.
         if (DataManager.useS3) {
             AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
             boolean sourceExists = defaultS3Client.doesObjectExist(S3Utils.DEFAULT_BUCKET, sourceKey);
@@ -617,6 +620,9 @@ public class FeedSource extends Model implements Cloneable {
                     defaultS3Client.copyObject(S3Utils.DEFAULT_BUCKET, latestVersionKey, S3Utils.DEFAULT_BUCKET, sourceKey);
                 }
             }
+        } else {
+            LOG.info("copying latest local feed {} to s3 public folder", this);
+            S3Utils.uploadObject(publicKey, retrieveLatest().retrieveGtfsFile());
         }
     }
 
