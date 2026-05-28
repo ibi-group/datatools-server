@@ -1,11 +1,8 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.io.FileUtils;
@@ -81,7 +78,6 @@ public class PublishProjectFeedsJob extends MonitorableJob {
                         }
                         url = S3Utils.getDefaultBucketUrlForKey(fs.toPublicKey());
                     }
-                    FeedVersion latest = fs.retrieveLatest();
                     r.append("<li>");
                     r.append("<a href=\"" + url + "\">");
                     r.append(fs.name);
@@ -111,12 +107,9 @@ public class PublishProjectFeedsJob extends MonitorableJob {
             e.printStackTrace();
         }
         try {
-            AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
-            defaultS3Client.putObject(S3Utils.DEFAULT_BUCKET, folder + fileName, file);
-            defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, folder + fileName, CannedAccessControlList.PublicRead);
+            S3Utils.uploadObject(folder + fileName, file);
         } catch (Exception e) {
             status.fail("Failed to perform S3 actions", e);
-            return;
         }
     }
 
