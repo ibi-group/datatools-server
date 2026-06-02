@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
 import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.UnitTest;
@@ -50,6 +51,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MtcFeedResourceTest extends UnitTest {
@@ -261,21 +263,26 @@ class MtcFeedResourceTest extends UnitTest {
 
     @ParameterizedTest
     @ValueSource(booleans = { false, true })
-    void canUseCorrectMtcCredentials(boolean overwriteRegion) {
-        if (overwriteRegion) {
+    void canUseCorrectMtcCredentials(boolean overwriteDefaults) {
+        if (overwriteDefaults) {
             DataManager.overrideConfigProperty(CONFIG_MTC_REGION, "us-west-2");
+            String credentialsFile = TestUtils.class.getResource("mock-aws-credentials").getFile();
+            DataManager.overrideConfigProperty(CONFIG_MTC_CREDENTIALS, credentialsFile);
         }
-        String credentialsFile = TestUtils.class.getResource("mock-aws-credentials").getFile();
-        DataManager.overrideConfigProperty(CONFIG_MTC_CREDENTIALS, credentialsFile);
 
         S3Utils.S3ClientBuild build = MtcFeedResource.getMTCS3Client();
+        assertNotNull(build);
 
         // Either application.data.s3_region or extensions.mtc.s3_region from server.yml.tmp.
-        assertEquals(overwriteRegion ? "us-west-2" : "us-east-1", build.s3Client.getRegion().toAWSRegion().getName());
+        assertEquals(overwriteDefaults ? "us-west-2" : "us-east-1", build.s3Client.getRegion().toAWSRegion().getName());
 
         // The credentials should reflect the content in the mock-aws-credentials file referenced above.
-        AWSCredentials credentials = build.credentials.getCredentials();
-        assertEquals("mock-id-123", credentials.getAWSAccessKeyId());
-        assertEquals("mock-secret-123", credentials.getAWSSecretKey());
+        if (overwriteDefaults) {
+            AWSCredentials credentials = build.credentials.getCredentials();
+            assertEquals("mock-id-123", credentials.getAWSAccessKeyId());
+            assertEquals("mock-secret-123", credentials.getAWSSecretKey());
+        } else {
+            assertEquals(DefaultAWSCredentialsProviderChain.class, build.credentials.getClass());
+        }
     }
 }

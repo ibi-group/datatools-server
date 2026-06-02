@@ -31,6 +31,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import static com.conveyal.datatools.common.utils.aws.S3Utils.APP_DATA_CREDS_FILE;
 import static com.conveyal.datatools.common.utils.aws.S3Utils.APP_DATA_S3_REGION;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 import static com.mongodb.client.model.Filters.eq;
@@ -363,6 +364,16 @@ public class MtcFeedResource implements ExternalFeedResource {
      */
     public static S3Utils.S3ClientBuild getMTCS3Client() {
         List<String> configRegions = List.of(CONFIG_MTC_REGION, APP_DATA_S3_REGION);
-        return S3Utils.buildS3Client(CONFIG_MTC_CREDENTIALS, configRegions);
+        List<String> configCredentials = List.of(CONFIG_MTC_CREDENTIALS, APP_DATA_CREDS_FILE);
+        try {
+            return S3Utils.buildS3Client(configCredentials, configRegions);
+        } catch (IllegalArgumentException e) {
+            try {
+                return new S3Utils.S3ClientBuild(null, S3Utils.getDefaultS3Client());
+            } catch (CheckedAWSException ex) {
+                LOG.error("Failed to fallback to default S3 provider", e);
+                return null;
+            }
+        }
     }
 }

@@ -43,6 +43,8 @@ public class S3Utils {
 
     public static final String APP_DATA_S3_REGION = "application.data.s3_region";
 
+    public static final String APP_DATA_CREDS_FILE = "application.data.s3_credentials_file";
+
     static {
         // Placeholder variables need to be used before setting the final variable to make sure initialization occurs
         AmazonS3 tempS3Client = null;
@@ -52,8 +54,7 @@ public class S3Utils {
 
         // Only configure s3 if the config requires doing so
         if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")) {
-            final String credsFile = "application.data.s3_credentials_file";
-            S3ClientBuild build = buildS3Client(credsFile, List.of(APP_DATA_S3_REGION));
+            S3ClientBuild build = buildS3Client(List.of(APP_DATA_CREDS_FILE), List.of(APP_DATA_S3_REGION));
             tempS3Client = build.s3Client;
             tempS3CredentialsProvider = build.credentials;
 
@@ -89,15 +90,31 @@ public class S3Utils {
      * @param configRegions The configuration entries in the order to try to get the AWS region to apply.
      * @return An S3 client for the provided credentials and region.
      */
-    public static S3ClientBuild buildS3Client(String configCredentials, List<String> configRegions) throws IllegalArgumentException {
+    public static S3ClientBuild buildS3Client(
+        List<String> configCredentials,
+        List<String> configRegions
+    ) throws IllegalArgumentException {
         AmazonS3 s3client = null;
         AWSCredentialsProvider credentialsProvider = null;
         try {
             AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
-            String credentialsFile = DataManager.getConfigPropertyAsText(configCredentials);
-            credentialsProvider = credentialsFile != null ?
-                new ProfileCredentialsProvider(credentialsFile, "default") :
-                new DefaultAWSCredentialsProviderChain(); // default credentials providers, e.g. IAM role
+            // Iterate through the credentials and stop at the first non-null returned.
+            // Default to the ambient IAM credentials, if any.
+            for (String configCred : configCredentials) {
+                String credentialsFile = DataManager.getConfigPropertyAsText(configCred);
+                if (credentialsFile != null) {
+                    try {
+                        credentialsProvider = new ProfileCredentialsProvider(credentialsFile, "default");
+                    } catch (IllegalArgumentException e) {
+                        LOG.error("Invalid credentials from {}. Trying the next one.", configCred, e);
+                    }
+                    if (credentialsProvider != null) break;
+                }
+            }
+            if (credentialsProvider == null) {
+                // default credentials providers, e.g. IAM role
+                credentialsProvider = new DefaultAWSCredentialsProviderChain();
+            }
             builder.withCredentials(credentialsProvider);
 
             // Iterate through the regions and stop at the first non-null returned.
