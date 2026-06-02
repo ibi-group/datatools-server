@@ -7,6 +7,7 @@ import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
+import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -454,20 +455,9 @@ public class FeedUpdater {
     public class DefaultCompletedFeedRetriever implements CompletedFeedRetriever {
         @Override
         public List<S3ObjectSummary> retrieveCompletedFeeds() {
-            try {
-                AmazonS3 s3Client = S3Utils.getDefaultS3Client();
-                if (isExtensionEnabled("mtc")) {
-                    String credentialsFile = "extensions.mtc.s3_credentials_file";
-                    List<String> configRegions = List.of("extensions.mtc.s3_region", "application.data.s3_region");
-                    AmazonS3 alternateClient = S3Utils.buildS3Client(credentialsFile, configRegions).s3Client;
-                    if (alternateClient != null) s3Client = alternateClient;
-                }
-                ObjectListing gtfsList = s3Client.listObjects(feedBucket, bucketFolder);
-                return gtfsList.getObjectSummaries();
-            } catch (CheckedAWSException e) {
-                LOG.error("Failed to list S3 Objects", e);
-                return null;
-            }
+            AmazonS3 s3Client = MtcFeedResource.getMTCS3Client().s3Client;
+            ObjectListing gtfsList = s3Client.listObjects(feedBucket, bucketFolder);
+            return gtfsList.getObjectSummaries();
         }
     }
 }

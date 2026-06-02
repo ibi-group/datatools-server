@@ -41,6 +41,8 @@ public class S3Utils {
     public static final String DEFAULT_BUCKET;
     public static final String DEFAULT_BUCKET_GTFS_FOLDER = "gtfs/";
 
+    public static final String APP_DATA_S3_REGION = "application.data.s3_region";
+
     static {
         // Placeholder variables need to be used before setting the final variable to make sure initialization occurs
         AmazonS3 tempS3Client = null;
@@ -51,8 +53,7 @@ public class S3Utils {
         // Only configure s3 if the config requires doing so
         if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")) {
             final String credsFile = "application.data.s3_credentials_file";
-            final String configRegion = "application.data.s3_region";
-            S3ClientBuild build = buildS3Client(credsFile, List.of(configRegion));
+            S3ClientBuild build = buildS3Client(credsFile, List.of(APP_DATA_S3_REGION));
             tempS3Client = build.s3Client;
             tempS3CredentialsProvider = build.credentials;
 

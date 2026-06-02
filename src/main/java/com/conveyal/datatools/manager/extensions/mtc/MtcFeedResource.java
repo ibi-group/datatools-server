@@ -31,6 +31,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import static com.conveyal.datatools.common.utils.aws.S3Utils.APP_DATA_S3_REGION;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -54,6 +55,8 @@ public class MtcFeedResource implements ExternalFeedResource {
     public static final String RESOURCE_TYPE = "MTC";
     public static final String STOP_CODE_PRIMARY_PREFIX_FIELD_NAME = "PrimaryPrefix";
     public static final String STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME = "SecondaryPrefixes";
+    public static final String CONFIG_MTC_CREDENTIALS = "extensions.mtc.s3_credentials_file";
+    public static final String CONFIG_MTC_REGION = "extensions.mtc.s3_region";
 
     private String rtdApi, s3Bucket, s3Prefix;
 
@@ -353,5 +356,13 @@ public class MtcFeedResource implements ExternalFeedResource {
     public static List<String> getSecondaryStopCodePrefixes(Map<String, Map<String, String>> properties) {
         String secondaryStopPrefixValue = MtcFeedResource.getFieldValue(properties, MtcFeedResource.STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME);
         return (secondaryStopPrefixValue == null) ? null : List.of(secondaryStopPrefixValue.split(","));
+    }
+
+    /**
+     * Get the S3 client to access the MTC RTD bucket, which needs separate credentials from the rest of datatools.
+     */
+    public static S3Utils.S3ClientBuild getMTCS3Client() {
+        List<String> configRegions = List.of(CONFIG_MTC_REGION, APP_DATA_S3_REGION);
+        return S3Utils.buildS3Client(CONFIG_MTC_CREDENTIALS, configRegions);
     }
 }
