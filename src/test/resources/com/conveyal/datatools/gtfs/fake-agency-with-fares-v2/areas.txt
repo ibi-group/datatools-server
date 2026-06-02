@@ -1,0 +1,40 @@
+area_id,area_name
+area_bl,Blue Line
+area_bl_airport,Blue Line - Airport Station
+area_cf_zone_buzzards,CapeFLYER - Wareham/Buzzards Bay/Bourne
+area_cf_zone_hyannis,CapeFLYER - Hyannis
+area_commuter_rail_porter_zone_1a,Commuter Rail Zone 1A
+area_commuter_rail_sumner_tunnel_zone_1a,Commuter Rail Zone 1A
+area_commuter_rail_zone_1,Commuter Rail Zone 1
+area_commuter_rail_zone_10,Commuter Rail Zone 10
+area_commuter_rail_zone_1a,Commuter Rail Zone 1A
+area_commuter_rail_zone_2,Commuter Rail Zone 2
+area_commuter_rail_zone_3,Commuter Rail Zone 3
+area_commuter_rail_zone_4,Commuter Rail Zone 4
+area_commuter_rail_zone_5,Commuter Rail Zone 5
+area_commuter_rail_zone_6,Commuter Rail Zone 6
+area_commuter_rail_zone_7,Commuter Rail Zone 7
+area_commuter_rail_zone_8,Commuter Rail Zone 8
+area_commuter_rail_zone_9,Commuter Rail Zone 9
+area_fairmount_line_zone_1a,Commuter Rail Zone 1A - Fairmount Line
+area_gl_govt_ctr,Green Line - Government Center
+area_green_b_west_of_kenmore,Green Line B - West of Kenmore
+area_green_c_west_of_kenmore,Green Line C - West of Kenmore
+area_green_e_west_of_symphony,Green Line E - West of Symphony
+area_m_ashmont_mattapan,Mattapan Trolley - Ashmont and Mattapan
+area_ol_state,Orange Line - State
+area_red_south_station,Red Line - South Station
+area_route_354_downtown,Route 354 - Downtown
+area_route_354_outside_downtown,Route 354 - Outside Downtown
+area_route_426_downtown,Route 426 - Downtown
+area_route_426_outside_downtown,Route 426 - Outside Downtown
+area_route_450_downtown,Route 450 - Downtown
+area_route_450_outside_downtown,Route 450 - Outside Downtown
+area_sl3_north_of_airport,Silver Line - North of Airport Station
+area_sl_airport,Silver Line - Airport Station
+area_sl_courthouse,Silver Line - Courthouse
+area_sl_logan_terminal,Silver Line - Airport Terminals
+area_sl_silver_line_way,Silver Line - Silver Line Way
+area_sl_south_station,Silver Line - South Station
+area_sl_world_trade_center,Silver Line - World Trade Center
+area_ss_commuter_rail_zone_1a,Commuter Rail Zone 1A - South Station
