@@ -6,7 +6,6 @@ import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
-import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -39,7 +38,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
-import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
 import static com.mongodb.client.model.Aggregates.group;
 import static com.mongodb.client.model.Aggregates.match;
@@ -409,7 +407,7 @@ public class FeedUpdater {
     ) throws AmazonServiceException, IOException, CheckedAWSException {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
-        S3Object object = S3Utils.getDefaultS3Client().getObject(feedBucket, keyName);
+        S3Object object = MtcFeedResource.getMTCS3Client().s3Client.getObject(feedBucket, keyName);
         File file = new File(FeedStore.basePath, filename);
         try (
             InputStream in = object.getObjectContent();

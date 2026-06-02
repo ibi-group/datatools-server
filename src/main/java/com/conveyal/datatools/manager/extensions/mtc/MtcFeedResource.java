@@ -215,7 +215,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         LOG.info("Pushing to MTC S3 Bucket: s3://{}/{}", s3Bucket, keyName);
         File file = feedVersion.retrieveGtfsFile();
         try {
-            S3Utils.getDefaultS3Client().putObject(new PutObjectRequest(s3Bucket, keyName, file));
+            getMTCS3Client().s3Client.putObject(new PutObjectRequest(s3Bucket, keyName, file));
         } catch (Exception e) {
             LOG.error("Could not upload feed version to s3.");
             e.printStackTrace();
