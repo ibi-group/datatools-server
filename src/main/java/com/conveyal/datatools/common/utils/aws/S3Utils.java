@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -49,31 +50,12 @@ public class S3Utils {
 
         // Only configure s3 if the config requires doing so
         if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")) {
-            try {
-                AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
-                String credentialsFile = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
-                tempS3CredentialsProvider = credentialsFile != null ?
-                    new ProfileCredentialsProvider(credentialsFile, "default") :
-                    new DefaultAWSCredentialsProviderChain(); // default credentials providers, e.g. IAM role
-                builder.withCredentials(tempS3CredentialsProvider);
+            final String credsFile = "application.data.s3_credentials_file";
+            final String configRegion = "application.data.s3_region";
+            S3ClientBuild build = buildS3Client(credsFile, List.of(configRegion));
+            tempS3Client = build.s3Client;
+            tempS3CredentialsProvider = build.credentials;
 
-                // If region configuration string is provided, use that.
-                // Otherwise defaults to value provided in ~/.aws/config
-                String region = DataManager.getConfigPropertyAsText("application.data.s3_region");
-                if (region != null) {
-                    builder.withRegion(region);
-                }
-                tempS3Client = builder.build();
-            } catch (Exception e) {
-                LOG.error(
-                    "S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config",
-                    e
-                );
-            }
-
-            if (tempS3Client == null) {
-                throw new IllegalArgumentException("Fatal error initializing the default s3Client");
-            }
             tempS3ClientManager = new S3ClientManagerImpl(tempS3Client);
 
             // s3 storage
@@ -87,6 +69,60 @@ public class S3Utils {
         DEFAULT_S3_CREDENTIALS = tempS3CredentialsProvider;
         S3ClientManager = tempS3ClientManager;
         DEFAULT_BUCKET = tempGtfsS3Bucket;
+    }
+
+    public static class S3ClientBuild {
+        public final AWSCredentialsProvider credentials;
+        public final AmazonS3 s3Client;
+
+        public S3ClientBuild(AWSCredentialsProvider credentials, AmazonS3 s3Client) {
+            this.credentials = credentials;
+            this.s3Client = s3Client;
+        }
+    }
+
+    /**
+     * Builds an S3 client from the specified credentials and region, or fallback to defaults
+     * using the ambient IAM role.
+     * @param configCredentials The credentials file to use for the client.
+     * @param configRegions The configuration entries in the order to try to get the AWS region to apply.
+     * @return An S3 client for the provided credentials and region.
+     */
+    public static S3ClientBuild buildS3Client(String configCredentials, List<String> configRegions) throws IllegalArgumentException {
+        AmazonS3 s3client = null;
+        AWSCredentialsProvider credentialsProvider = null;
+        try {
+            AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
+            String credentialsFile = DataManager.getConfigPropertyAsText(configCredentials);
+            credentialsProvider = credentialsFile != null ?
+                new ProfileCredentialsProvider(credentialsFile, "default") :
+                new DefaultAWSCredentialsProviderChain(); // default credentials providers, e.g. IAM role
+            builder.withCredentials(credentialsProvider);
+
+            // Iterate through the regions and stop at the first non-null returned.
+            // Otherwise defaults to value (typically provided in ~/.aws/config)
+            for (String configRegion : configRegions) {
+                String region = DataManager.getConfigPropertyAsText(configRegion);
+                if (region != null) {
+                    builder.withRegion(region);
+                    break;
+                }
+            }
+
+            s3client = builder.build();
+        } catch (Exception e) {
+            LOG.error(
+                "S3 client not initialized correctly.  Must provide config property {} or specify region in ~/.aws/config",
+                configRegions,
+                e
+            );
+        }
+
+        if (s3client == null) {
+            throw new IllegalArgumentException("Fatal error initializing the default s3Client");
+        }
+
+        return new S3ClientBuild(credentialsProvider, s3client);
     }
 
     /**

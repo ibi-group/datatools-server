@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
@@ -37,6 +38,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
+import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
 import static com.mongodb.client.model.Aggregates.group;
 import static com.mongodb.client.model.Aggregates.match;
@@ -447,12 +449,20 @@ public class FeedUpdater {
 
     /**
      * Implements the default behavior for above interface.
+     * This method uses extensions.mtc.s3_credentials_file and s3_region is populated, use that file first, and fallback on the default S3 client.
      */
     public class DefaultCompletedFeedRetriever implements CompletedFeedRetriever {
         @Override
         public List<S3ObjectSummary> retrieveCompletedFeeds() {
             try {
-                ObjectListing gtfsList = S3Utils.getDefaultS3Client().listObjects(feedBucket, bucketFolder);
+                AmazonS3 s3Client = S3Utils.getDefaultS3Client();
+                if (isExtensionEnabled("mtc")) {
+                    String credentialsFile = "extensions.mtc.s3_credentials_file";
+                    List<String> configRegions = List.of("extensions.mtc.s3_region", "application.data.s3_region");
+                    AmazonS3 alternateClient = S3Utils.buildS3Client(credentialsFile, configRegions).s3Client;
+                    if (alternateClient != null) s3Client = alternateClient;
+                }
+                ObjectListing gtfsList = s3Client.listObjects(feedBucket, bucketFolder);
                 return gtfsList.getObjectSummaries();
             } catch (CheckedAWSException e) {
                 LOG.error("Failed to list S3 Objects", e);
