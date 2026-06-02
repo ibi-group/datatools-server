@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
 import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.common.utils.CloseableHttpURLConnection;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
@@ -58,6 +59,7 @@ public class MtcFeedResource implements ExternalFeedResource {
     public static final String STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME = "SecondaryPrefixes";
     public static final String CONFIG_MTC_CREDENTIALS = "extensions.mtc.s3_credentials_file";
     public static final String CONFIG_MTC_REGION = "extensions.mtc.s3_region";
+    private static S3Utils.S3Wrapper s3Wrapper;
 
     private String rtdApi, s3Bucket, s3Prefix;
 
@@ -216,7 +218,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         LOG.info("Pushing to MTC S3 Bucket: s3://{}/{}", s3Bucket, keyName);
         File file = feedVersion.retrieveGtfsFile();
         try {
-            getMTCS3Client().s3Client.putObject(new PutObjectRequest(s3Bucket, keyName, file));
+            getMTCS3Client().putObject(new PutObjectRequest(s3Bucket, keyName, file));
         } catch (Exception e) {
             LOG.error("Could not upload feed version to s3.");
             e.printStackTrace();
@@ -360,11 +362,23 @@ public class MtcFeedResource implements ExternalFeedResource {
     }
 
     /**
-     * Get the S3 client to access the MTC RTD bucket, which needs separate credentials from the rest of datatools.
+     * Builds the S3 wrapper to access the MTC RTD bucket, which needs separate credentials from the rest of datatools.
      */
-    public static S3Utils.S3ClientBuild getMTCS3Client() {
+    public static S3Utils.S3Wrapper getMTCS3Wrapper() {
         List<String> configRegions = List.of(CONFIG_MTC_REGION, APP_DATA_S3_REGION);
         List<String> configCredentials = List.of(CONFIG_MTC_CREDENTIALS, APP_DATA_CREDS_FILE);
-        return S3Utils.buildS3Client(configCredentials, configRegions);
+        return S3Utils.buildS3Wrapper(configCredentials, configRegions);
+    }
+
+    /**
+     * Get the S3 client from a cached wrapper to access the MTC RTD bucket.
+     * Note: In S3Utils, an AWSClientManager is used, however in practice, only the default client is invoked
+     * (i.e. with role=null, region=null), so the logical path returns the original s3Client, which we are doing here.
+     */
+    public static AmazonS3 getMTCS3Client() {
+        if (s3Wrapper == null) {
+            s3Wrapper = getMTCS3Wrapper();
+        }
+        return s3Wrapper.s3Client;
     }
 }

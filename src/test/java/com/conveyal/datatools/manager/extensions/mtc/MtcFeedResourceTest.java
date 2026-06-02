@@ -270,19 +270,19 @@ class MtcFeedResourceTest extends UnitTest {
             DataManager.overrideConfigProperty(CONFIG_MTC_CREDENTIALS, credentialsFile);
         }
 
-        S3Utils.S3ClientBuild build = MtcFeedResource.getMTCS3Client();
-        assertNotNull(build);
+        S3Utils.S3Wrapper s3wrapper = MtcFeedResource.getMTCS3Wrapper();
+        assertNotNull(s3wrapper);
 
         // Either application.data.s3_region or extensions.mtc.s3_region from server.yml.tmp.
-        assertEquals(overwriteDefaults ? "us-west-2" : "us-east-1", build.s3Client.getRegion().toAWSRegion().getName());
+        assertEquals(overwriteDefaults ? "us-west-2" : "us-east-1", s3wrapper.s3Client.getRegion().toAWSRegion().getName());
 
         // The credentials should reflect the content in the mock-aws-credentials file referenced above.
         if (overwriteDefaults) {
-            AWSCredentials credentials = build.credentials.getCredentials();
+            AWSCredentials credentials = s3wrapper.credentials.getCredentials();
             assertEquals("mock-id-123", credentials.getAWSAccessKeyId());
             assertEquals("mock-secret-123", credentials.getAWSSecretKey());
         } else {
-            assertEquals(DefaultAWSCredentialsProviderChain.class, build.credentials.getClass());
+            assertEquals(DefaultAWSCredentialsProviderChain.class, s3wrapper.credentials.getClass());
         }
     }
 }

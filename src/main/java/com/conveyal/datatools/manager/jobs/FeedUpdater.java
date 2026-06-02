@@ -407,7 +407,7 @@ public class FeedUpdater {
     ) throws AmazonServiceException, IOException, CheckedAWSException {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
-        S3Object object = MtcFeedResource.getMTCS3Client().s3Client.getObject(feedBucket, keyName);
+        S3Object object = MtcFeedResource.getMTCS3Client().getObject(feedBucket, keyName);
         File file = new File(FeedStore.basePath, filename);
         try (
             InputStream in = object.getObjectContent();
@@ -453,7 +453,7 @@ public class FeedUpdater {
     public class DefaultCompletedFeedRetriever implements CompletedFeedRetriever {
         @Override
         public List<S3ObjectSummary> retrieveCompletedFeeds() {
-            AmazonS3 s3Client = MtcFeedResource.getMTCS3Client().s3Client;
+            AmazonS3 s3Client = MtcFeedResource.getMTCS3Client();
             ObjectListing gtfsList = s3Client.listObjects(feedBucket, bucketFolder);
             return gtfsList.getObjectSummaries();
         }

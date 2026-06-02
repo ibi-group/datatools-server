@@ -47,18 +47,15 @@ public class S3Utils {
 
     static {
         // Placeholder variables need to be used before setting the final variable to make sure initialization occurs
-        AmazonS3 tempS3Client = null;
         AWSCredentialsProvider tempS3CredentialsProvider = null;
         String tempGtfsS3Bucket = null;
         S3ClientManagerImpl tempS3ClientManager = null;
 
         // Only configure s3 if the config requires doing so
         if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")) {
-            S3ClientBuild build = buildS3Client(List.of(APP_DATA_CREDS_FILE), List.of(APP_DATA_S3_REGION));
-            tempS3Client = build.s3Client;
+            S3Wrapper build = buildS3Wrapper(List.of(APP_DATA_CREDS_FILE), List.of(APP_DATA_S3_REGION));
             tempS3CredentialsProvider = build.credentials;
-
-            tempS3ClientManager = new S3ClientManagerImpl(tempS3Client);
+            tempS3ClientManager = new S3ClientManagerImpl(build.s3Client);
 
             // s3 storage
             tempGtfsS3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
@@ -73,11 +70,11 @@ public class S3Utils {
         DEFAULT_BUCKET = tempGtfsS3Bucket;
     }
 
-    public static class S3ClientBuild {
+    public static class S3Wrapper {
         public final AWSCredentialsProvider credentials;
         public final AmazonS3 s3Client;
 
-        public S3ClientBuild(AWSCredentialsProvider credentials, AmazonS3 s3Client) {
+        public S3Wrapper(AWSCredentialsProvider credentials, AmazonS3 s3Client) {
             this.credentials = credentials;
             this.s3Client = s3Client;
         }
@@ -90,7 +87,7 @@ public class S3Utils {
      * @param configRegions The configuration entries in the order to try to get the AWS region to apply.
      * @return An S3 client for the provided credentials and region.
      */
-    public static S3ClientBuild buildS3Client(
+    public static S3Wrapper buildS3Wrapper(
         List<String> configCredentials,
         List<String> configRegions
     ) throws IllegalArgumentException {
@@ -140,7 +137,7 @@ public class S3Utils {
             throw new IllegalArgumentException("Fatal error initializing the default s3Client");
         }
 
-        return new S3ClientBuild(credentialsProvider, s3client);
+        return new S3Wrapper(credentialsProvider, s3client);
     }
 
     /**
