@@ -365,15 +365,6 @@ public class MtcFeedResource implements ExternalFeedResource {
     public static S3Utils.S3ClientBuild getMTCS3Client() {
         List<String> configRegions = List.of(CONFIG_MTC_REGION, APP_DATA_S3_REGION);
         List<String> configCredentials = List.of(CONFIG_MTC_CREDENTIALS, APP_DATA_CREDS_FILE);
-        try {
-            return S3Utils.buildS3Client(configCredentials, configRegions);
-        } catch (IllegalArgumentException e) {
-            try {
-                return new S3Utils.S3ClientBuild(null, S3Utils.getDefaultS3Client());
-            } catch (CheckedAWSException ex) {
-                LOG.error("Failed to fallback to default S3 provider", e);
-                return null;
-            }
-        }
+        return S3Utils.buildS3Client(configCredentials, configRegions);
     }
 }
