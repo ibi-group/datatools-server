@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
@@ -407,7 +406,7 @@ public class FeedUpdater {
     ) throws AmazonServiceException, IOException, CheckedAWSException {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
-        S3Object object = MtcFeedResource.getMTCS3Client().getObject(feedBucket, keyName);
+        S3Object object = MtcFeedResource.getS3Client().getObject(feedBucket, keyName);
         File file = new File(FeedStore.basePath, filename);
         try (
             InputStream in = object.getObjectContent();
@@ -448,13 +447,13 @@ public class FeedUpdater {
 
     /**
      * Implements the default behavior for above interface.
-     * This method uses extensions.mtc.s3_credentials_file and s3_region is populated, use that file first, and fallback on the default S3 client.
+     * This method uses extensions.mtc.s3_credentials_file and s3_region, if populated,
+     * and falls back to .
      */
     public class DefaultCompletedFeedRetriever implements CompletedFeedRetriever {
         @Override
         public List<S3ObjectSummary> retrieveCompletedFeeds() {
-            AmazonS3 s3Client = MtcFeedResource.getMTCS3Client();
-            ObjectListing gtfsList = s3Client.listObjects(feedBucket, bucketFolder);
+            ObjectListing gtfsList = MtcFeedResource.getS3Client().listObjects(feedBucket, bucketFolder);
             return gtfsList.getObjectSummaries();
         }
     }
