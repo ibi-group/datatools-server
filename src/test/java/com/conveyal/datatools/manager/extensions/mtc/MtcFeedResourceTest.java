@@ -270,7 +270,7 @@ class MtcFeedResourceTest extends UnitTest {
             DataManager.overrideConfigProperty(CONFIG_MTC_CREDENTIALS, credentialsFile);
         }
 
-        S3Utils.S3Wrapper s3wrapper = MtcFeedResource.getMTCS3Wrapper();
+        S3Utils.S3Wrapper s3wrapper = MtcFeedResource.getS3Wrapper();
         assertNotNull(s3wrapper);
 
         // Either application.data.s3_region or extensions.mtc.s3_region from server.yml.tmp.
