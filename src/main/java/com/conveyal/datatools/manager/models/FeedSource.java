@@ -580,9 +580,15 @@ public class FeedSource extends Model implements Cloneable {
      * Makes the feed source's latest version have public access on AWS S3.
      */
     public void makePublic() throws CheckedAWSException {
+        makePublic(this.latestVersionId());
+    }
+
+    /**
+     * Makes the feed source's specified version have public access on AWS S3.
+     */
+    public void makePublic(String versionId) throws CheckedAWSException {
         String sourceKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + this.id + ".zip";
         String publicKey = toPublicKey();
-        String versionId = this.latestVersionId();
         String latestVersionKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + versionId;
 
         // Copy, forever, the latest stored version to the public folder, regardless of

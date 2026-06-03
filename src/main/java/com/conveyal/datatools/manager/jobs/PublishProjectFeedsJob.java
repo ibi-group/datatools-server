@@ -3,9 +3,11 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.math3.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,36 +63,41 @@ public class PublishProjectFeedsJob extends MonitorableJob {
         r.append("<ul>\n");
         status.update("Ensuring public GTFS files are up-to-date.", 50);
         project.retrieveProjectFeedSources().stream()
-                .filter(fs -> fs.isPublic && fs.retrieveLatest() != null)
-                .forEach(fs -> {
-                    // generate list item for feed source
-                    String url;
-                    if (fs.url != null && !hasConfigProperty("modules.enterprise.prefer_s3_links")) {
-                        url = fs.url.toString();
+            .filter(fs -> fs.isPublic)
+            // Store latest version id, so we don't have to fetch it again in the forEach stage.
+            .map(fs -> new Pair<FeedSource, String>(fs, fs.latestVersionId()) {})
+            .filter(p -> p.getValue() != null)
+            .forEach(p -> {
+                // generate list item for feed source
+                FeedSource fs = p.getKey();
+                String latestVersionId = p.getValue();
+                String url;
+                if (fs.url != null && !hasConfigProperty("modules.enterprise.prefer_s3_links")) {
+                    url = fs.url.toString();
+                }
+                else {
+                    // ensure latest feed is written to the s3 public folder
+                    try {
+                        fs.makePublic(latestVersionId);
+                    } catch (Exception e) {
+                        status.fail("Failed to make GTFS files public on S3", e);
+                        return;
                     }
-                    else {
-                        // ensure latest feed is written to the s3 public folder
-                        try {
-                            fs.makePublic();
-                        } catch (Exception e) {
-                            status.fail("Failed to make GTFS files public on S3", e);
-                            return;
-                        }
-                        url = S3Utils.getDefaultBucketUrlForKey(fs.toPublicKey());
-                    }
-                    r.append("<li>");
-                    r.append("<a href=\"" + url + "\">");
-                    r.append(fs.name);
-                    r.append("</a>");
-                    r.append(" (");
-                    if (fs.url != null && fs.lastFetched != null) {
-                        r.append("last checked: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastFetched) + ", ");
-                    }
-                    if (fs.lastUpdated() != null) {
-                        r.append("last updated: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastUpdated()) + ")");
-                    }
-                    r.append("</li>");
-        });
+                    url = S3Utils.getDefaultBucketUrlForKey(fs.toPublicKey());
+                }
+                r.append("<li>");
+                r.append("<a href=\"" + url + "\">");
+                r.append(fs.name);
+                r.append("</a>");
+                r.append(" (");
+                if (fs.url != null && fs.lastFetched != null) {
+                    r.append("last checked: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastFetched) + ", ");
+                }
+                if (fs.lastUpdated() != null) {
+                    r.append("last updated: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastUpdated()) + ")");
+                }
+                r.append("</li>");
+            });
         r.append("</ul>");
         r.append("</body>");
         r.append("</html>");
