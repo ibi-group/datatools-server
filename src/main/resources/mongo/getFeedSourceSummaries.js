@@ -6,6 +6,7 @@ db.getCollection('FeedSource').aggregate([
         }
     },
     {
+        // FeedSource fields to include
         $project: {
             "_id": 1,
             "name": 1,
