@@ -448,7 +448,7 @@ public class FeedUpdater {
     /**
      * Implements the default behavior for above interface.
      * This method uses extensions.mtc.s3_credentials_file and s3_region, if populated,
-     * and falls back to .
+     * and falls back to the application's S3 credentials and region otherwise.
      */
     public class DefaultCompletedFeedRetriever implements CompletedFeedRetriever {
         @Override

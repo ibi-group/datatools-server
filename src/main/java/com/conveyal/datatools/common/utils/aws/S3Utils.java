@@ -127,7 +127,7 @@ public class S3Utils {
             s3client = builder.build();
         } catch (Exception e) {
             LOG.error(
-                "S3 client not initialized correctly.  Must provide config property {} or specify region in ~/.aws/config",
+                "S3 client not initialized correctly. Must provide config property {} or specify region in ~/.aws/config",
                 configRegions,
                 e
             );
