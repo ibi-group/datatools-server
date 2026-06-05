@@ -47,21 +47,23 @@ public class PublishProjectFeedsJob extends MonitorableJob {
         r.append("<!DOCTYPE html>\n");
         r.append("<html>\n");
         r.append("<head>\n");
-        r.append("<title>" + title + "</title>\n");
-        r.append("<style type=\"text/css\">\n" +
-                "        body { font-family: arial,helvetica,clean,sans-serif; font-size: 12px }\n" +
-                "        h1 { font-size: 18px }\n" +
-                "    </style>");
+        r.append("<title>").append(title).append("</title>\n");
+        r.append("<style type=\"text/css\">\n");
+        r.append("        body { font-family: arial,helvetica,clean,sans-serif; font-size: 12px }\n");
+        r.append("        h1 { font-size: 18px }\n");
+        r.append("    </style>");
 
         r.append("</head>\n");
         r.append("<body>\n");
-        r.append("<h1>" + title + "</h1>\n");
+        r.append("<h1>").append(title).append("</h1>\n");
         r.append("The following feeds, in GTFS format, are available for download and use.\n");
         if (dataSupportEmail != null) {
             r.append(String.format("If you have inquiries, please contact us at: <a href=\"mailto:%1$s\">%1$s</a>", dataSupportEmail));
         }
         r.append("<ul>\n");
         status.update("Ensuring public GTFS files are up-to-date.", 50);
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy");
         project.retrieveProjectFeedSources().stream()
             .filter(fs -> fs.isPublic)
             // Store latest version id, so we don't have to fetch it again in the forEach stage.
@@ -86,15 +88,15 @@ public class PublishProjectFeedsJob extends MonitorableJob {
                     url = S3Utils.getDefaultBucketUrlForKey(fs.toPublicKey());
                 }
                 r.append("<li>");
-                r.append("<a href=\"" + url + "\">");
+                r.append("<a href=\"").append(url).append("\">");
                 r.append(fs.name);
                 r.append("</a>");
                 r.append(" (");
                 if (fs.url != null && fs.lastFetched != null) {
-                    r.append("last checked: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastFetched) + ", ");
+                    r.append("last checked: ").append(dateFormat.format(fs.lastFetched)).append(", ");
                 }
                 if (fs.lastUpdated() != null) {
-                    r.append("last updated: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastUpdated()) + ")");
+                    r.append("last updated: ").append(dateFormat.format(fs.lastUpdated())).append(")");
                 }
                 r.append("</li>");
             });
