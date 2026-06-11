@@ -5,7 +5,7 @@ import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
-import com.conveyal.datatools.common.utils.aws.S3Utils;
+import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -406,7 +406,7 @@ public class FeedUpdater {
     ) throws AmazonServiceException, IOException, CheckedAWSException {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
-        S3Object object = S3Utils.getDefaultS3Client().getObject(feedBucket, keyName);
+        S3Object object = MtcFeedResource.getS3Client().getObject(feedBucket, keyName);
         File file = new File(FeedStore.basePath, filename);
         try (
             InputStream in = object.getObjectContent();
@@ -447,17 +447,14 @@ public class FeedUpdater {
 
     /**
      * Implements the default behavior for above interface.
+     * This method uses extensions.mtc.s3_credentials_file and s3_region, if populated,
+     * and falls back to the application's S3 credentials and region otherwise.
      */
     public class DefaultCompletedFeedRetriever implements CompletedFeedRetriever {
         @Override
         public List<S3ObjectSummary> retrieveCompletedFeeds() {
-            try {
-                ObjectListing gtfsList = S3Utils.getDefaultS3Client().listObjects(feedBucket, bucketFolder);
-                return gtfsList.getObjectSummaries();
-            } catch (CheckedAWSException e) {
-                LOG.error("Failed to list S3 Objects", e);
-                return null;
-            }
+            ObjectListing gtfsList = MtcFeedResource.getS3Client().listObjects(feedBucket, bucketFolder);
+            return gtfsList.getObjectSummaries();
         }
     }
 }
