@@ -87,6 +87,8 @@ public class FeedSourceSummary {
 
     public FeedValidationResultSummary publishedValidationSummary;
 
+    public String publishedVersionId;
+
     public PublishState publishState;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -113,6 +115,7 @@ public class FeedSourceSummary {
         // Convert to local date type for consistency.
         lastUpdated = getLocalDateFromDate(feedSourceDocument.getDate("lastUpdated"));
         url = feedSourceDocument.getString("url");
+        publishedVersionId = feedSourceDocument.getString("publishedVersionId");
         // Get optional filename.
         filename = feedSourceDocument.getString("filename");
         // Optional external properties, if enabled by config.
@@ -180,7 +183,8 @@ public class FeedSourceSummary {
                     "labelIds",
                     "url",
                     "filename",
-                    "noteIds"
+                    "noteIds",
+                    "publishedVersionId"
                 )
             ),
             sort(Sorts.ascending("name"))
