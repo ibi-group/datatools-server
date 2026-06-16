@@ -252,7 +252,7 @@ public class DataManager {
                 String extensionFeedBucket = getExtensionPropertyAsText(extensionType, "s3_bucket");
                 String extensionBucketFolder = getExtensionPropertyAsText(extensionType, "s3_download_prefix");
                 int updateFrequency = getConfigProperty("modules.gtfsapi.update_frequency").asInt();
-                if (S3Utils.DEFAULT_BUCKET != null && extensionBucketFolder != null) {
+                if (extensionFeedBucket != null && extensionBucketFolder != null) {
                     FeedUpdater.schedule(updateFrequency, extensionFeedBucket, extensionBucketFolder);
                 }
                 else LOG.warn("FeedUpdater not initialized. S3 bucket and folder not provided.");

@@ -1,7 +1,12 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
@@ -14,6 +19,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -26,6 +32,9 @@ import java.util.Date;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.parseJson;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
+import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.CONFIG_MTC_CREDENTIALS;
+import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.CONFIG_MTC_REGION;
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.STOP_CODE_PRIMARY_PREFIX_FIELD_NAME;
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME;
 import static com.conveyal.gtfs.error.NewGTFSErrorType.MISSING_STOP_CODE_PREFIX;
@@ -41,12 +50,16 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MtcFeedResourceTest extends UnitTest {
     private static Project project;
     private static FeedSource feedSource;
     private static WireMockServer wireMockServer;
+    private static String defaultMtcAwsCredentials;
+    private static String defaultMtcAwsRegion;
 
     private static final String AGENCY_CODE = "DE";
 
@@ -61,6 +74,8 @@ class MtcFeedResourceTest extends UnitTest {
         // Enable MTC extension, but disable the transformations.
         ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = false;
         DatatoolsTest.enableMTCExtension();
+        defaultMtcAwsCredentials = getConfigPropertyAsText(CONFIG_MTC_CREDENTIALS);
+        defaultMtcAwsRegion = getConfigPropertyAsText(CONFIG_MTC_REGION);
 
         Auth0Connection.setAuthDisabled(true);
         // Create a project, feed sources.
@@ -89,6 +104,16 @@ class MtcFeedResourceTest extends UnitTest {
         }
         DatatoolsTest.resetMTCExtension();
         ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = true;
+    }
+
+    @AfterEach
+    void resetState() {
+        DataManager.overrideConfigProperty(CONFIG_MTC_CREDENTIALS, defaultMtcAwsCredentials);
+
+        String currentMtcRegion = getConfigPropertyAsText(CONFIG_MTC_REGION);
+        if (currentMtcRegion != null && !currentMtcRegion.equals(defaultMtcAwsRegion)) {
+            DataManager.overrideConfigProperty(CONFIG_MTC_REGION, defaultMtcAwsRegion);
+        }
     }
 
     @Test
@@ -234,5 +259,30 @@ class MtcFeedResourceTest extends UnitTest {
         assertTrue(
             carrier.toJson().contains(String.format(",\"AgencyAddress\":%s,", jsonAddress))
         );
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void canUseCorrectMtcCredentials(boolean overwriteDefaults) {
+        if (overwriteDefaults) {
+            DataManager.overrideConfigProperty(CONFIG_MTC_REGION, "us-west-2");
+            String credentialsFile = TestUtils.class.getResource("mock-aws-credentials").getFile();
+            DataManager.overrideConfigProperty(CONFIG_MTC_CREDENTIALS, credentialsFile);
+        }
+
+        S3Utils.S3Wrapper s3wrapper = MtcFeedResource.getS3Wrapper();
+        assertNotNull(s3wrapper);
+
+        // Either application.data.s3_region or extensions.mtc.s3_region from server.yml.tmp.
+        assertEquals(overwriteDefaults ? "us-west-2" : "us-east-1", s3wrapper.s3Client.getRegion().toAWSRegion().getName());
+
+        // The credentials should reflect the content in the mock-aws-credentials file referenced above.
+        if (overwriteDefaults) {
+            AWSCredentials credentials = s3wrapper.credentials.getCredentials();
+            assertEquals("mock-id-123", credentials.getAWSAccessKeyId());
+            assertEquals("mock-secret-123", credentials.getAWSSecretKey());
+        } else {
+            assertEquals(DefaultAWSCredentialsProviderChain.class, s3wrapper.credentials.getClass());
+        }
     }
 }
