@@ -88,7 +88,16 @@ class SqlSchemaUpdaterTest extends UnitTest {
             // Some tables are missing from the feed and should be flagged.
             assertTrue(namespaceCheck.missingTables.containsAll(Lists.newArrayList(
                 Table.SCHEDULE_EXCEPTIONS,
+                Table.TIME_FRAMES,
+                Table.FARE_MEDIAS,
+                Table.FARE_PRODUCTS,
+                Table.NETWORKS,
+                Table.FARE_LEG_RULES,
+                Table.FARE_TRANSFER_RULES,
                 Table.FEED_INFO,
+                Table.AREAS,
+                Table.RIDER_CATEGORIES,
+                Table.FARE_LEG_JOIN_RULES,
                 Table.TRANSFERS,
                 Table.FREQUENCIES,
                 Table.ATTRIBUTIONS,

@@ -33,7 +33,7 @@ modules:
   gtfsapi:
     enabled: true
     load_on_fetch: false
-    # use_extension: mtc
+    use_extension: mtc
     # update_frequency: 30 # in seconds
   manager:
     normalizeFieldTransformation:
@@ -74,8 +74,12 @@ extensions:
     enabled: true
     rtd_api: http://localhost:9876/
     s3_bucket: bucket-name
+    ### Uncomment and edit if the S3 region of the bucket above is different than application.data.s3_region.
+    # s3_region: us-west-2
     s3_prefix: waiting/
     s3_download_prefix: waiting/
+    ### Uncomment and edit if separate credentials are needed to access the bucket above.
+    # s3_credentials_file: ~/.aws/credentials
   transitland:
     enabled: true
     api: https://transit.land/api/v1/feeds
