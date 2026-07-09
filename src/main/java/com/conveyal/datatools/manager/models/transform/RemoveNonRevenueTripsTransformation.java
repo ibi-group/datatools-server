@@ -231,7 +231,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     private boolean isRevenuePickupDropOff(CsvReader csvReader, Map<String, Integer> fieldIndexes) throws IOException {
         String pickup = csvReader.get(fieldIndexes.get(PICKUP_FIELD_NAME));
         String dropOff = csvReader.get(fieldIndexes.get(DROP_OFF_FIELD_NAME));
-        return !"1".equals(pickup) && !"1".equals(dropOff);
+        return !"1".equals(pickup) || !"1".equals(dropOff);
     }
 
     /**
