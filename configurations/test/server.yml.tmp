@@ -33,7 +33,7 @@ modules:
   gtfsapi:
     enabled: true
     load_on_fetch: false
-    # use_extension: mtc
+    use_extension: mtc
     # update_frequency: 30 # in seconds
   manager:
     normalizeFieldTransformation:
