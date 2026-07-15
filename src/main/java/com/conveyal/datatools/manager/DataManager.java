@@ -209,25 +209,36 @@ public class DataManager {
             SnapshotController.register(EDITOR_API_PREFIX);
             EditorLockController.register(EDITOR_API_PREFIX);
 
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.AREAS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ATTRIBUTIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
             // NOTE: fare_attributes controller handles updates to nested table fare_rules.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_LEG_JOIN_RULES, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_LEG_RULES, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_MEDIAS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_PRODUCTS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_TRANSFER_RULES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
+
             // NOTE: Booking rules, locations and location shapes are GTFS Flex additions.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.BOOKING_RULES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_GROUP, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_GROUP_STOPS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_SHAPES, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.NETWORKS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.RIDER_CATEGORIES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
             // NOTE: Patterns controller handles updates to nested tables shapes, pattern stops, and frequencies.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.PATTERNS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.SCHEDULE_EXCEPTIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.TIME_FRAMES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRANSLATIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
+
             // TODO: Add transfers.txt controller?
         }
 
@@ -248,7 +259,7 @@ public class DataManager {
                 String extensionFeedBucket = getExtensionPropertyAsText(extensionType, "s3_bucket");
                 String extensionBucketFolder = getExtensionPropertyAsText(extensionType, "s3_download_prefix");
                 int updateFrequency = getConfigProperty("modules.gtfsapi.update_frequency").asInt();
-                if (S3Utils.DEFAULT_BUCKET != null && extensionBucketFolder != null) {
+                if (extensionFeedBucket != null && extensionBucketFolder != null) {
                     FeedUpdater.schedule(updateFrequency, extensionFeedBucket, extensionBucketFolder);
                 }
                 else LOG.warn("FeedUpdater not initialized. S3 bucket and folder not provided.");

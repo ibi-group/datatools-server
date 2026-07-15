@@ -15,7 +15,8 @@ db.getCollection('FeedSource').aggregate([
             "labelIds": 1,
             "url": 1,
             "filename": 1,
-            "noteIds": 1
+            "noteIds": 1,
+            "publishedVersionId": 1
         }
     },
     {

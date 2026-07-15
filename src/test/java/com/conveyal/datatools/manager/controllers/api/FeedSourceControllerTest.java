@@ -11,6 +11,7 @@ import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedSourceSummary;
+import com.conveyal.datatools.manager.models.FeedValidationResultSummary;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.FeedVersionSummary;
 import com.conveyal.datatools.manager.models.FetchFrequency;
@@ -148,8 +149,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         feedVersionPublishedFromLatestDeployment = createFeedVersion(
             "published-feed-version-from-latest-deployment",
-            // Set to null so the relationship to feed source is via the published version id.
-            null,
+            feedSourceWithLatestDeploymentFeedVersion.id,
             LocalDate.of(2022, Month.NOVEMBER, 2),
             LocalDate.of(2022, Month.NOVEMBER, 3),
             feedSourceWithLatestDeploymentFeedVersion.publishedVersionId,
@@ -375,25 +375,28 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             );
 
         assertNotNull(feedSourceSummaries);
-        assertEquals(feedSourceWithLatestDeploymentFeedVersion.id, feedSourceSummaries.get(0).id);
-        assertEquals(feedSourceWithLatestDeploymentFeedVersion.projectId, feedSourceSummaries.get(0).projectId);
-        assertEquals(feedSourceWithLatestDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
-        assertEquals(feedSourceWithLatestDeploymentFeedVersion.url.toString(), feedSourceSummaries.get(0).url);
-        assertEquals(feedSourceWithLatestDeploymentFeedVersion.noteIds, feedSourceSummaries.get(0).noteIds);
-        assertEquals(feedSourceWithLatestDeploymentFeedVersion.organizationId(), feedSourceSummaries.get(0).organizationId);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.id, feedSourceSummaries.get(0).deployedFeedVersionId);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().errorCount, feedSourceSummaries.get(0).deployedFeedVersionIssues);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.id, feedSourceSummaries.get(0).latestValidation.feedVersionId);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.startDate);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.endDate);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
-        assertEquals(PublishState.PUBLISH_BLOCKED, feedSourceSummaries.get(0).publishState);
-        assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.errorCount, feedSourceSummaries.get(0).publishedValidationSummary.errorCount);
-        assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.firstCalendarDate, feedSourceSummaries.get(0).publishedValidationSummary.startDate);
-        assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.lastCalendarDate, feedSourceSummaries.get(0).publishedValidationSummary.endDate);
+        FeedSourceSummary firstSummary = feedSourceSummaries.get(0);
+        FeedValidationResultSummary expectedValidationSummary = feedVersionFromLatestDeploymentVersion2.validationSummary();
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.id, firstSummary.id);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.projectId, firstSummary.projectId);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.labelIds, firstSummary.labelIds);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.url.toString(), firstSummary.url);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.noteIds, firstSummary.noteIds);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.organizationId(), firstSummary.organizationId);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.id, firstSummary.deployedFeedVersionId);
+        assertEquals(expectedValidationSummary.startDate, firstSummary.deployedFeedVersionStartDate);
+        assertEquals(expectedValidationSummary.endDate, firstSummary.deployedFeedVersionEndDate);
+        assertEquals(expectedValidationSummary.errorCount, firstSummary.deployedFeedVersionIssues);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.id, firstSummary.latestValidation.feedVersionId);
+        assertEquals(expectedValidationSummary.startDate, firstSummary.latestValidation.startDate);
+        assertEquals(expectedValidationSummary.endDate, firstSummary.latestValidation.endDate);
+        assertEquals(expectedValidationSummary.errorCount, firstSummary.latestValidation.errorCount);
+        assertEquals(feedVersionFromLatestDeploymentVersion2.sentToExternalPublisher, firstSummary.latestSentToExternalPublisher);
+        assertEquals(PublishState.PUBLISH_BLOCKED, firstSummary.publishState);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.publishedVersionId, firstSummary.publishedVersionId);
+        assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.errorCount, firstSummary.publishedValidationSummary.errorCount);
+        assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.firstCalendarDate, firstSummary.publishedValidationSummary.startDate);
+        assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.lastCalendarDate, firstSummary.publishedValidationSummary.endDate);
     }
 
     @Test
@@ -414,22 +417,26 @@ public class FeedSourceControllerTest extends DatatoolsTest {
                 FeedSourceSummary.class
             );
         assertNotNull(feedSourceSummaries);
-        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.id, feedSourceSummaries.get(0).id);
-        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.projectId, feedSourceSummaries.get(0).projectId);
-        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
-        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.url.toString(), feedSourceSummaries.get(0).url);
-        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.noteIds, feedSourceSummaries.get(0).noteIds);
-        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.organizationId(), feedSourceSummaries.get(0).organizationId);
-        assertEquals(feedVersionFromPinnedDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
-        assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
-        assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
-        assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).deployedFeedVersionIssues);
-        assertEquals(feedVersionFromPinnedDeployment.id, feedSourceSummaries.get(0).latestValidation.feedVersionId);
-        assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.startDate);
-        assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.endDate);
-        assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.errorCount);
-        assertEquals(feedVersionFromPinnedDeployment.sentToExternalPublisher, feedSourceSummaries.get(0).latestSentToExternalPublisher);
-        assertEquals(PublishState.PUBLISH_BLOCKED, feedSourceSummaries.get(0).publishState);
+        FeedSourceSummary firstSummary = feedSourceSummaries.get(0);
+        FeedValidationResultSummary expectedValidationSummary = feedVersionFromPinnedDeployment.validationSummary();
+
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.id, firstSummary.id);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.projectId, firstSummary.projectId);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.labelIds, firstSummary.labelIds);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.url.toString(), firstSummary.url);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.noteIds, firstSummary.noteIds);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.organizationId(), firstSummary.organizationId);
+        assertEquals(feedVersionFromPinnedDeployment.id, firstSummary.deployedFeedVersionId);
+        assertEquals(expectedValidationSummary.startDate, firstSummary.deployedFeedVersionStartDate);
+        assertEquals(expectedValidationSummary.endDate, firstSummary.deployedFeedVersionEndDate);
+        assertEquals(expectedValidationSummary.errorCount, firstSummary.deployedFeedVersionIssues);
+        assertEquals(feedVersionFromPinnedDeployment.id, firstSummary.latestValidation.feedVersionId);
+        assertEquals(expectedValidationSummary.startDate, firstSummary.latestValidation.startDate);
+        assertEquals(expectedValidationSummary.endDate, firstSummary.latestValidation.endDate);
+        assertEquals(expectedValidationSummary.errorCount, firstSummary.latestValidation.errorCount);
+        assertEquals(feedVersionFromPinnedDeployment.sentToExternalPublisher, firstSummary.latestSentToExternalPublisher);
+        assertEquals(PublishState.PUBLISH_BLOCKED, firstSummary.publishState);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.publishedVersionId, firstSummary.publishedVersionId);
     }
 
     @ParameterizedTest

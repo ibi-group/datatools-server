@@ -25,8 +25,10 @@ db.FeedSource.aggregate([
     {
         $lookup: {
             from: "FeedVersion",
-            let: { publishedVersionId: "$publishedVersionId" },
+            let: { feedSourceId: "$_id", publishedVersionId: "$publishedVersionId" },
             pipeline: [
+                // Filtering by feedSourceId helps by 100x when dealing with large number of feed versions.
+                { $match: { $expr: { $eq: ["$feedSourceId", "$$feedSourceId"] } } },
                 { $match: { $expr: { $eq: ["$namespace", "$$publishedVersionId"] } } },
                 { $limit: 1 },
                 { $project: { validationResult: 1 } }

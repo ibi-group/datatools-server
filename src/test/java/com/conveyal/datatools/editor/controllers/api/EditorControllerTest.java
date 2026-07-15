@@ -14,6 +14,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.restassured.http.Method;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -27,10 +28,13 @@ import spark.utils.IOUtils;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Date;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
+import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
+import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_DOMAIN;
 import static io.restassured.RestAssured.given;
@@ -45,8 +49,10 @@ public class EditorControllerTest extends UnitTest {
     private static Project project;
     private static FeedSource feedSource;
     private static FeedSource feedSourceCascadeDelete;
+    private static FeedSource faresV2FeedSource;
     private static FeedVersion feedVersion;
     private static FeedVersion feedVersionCascadeDelete;
+    private static FeedVersion faresV2Version;
     private static final ObjectMapper mapper = new ObjectMapper();
 
     /**
@@ -72,12 +78,18 @@ public class EditorControllerTest extends UnitTest {
         feedSourceCascadeDelete.projectId = project.id;
         Persistence.feedSources.create(feedSourceCascadeDelete);
 
+        faresV2FeedSource = new FeedSource("FaresV2");
+        faresV2FeedSource.projectId = project.id;
+        Persistence.feedSources.create(faresV2FeedSource);
+
         feedVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
         feedVersionCascadeDelete = createFeedVersionFromGtfsZip(feedSourceCascadeDelete, "bart_old.zip");
+        faresV2Version = createFeedVersion(faresV2FeedSource, zipFolderFiles("fake-agency-with-fares-v2"));
 
         // Create and run snapshot jobs
-        crateAndRunSnapshotJob(feedVersion.name, feedSource.id, feedVersion.namespace);
-        crateAndRunSnapshotJob(feedVersionCascadeDelete.name, feedSourceCascadeDelete.id, feedVersionCascadeDelete.namespace);
+        createAndRunSnapshotJob(feedVersion.name, feedSource.id, feedVersion.namespace);
+        createAndRunSnapshotJob(feedVersionCascadeDelete.name, feedSourceCascadeDelete.id, feedVersionCascadeDelete.namespace);
+        createAndRunSnapshotJob(faresV2Version.name, faresV2FeedSource.id, faresV2Version.namespace);
         LOG.info("{} setup completed in {} ms", EditorControllerTest.class.getSimpleName(), System.currentTimeMillis() - startTime);
     }
 
@@ -86,15 +98,22 @@ public class EditorControllerTest extends UnitTest {
         project.delete();
         feedSource.delete();
         feedSourceCascadeDelete.delete();
+        faresV2FeedSource.delete();
     }
 
     /**
      * Create and run a snapshot job in the current thread (so tests do not run until this is complete).
      */
-    private static void crateAndRunSnapshotJob(String feedVersionName, String feedSourceId, String namespace) {
+    private static void createAndRunSnapshotJob(String feedVersionName, String feedSourceId, String namespace) {
         Snapshot snapshot = new Snapshot("Snapshot of " + feedVersionName, feedSourceId, namespace);
         CreateSnapshotJob createSnapshotJob =
-            new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
+            new CreateSnapshotJob(
+                Auth0UserProfile.createTestAdminUser(),
+                snapshot,
+                true,
+                false,
+                false
+            );
         createSnapshotJob.run();
     }
 
@@ -111,14 +130,7 @@ public class EditorControllerTest extends UnitTest {
      */
     @ParameterizedTest
     @MethodSource("createPatchTableTests")
-    public void canPatchTableTests(
-        String field,
-        String entity,
-        int expectedCount,
-        String graphQLQueryFile,
-        String table
-    ) throws IOException {
-
+    void canPatchTableTests(String field, String entity, int expectedCount, String graphQLQueryFile, String table) throws IOException {
         LOG.info("Making patch {} request", table);
         String value = "NEW";
         ObjectNode jsonBody = mapper.createObjectNode();
@@ -138,7 +150,7 @@ public class EditorControllerTest extends UnitTest {
      * Make sure the patch table endpoint can patch stops conditionally with query.
      */
     @Test
-    public void canPatchStopsConditionally() throws IOException {
+    void canPatchStopsConditionally() throws IOException {
         LOG.info("Making conditional patch stops request");
         ObjectNode jsonBody = mapper.createObjectNode();
         String field = "stop_desc";
@@ -187,13 +199,7 @@ public class EditorControllerTest extends UnitTest {
             stopId,
             feedVersionCascadeDelete.feedSourceId
         );
-        String response = given()
-            .port(DataManager.PORT)
-            .delete(path)
-            .then()
-            .extract()
-            .response()
-            .asString();
+        String response = makeRequest(Method.DELETE, path, "");
         JsonNode json = mapper.readTree(response);
         assertEquals(OK_200, json.get("code").asInt());
 
@@ -204,20 +210,64 @@ public class EditorControllerTest extends UnitTest {
     }
 
     /**
-     * Perform patch table request on the feed source ID with the requested query and patch JSON. A null query will
-     * apply the patch JSON to the entire table.
+     * Confirm that a fare product can be created, updated and deleted.
      */
-    private static int patchTableRequest(String entity, String feedId, String query, JsonNode oatchJSON) throws IOException {
-        String path = String.format("/api/editor/secure/%s?feedId=%s", entity, feedId);
-        if (query != null) path += "&" + query;
-        String response = given()
+    @Test
+    void canCreateUpdateAndDeleteFareProduct() throws IOException {
+        String fareProductId = "AERIAL_TRAM_ROUND_TRIP";
+        String fareProductIdUpdated = "AERIAL_TRAM_ROUND_TRIP_UPDATED";
+        String urlPrefix = "/api/editor/secure/fareproduct";
+        String urlSuffix = String.format("?feedId=%s&sessionId=test", faresV2Version.feedSourceId);
+        String payload =
+            "{" +
+                "\"fare_product_id\":\"" + fareProductId + "\"," +
+                "\"fare_product_name\":\"Portland Aerial Tram Single Round Trip\"," +
+                "\"rider_category_id\":\"HONORED_CITIZEN\"," +
+                "\"fare_media_id\":\"1\"," +
+                "\"amount\":\"13.5\"," +
+                "\"currency\":\"USD\"" +
+            "}";
+
+        // Create.
+        String response = makeRequest(Method.POST, String.format("%s%s", urlPrefix, urlSuffix), payload);
+        JsonNode json = mapper.readTree(response);
+        String id = json.get("id").asText();
+        assertEquals(fareProductId, json.get("fare_product_id").asText());
+
+        // Update.
+        payload = payload.replace(fareProductId, fareProductIdUpdated);
+        response = makeRequest(Method.PUT, String.format("%s/%s%s", urlPrefix, id, urlSuffix), payload);
+        json = mapper.readTree(response);
+        assertEquals(fareProductIdUpdated, json.get("fare_product_id").asText());
+
+        // Delete.
+        response = makeRequest(Method.DELETE, String.format("%s/%s%s", urlPrefix, id, urlSuffix), "");
+        json = mapper.readTree(response);
+        assertEquals(200, json.get("code").asInt());
+    }
+
+    /**
+     * Make request and return the response.
+     */
+    private static String makeRequest(Method method, String path, Object payload) {
+        return given()
             .port(DataManager.PORT)
-            .body(oatchJSON)
-            .patch(path)
+            .body(payload)
+            .request(method, path)
             .then()
             .extract()
             .response()
             .asString();
+    }
+
+    /**
+     * Perform patch table request on the feed source ID with the requested query and patch JSON. A null query will
+     * apply the patch JSON to the entire table.
+     */
+    private static int patchTableRequest(String entity, String feedId, String query, JsonNode patchJSON) throws IOException {
+        String path = String.format("/api/editor/secure/%s?feedId=%s", entity, feedId);
+        if (query != null) path += "&" + query;
+        String response = makeRequest(Method.PATCH, path, patchJSON);
         JsonNode json = mapper.readTree(response);
         return json.get("count").asInt();
     }
@@ -230,16 +280,9 @@ public class EditorControllerTest extends UnitTest {
         ObjectNode variables = mapper.createObjectNode();
         variables.put("namespace", namespace);
         graphQLBody.set("variables", variables);
-        String query = IOUtils.toString(EditorControllerTest.class.getClassLoader().getResourceAsStream(graphQLQueryFile));
+        String query = IOUtils.toString(Objects.requireNonNull(EditorControllerTest.class.getClassLoader().getResourceAsStream(graphQLQueryFile)));
         graphQLBody.put("query", query);
-        String graphQLString = given()
-            .port(DataManager.PORT)
-            .body(graphQLBody)
-            .post("api/manager/secure/gtfs/graphql")
-            .then()
-            .extract()
-            .response()
-            .asString();
+        String graphQLString = makeRequest(Method.POST, "api/manager/secure/gtfs/graphql", graphQLBody);
         return mapper.readTree(graphQLString);
     }
 

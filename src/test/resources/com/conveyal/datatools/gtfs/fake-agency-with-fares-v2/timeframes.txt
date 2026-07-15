@@ -1,0 +1,8 @@
+timeframe_group_id,start_time,end_time,service_id
+timeframe_regular,,,04100312-8fe1-46a5-a9f2-556f39478f57
+timeframe_systemwide_free,,,04100312-8fe1-46a5-a9f2-556f39478f57
+timeframe_sumner_tunnel_closure,,,04100312-8fe1-46a5-a9f2-556f39478f57
+timeframe_sumner_tunnel_closure,00:00:00,02:30:00,04100312-8fe1-46a5-a9f2-556f39478f57
+timeframe_regular,02:30:00,24:00:00,04100312-8fe1-46a5-a9f2-556f39478f57
+timeframe_alewife_kendall_surge,,,04100312-8fe1-46a5-a9f2-556f39478f57
+timeframe_alewife_kendall_surge,00:00:00,02:30:00,04100312-8fe1-46a5-a9f2-556f39478f57

@@ -1,0 +1,5 @@
+fare_media_id,fare_media_name,fare_media_type
+cash,Cash,0
+credit_debit,Credit/debit card,0
+charlieticket,CharlieTicket,1
+mticket,mTicket app,4
