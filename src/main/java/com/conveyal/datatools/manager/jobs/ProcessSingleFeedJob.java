@@ -133,7 +133,9 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
         addNextJob(new ValidateFeedJob(feedVersion, owner, isNewVersion));
         if (ENABLE_ADDITIONAL_VALIDATION) {
             addNextJob(new ValidateMobilityDataFeedJob(feedVersion, owner, isNewVersion));
-            addNextJob(new ValidateGtfsPlusFeedJob(feedVersion, owner, isNewVersion));
+            if (DataManager.isModuleEnabled("gtfsplus")) {
+                addNextJob(new ValidateGtfsPlusFeedJob(feedVersion, owner, isNewVersion));
+            }
         }
 
         // We only need to snapshot the feed if there are transformations at the database level. In the case that there
