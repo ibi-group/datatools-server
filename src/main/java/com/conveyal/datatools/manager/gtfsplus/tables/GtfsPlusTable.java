@@ -97,7 +97,7 @@ public class GtfsPlusTable {
         DIRECTIONS,
         STOP_ATTRIBUTES,
         TIMEPOINTS,
-        RIDER_CATEGORIES,
+        // RIDER_CATEGORIES is now part of Fares V2 in the GTFS spec.
         FARE_RIDER_CATEGORIES,
         CALENDAR_ATTRIBUTES,
         FAREZONE_ATTRIBUTES,
