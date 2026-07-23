@@ -107,15 +107,16 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
         return Stream.of(
             Arguments.of(
                 List.of(
-                    "non-revenue-trip1,1,",
                     "non-revenue-trip1,1,1",
                     "non-revenue-trip1,1,1",
-                    "non-revenue-trip1,1,"
+                    "non-revenue-trip1,1,1",
+                    "non-revenue-trip1,1,1"
                 ),
                 List.of(
                     "revenue-trip,0,0",
                     "revenue-trip,1,1",
-                    "revenue-trip,1,1",
+                    "revenue-trip,2,1",
+                    "revenue-trip,1,2",
                     "revenue-trip,0,0"
                 ),
                 fieldIndexes
@@ -131,8 +132,8 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
                 List.of(
                     "revenue-trip,0,0,2,2",
                     "revenue-trip,0,0,1,1",
-                    "revenue-trip,0,0,2,2",
-                    "revenue-trip,0,0,2,2"
+                    "revenue-trip,0,0,2,1",
+                    "revenue-trip,0,0,1,2"
                 ),
                 allFieldIndexes
             )

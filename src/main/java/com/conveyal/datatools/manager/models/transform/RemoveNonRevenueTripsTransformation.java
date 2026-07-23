@@ -95,21 +95,27 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
                 LOG.warn("No revenue trips! All trips and related stop times will be removed.");
             }
 
-            writeToFile(
-                zipTarget,
-                "stop_times.txt",
-                revenueStopTimes.getStopTimeRows().values().stream().flatMap(List::stream).collect(Collectors.toList()),
-                headersForStopTime,
-                revenueStopTimes.getDeletedRowCount()
-            );
+            // Only update tables and report change if rows are removed.
 
-            writeToFile(
-                zipTarget,
-                "trips.txt",
-                revenueTrips.tripRows,
-                headersForTrips,
-                revenueTrips.getDeletedRowCount()
-            );
+            if (revenueStopTimes.getDeletedRowCount() != 0) {
+                writeToFile(
+                    zipTarget,
+                    "stop_times.txt",
+                    revenueStopTimes.getStopTimeRows().values().stream().flatMap(List::stream).collect(Collectors.toList()),
+                    headersForStopTime,
+                    revenueStopTimes.getDeletedRowCount()
+                );
+            }
+
+            if (revenueTrips.getDeletedRowCount() != 0) {
+                writeToFile(
+                    zipTarget,
+                    "trips.txt",
+                    revenueTrips.tripRows,
+                    headersForTrips,
+                    revenueTrips.getDeletedRowCount()
+                );
+            }
         } catch (Exception e) {
             LOG.error("Unknown error encountered while attempting to remove non revenue trip from zip file.", e);
         }
@@ -231,7 +237,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     private boolean isRevenuePickupDropOff(CsvReader csvReader, Map<String, Integer> fieldIndexes) throws IOException {
         String pickup = csvReader.get(fieldIndexes.get(PICKUP_FIELD_NAME));
         String dropOff = csvReader.get(fieldIndexes.get(DROP_OFF_FIELD_NAME));
-        return !"1".equals(pickup) && !"1".equals(dropOff);
+        return !"1".equals(pickup) || !"1".equals(dropOff);
     }
 
     /**
