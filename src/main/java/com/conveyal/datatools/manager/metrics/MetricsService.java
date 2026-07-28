@@ -2,7 +2,7 @@ package com.conveyal.datatools.manager.metrics;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.bson.Document;
@@ -36,11 +36,14 @@ public class MetricsService {
     private static final AtomicLong lastRefreshEpoch = new AtomicLong(0);
     private static final AtomicLong refreshFailures = new AtomicLong(0);
 
-    private static final ConcurrentMap<JobType, AtomicInteger> activeJobsByType = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<JobType, Counter> failedJobsByType = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<JobType, Counter> completedJobsByType = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<JobType, Timer> jobDurationByType = new ConcurrentHashMap<>();
+    private static Timer jobDuration;
 
     static {
         registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-        populateAndRegisterActiveJobsByType();
+        populateAndRegisterJobMetricsByType();
 
         new ClassLoaderMetrics().bindTo(registry);
         new JvmMemoryMetrics().bindTo(registry);
@@ -78,24 +81,30 @@ public class MetricsService {
             .register(registry);
     }
 
-    private static void populateAndRegisterActiveJobsByType() {
+    private static void populateAndRegisterJobMetricsByType() {
         for(JobType type : JobType.values()) {
-            activeJobsByType.put(type, new AtomicInteger());
-            Gauge.builder("datatools.jobs."+type.name()+".active",
-                    activeJobsByType.get(type),
-                    AtomicInteger::get)
-                .description("Number of active jobs of type "+type.name())
-                .strongReference(true)
-                .register(registry);
+            failedJobsByType.put(type, Counter.builder("datatools.jobs."+type.name()+".failed")
+                .description("Number of failed jobs of type "+type.name())
+                .register(registry));
+            completedJobsByType.put(type, Counter.builder("datatools.jobs."+type.name()+".completed")
+                .description("Number of completed jobs of type "+type.name())
+                .register(registry));
+            jobDurationByType.put(type, Timer.builder("datatools.jobs."+type.name()+".duration")
+                .description("Execution duration of jobs of type "+type.name())
+                .register(registry));
         }
 
-        Gauge.builder("datatools.jobs.active", activeJobsByType, map -> {
-                // Sum all values
-                return map.values().stream().mapToInt(AtomicInteger::get).sum();
-            })
-            .description("Currently active jobs")
+        Gauge.builder("datatools.jobs.failed", failedJobsByType,
+                map -> map.values().stream().mapToDouble(Counter::count).sum())
+            .description("Number of failed jobs")
             .register(registry);
-
+        Gauge.builder("datatools.jobs.completed", completedJobsByType,
+                map -> map.values().stream().mapToDouble(Counter::count).sum())
+            .description("Number of completed jobs")
+            .register(registry);
+        jobDuration = Timer.builder("datatools.jobs.duration")
+            .description("Job execution duration")
+            .register(registry);
     }
 
     public static PrometheusMeterRegistry registry() {
@@ -117,7 +126,10 @@ public class MetricsService {
     }
 
     public static void recordJobOutcome(JobType type, boolean error, long duration) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'recordJobOutcome'");
+        ConcurrentMap<JobType, Counter> outcomeCountersByType = error ? failedJobsByType : completedJobsByType;
+
+        outcomeCountersByType.get(type).increment();
+        jobDuration.record(duration, TimeUnit.MILLISECONDS);
+        jobDurationByType.get(type).record(duration, TimeUnit.MILLISECONDS);
     }
 }
