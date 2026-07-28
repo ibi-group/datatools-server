@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.bson.Document;
 
 import com.conveyal.datatools.common.status.MonitorableJob.JobType;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,6 +79,11 @@ public class MetricsService {
                     : (System.currentTimeMillis() - e.get()) / 1000.0)
             .description("Seconds since last inventory refresh")
             .strongReference(true)
+            .register(registry);
+        Gauge.builder("datatools.uptime.seconds",
+                DataManager.serverStartTime,
+                start -> (System.currentTimeMillis() - start) / 1000.0)
+            .description("Server uptime in seconds")
             .register(registry);
     }
 

@@ -71,6 +71,8 @@ public class DataManager {
     public static final String GTFS_PLUS_SUBDIR = "gtfsplus";
     private static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
+    public static long serverStartTime;
+
     // These fields hold YAML files that represent the server configuration.
     private static JsonNode envConfig;
     private static JsonNode serverConfig;
@@ -103,7 +105,7 @@ public class DataManager {
     public static final Map<String, RequestSummary> lastRequestForUser = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
-        long serverStartTime = System.currentTimeMillis();
+        serverStartTime = System.currentTimeMillis();
         initializeApplication(args);
 
         registerRoutes();
