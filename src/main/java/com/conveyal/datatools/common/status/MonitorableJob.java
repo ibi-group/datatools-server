@@ -1,6 +1,7 @@
 package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.metrics.MetricsService;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -215,6 +216,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         } finally {
             LOG.info("{} (jobId={}) {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
             active = false;
+            // Single hook point:
+            MetricsService.recordJobOutcome(type, status.error, status.duration);
         }
     }
 

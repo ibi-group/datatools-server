@@ -3,6 +3,7 @@ package com.conveyal.datatools.common.utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FeedExpirationNotificationJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
+import com.conveyal.datatools.manager.metrics.MetricsService;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -48,10 +49,20 @@ public class Scheduler {
     public final static ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources =
         synchronizedListMultimap(ArrayListMultimap.create());
 
+    // Use a separate thread to handle updating metrics inventory.
+    private static final ScheduledExecutorService metricsInventoryScheduler =
+        Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "metrics-refresh");
+            t.setDaemon(true);
+            return t;
+        });
+
+
     /**
      * A method to initialize all scheduled tasks upon server startup.
      */
     public static void initialize() {
+        startInventoryRefresh(5, TimeUnit.MINUTES);
         LOG.info("Scheduling recurring feed auto fetches for all projects.");
         for (Project project : Persistence.projects.getAll()) {
             handleAutoFeedFetch(project);
@@ -62,6 +73,17 @@ public class Scheduler {
             // Schedule expiration notification jobs for the latest feed version
             scheduleExpirationNotifications(feedSource);
         }
+    }
+
+    /**
+    * Schedules a task to refresh the metrics inventory on a regular interval
+    * @param period refresh interval
+    * @param unit unit for the refresh interval
+    */
+    public static void startInventoryRefresh(long period, TimeUnit unit) {
+        LOG.info("Creating a separate thread for refreshing metrics inventory.");
+        metricsInventoryScheduler.scheduleAtFixedRate(MetricsService::refreshInventory,
+            0, period, unit);
     }
 
     /**
