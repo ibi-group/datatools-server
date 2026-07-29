@@ -88,14 +88,14 @@ public class MetricsService {
 
     private static void populateAndRegisterJobMetricsByType() {
         for(JobType type : JobType.values()) {
-            failedJobsByType.put(type, Counter.builder("datatools.jobs."+type.name()+".failed")
-                .description("Number of failed jobs of type "+type.name())
+            failedJobsByType.put(type, Counter.builder(String.format("datatools.jobs.%s.failed", type.name()))
+                .description(String.format("Number of failed jobs of type %s", type.name()))
                 .register(registry));
-            completedJobsByType.put(type, Counter.builder("datatools.jobs."+type.name()+".completed")
-                .description("Number of completed jobs of type "+type.name())
+            completedJobsByType.put(type, Counter.builder(String.format("datatools.jobs.%s.completed", type.name()))
+                .description(String.format("Number of completed jobs of type %s", type.name()))
                 .register(registry));
-            jobDurationByType.put(type, Timer.builder("datatools.jobs."+type.name()+".duration")
-                .description("Execution duration of jobs of type "+type.name())
+            jobDurationByType.put(type, Timer.builder(String.format("datatools.jobs.%s.duration", type.name()))
+                .description(String.format("Execution duration of jobs of type %s", type.name()))
                 .register(registry));
         }
 
