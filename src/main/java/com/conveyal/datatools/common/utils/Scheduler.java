@@ -1,5 +1,6 @@
 package com.conveyal.datatools.common.utils;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FeedExpirationNotificationJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
@@ -62,7 +63,9 @@ public class Scheduler {
      * A method to initialize all scheduled tasks upon server startup.
      */
     public static void initialize() {
-        startInventoryRefresh(5, TimeUnit.MINUTES);
+        if(DataManager.isModuleEnabled("metrics")) {
+            startInventoryRefresh(5, TimeUnit.MINUTES);
+        }
         LOG.info("Scheduling recurring feed auto fetches for all projects.");
         for (Project project : Persistence.projects.getAll()) {
             handleAutoFeedFetch(project);
