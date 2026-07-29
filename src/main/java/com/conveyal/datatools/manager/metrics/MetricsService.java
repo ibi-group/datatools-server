@@ -35,7 +35,7 @@ public class MetricsService {
     private static final AtomicLong projectCount = new AtomicLong(0);
     private static final AtomicLong organizationCount = new AtomicLong(0);
     private static final AtomicLong lastRefreshEpoch = new AtomicLong(0);
-    private static final AtomicLong refreshFailures = new AtomicLong(0);
+    private static final Counter refreshFailures;
 
     private static final ConcurrentMap<JobType, Counter> failedJobsByType = new ConcurrentHashMap<>();
     private static final ConcurrentMap<JobType, Counter> completedJobsByType = new ConcurrentHashMap<>();
@@ -69,10 +69,6 @@ public class MetricsService {
             .description("Total number of Organizations")
             .strongReference(true)
             .register(registry);
-        Gauge.builder("datatools.inventory.refresh.failures", refreshFailures, AtomicLong::get)
-            .description("Total number of failed Refreshes")
-            .strongReference(true)
-            .register(registry);
         Gauge.builder("datatools.inventory.refresh.age.seconds",
                 lastRefreshEpoch, e -> e.get() == 0
                     ? Double.NaN
@@ -80,6 +76,9 @@ public class MetricsService {
             .description("Seconds since last inventory refresh")
             .strongReference(true)
             .register(registry);
+        refreshFailures = Counter.builder("datatools.inventory.refresh.failures")
+                .description("Total number of failed Refreshes")
+                .register(registry);
         Gauge.builder("datatools.uptime.seconds",
                 DataManager.serverStartTime,
                 start -> (System.currentTimeMillis() - start) / 1000.0)
@@ -126,7 +125,7 @@ public class MetricsService {
             organizationCount.set(Persistence.organizations.count(allDocuments));
             lastRefreshEpoch.set(System.currentTimeMillis());
         } catch (Exception e) {
-            refreshFailures.getAndIncrement();
+            refreshFailures.increment();
 			LOG.warn("Inventory refresh failed", e);
         }
     }
