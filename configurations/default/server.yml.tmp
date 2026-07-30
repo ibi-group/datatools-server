@@ -18,6 +18,9 @@ application:
 modules:
   metrics:
     enabled: true
+    # If set, this API key must be passed to access the /metrics endpoint.
+    # Pass via header "X-API-Key" or query parameter "api_key".
+    # api_key: your-secret-api-key
   enterprise:
     enabled: false
     # Setting this to true will upload all feeds to S3 instead of linking to their URL
