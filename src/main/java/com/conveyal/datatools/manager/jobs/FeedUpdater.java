@@ -40,6 +40,7 @@ import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
 import static com.mongodb.client.model.Aggregates.group;
 import static com.mongodb.client.model.Aggregates.match;
+import static com.mongodb.client.model.Aggregates.project;
 import static com.mongodb.client.model.Aggregates.replaceRoot;
 import static com.mongodb.client.model.Aggregates.unwind;
 import static com.mongodb.client.model.Filters.and;
@@ -326,6 +327,14 @@ public class FeedUpdater {
         /* Corresponding mongoshell query:
         db.getCollection('FeedVersion').aggregate([
         {
+            // Only keep needed fields to reduce the memory footprint of the query.
+            $project: {
+                _id: 1,
+                feedSourceId: 1,
+                sentToExternalPublisher: 1
+            }
+        },
+        {
             $match: {
                 sentToExternalPublisher: { $exists: 1 },
                 //feedSourceId: {$in: <array>}
@@ -357,6 +366,12 @@ public class FeedUpdater {
         List<String> feedSourceIds = feedSources.stream().map(fs -> fs.id).collect(Collectors.toList());
 
         List<Bson> stages = Lists.newArrayList(
+            project(
+                new BasicDBObject()
+                    .append("_id", 1)
+                    .append("feedSourceId", 1)
+                    .append(SENT_TO_EXTERNAL_PUBLISHER_FIELD, 1)
+            ),
             match(
                 and(
                     exists(SENT_TO_EXTERNAL_PUBLISHER_FIELD),
