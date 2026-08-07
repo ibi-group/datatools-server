@@ -5,6 +5,7 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.FeedVersionSummary;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.collect.Lists;
@@ -36,7 +37,7 @@ class FeedUpdaterTest {
     private static final String PROJECT_NAME = String.format("Test %s", new Date());
 
     @BeforeAll
-    public static void setUp() throws IOException {
+    static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
 
@@ -128,7 +129,7 @@ class FeedUpdaterTest {
         persistFeedVersion("feed-version21", FEED_SOURCE_2_ID, source2OtherDate, null);
         persistFeedVersion("feed-version22", FEED_SOURCE_2_ID, source2LatestSentDate, null);
 
-        Map<String, FeedVersion> latestVersions = FeedUpdater.getLatestVersionsSentForPublishing(
+        Map<String, FeedVersionSummary> latestVersions = FeedUpdater.getLatestVersionsSentForPublishing(
             Lists.newArrayList(source1, source2)
         );
 
@@ -136,7 +137,7 @@ class FeedUpdaterTest {
         checkFeedVersionDates("feed-version22", latestVersions.get(FEED_SOURCE_2_ID), source2LatestSentDate);
     }
 
-    private static void checkFeedVersionDates(String versionId, FeedVersion version, Date sentDate) {
+    private static void checkFeedVersionDates(String versionId, FeedVersionSummary version, Date sentDate) {
         assertEquals(versionId, version.id);
         assertEquals(sentDate, version.sentToExternalPublisher);
     }
