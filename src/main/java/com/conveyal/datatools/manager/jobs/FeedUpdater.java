@@ -72,6 +72,7 @@ public class FeedUpdater {
     private static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
     public static final String SENT_TO_EXTERNAL_PUBLISHER_FIELD = "sentToExternalPublisher";
     public static final String PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD = "processedByExternalPublisher";
+    public static final String FEED_SOURCE_ID_FIELD = "feedSourceId";
 
     private Map<String, String> eTagForFeed;
     private final String feedBucket;
@@ -364,13 +365,13 @@ public class FeedUpdater {
             project(
                 new BasicDBObject()
                     .append("_id", 1)
-                    .append("feedSourceId", 1)
+                    .append(FEED_SOURCE_ID_FIELD, 1)
                     .append(SENT_TO_EXTERNAL_PUBLISHER_FIELD, 1)
             ),
             match(
                 and(
                     exists(SENT_TO_EXTERNAL_PUBLISHER_FIELD),
-                    in("feedSourceId", feedSourceIds)
+                    in(FEED_SOURCE_ID_FIELD, feedSourceIds)
                 )
             ),
             group(
