@@ -195,7 +195,7 @@ public class FeedUpdater {
 
         Map<String, FeedSource> allFeedSourcesById = getFeedSourcesByFeedId(filteredObjectSummaries);
 
-        Map<String, FeedVersion> latestSentVersionsByFeedSourceId = getLatestVersionsSentForPublishing(allFeedSourcesById.values());
+        Map<String, FeedVersionSummary> latestSentVersionsByFeedSourceId = getLatestVersionsSentForPublishing(allFeedSourcesById.values());
 
         LOG.debug(eTagForFeed.toString());
         for (S3ObjectSummary objSummary : filteredObjectSummaries) {
@@ -210,19 +210,19 @@ public class FeedUpdater {
                 continue;
             }
 
-            FeedVersion latestVersionSentForPublishing = latestSentVersionsByFeedSourceId.get(feedSource.id);
+            FeedVersionSummary latestVersionSentForPublishing = latestSentVersionsByFeedSourceId.get(feedSource.id);
             if (shouldMarkFeedAsProcessed(eTag, latestVersionSentForPublishing)) {
                 try {
                     // Don't mark a feed version as published if previous published version is before sentToExternalPublisher.
                     if (!objSummary.getLastModified().before(latestVersionSentForPublishing.sentToExternalPublisher)) {
                         LOG.info("New version found for {} at s3://{}/{}. ETag = {}.", feedId, feedBucket, keyName, eTag);
-                        updatePublishedFeedVersion(feedId, latestVersionSentForPublishing);
+                        updatePublishedFeedVersion(feedId, feedSource.name, latestVersionSentForPublishing);
                         // TODO: Explore if MD5 checksum can be used to find matching feed version.
                         // findMatchingFeedVersion(md5, feedId, feedSource);
                     }
 
                 } catch (Exception e) {
-                    LOG.warn("Could not load feed " + keyName, e);
+                    LOG.warn("Could not load feed {} ({})", keyName, feedSource.name, e);
                 } finally {
                     // Add new tag to map used for tracking updates. NOTE: this is in a finally block because we still
                     // need to track the eTags even for feed sources that were not found. Otherwise, the feeds will be
@@ -280,7 +280,7 @@ public class FeedUpdater {
     /**
      * @return true if the feed with the corresponding etag should be mark as processed, false otherwise.
      */
-    private boolean shouldMarkFeedAsProcessed(String eTag, FeedVersion publishedVersion) {
+    private boolean shouldMarkFeedAsProcessed(String eTag, FeedVersionSummary publishedVersion) {
         if (eTagForFeed.containsValue(eTag)) return false;
         if (publishedVersion == null) return false;
 
@@ -292,7 +292,7 @@ public class FeedUpdater {
      * @param feedId the unique ID used by MTC to identify a feed source
      * @param publishedVersion the feed version to be registered
      */
-    private void updatePublishedFeedVersion(String feedId, FeedVersion publishedVersion) {
+    private void updatePublishedFeedVersion(String feedId, String sourceName, FeedVersionSummary publishedVersion) {
         try {
             if (publishedVersion != null) {
                 if (publishedVersion.sentToExternalPublisher == null) {
@@ -304,12 +304,7 @@ public class FeedUpdater {
                 Persistence.feedVersions.updateField(publishedVersion.id, PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, new Date());
                 Persistence.feedSources.updateField(publishedVersion.feedSourceId, "publishedVersionId", publishedVersion.namespace);
             } else {
-                LOG.error(
-                    "No published versions found for {} ({} id={})",
-                    feedId,
-                    publishedVersion.parentFeedSource().name,
-                    publishedVersion.feedSourceId
-                );
+                LOG.error("No published versions found for {} (Feed source {})", feedId, sourceName);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -323,7 +318,7 @@ public class FeedUpdater {
      * could be that more than one versions were recently "published" and the latest published version was a bad
      * feed that failed processing by RTD.
      */
-    static Map<String, FeedVersion> getLatestVersionsSentForPublishing(Collection<FeedSource> feedSources) {
+    static Map<String, FeedVersionSummary> getLatestVersionsSentForPublishing(Collection<FeedSource> feedSources) {
         /* Corresponding mongoshell query:
         db.getCollection('FeedVersion').aggregate([
         {
@@ -396,7 +391,7 @@ public class FeedUpdater {
 
         try {
             // Collect the feed versions for the feed source.
-            return Persistence.feedVersions
+            return Persistence.feedVersionSummaries
                 .getMongoCollection()
                 .aggregate(stages)
                 .into(new ArrayList<>())
