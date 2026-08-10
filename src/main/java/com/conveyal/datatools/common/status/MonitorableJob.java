@@ -216,7 +216,6 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         } finally {
             LOG.info("{} (jobId={}) {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
             active = false;
-            // Single hook point:
             MetricsService.recordJobOutcome(type, status.error, status.duration);
         }
     }
