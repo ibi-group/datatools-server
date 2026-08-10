@@ -63,7 +63,7 @@ public class Scheduler {
      * A method to initialize all scheduled tasks upon server startup.
      */
     public static void initialize() {
-        if(DataManager.isModuleEnabled("metrics")) {
+        if (DataManager.isModuleEnabled("metrics")) {
             startInventoryRefresh(5, TimeUnit.MINUTES);
         }
         LOG.info("Scheduling recurring feed auto fetches for all projects.");
@@ -79,10 +79,10 @@ public class Scheduler {
     }
 
     /**
-    * Schedules a task to refresh the metrics inventory on a regular interval
-    * @param period refresh interval
-    * @param unit unit for the refresh interval
-    */
+     * Schedules a task to refresh the metrics inventory on a regular interval
+     * @param period refresh interval
+     * @param unit unit for the refresh interval
+     */
     public static void startInventoryRefresh(long period, TimeUnit unit) {
         LOG.info("Creating a separate thread for refreshing metrics inventory.");
         metricsInventoryScheduler.scheduleAtFixedRate(MetricsService::refreshInventory,

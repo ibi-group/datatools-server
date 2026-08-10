@@ -10,7 +10,7 @@ import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText
 import static spark.Spark.get;
 
 public class MetricsController {
-    private static final String METRICS_API_KEY_CONFIG = "modules.metrics.api_key";
+    private static final String METRICS_API_KEY_CONFIG = "METRICS_API_KEY";
 
     /** GET /metrics — Prometheus scrape endpoint. */
     private static String getMetrics(Request req, Response res) {
