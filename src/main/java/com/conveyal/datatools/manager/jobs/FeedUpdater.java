@@ -293,7 +293,7 @@ public class FeedUpdater {
      * @param feedId the unique ID used by MTC to identify a feed source
      * @param publishedVersion the feed version to be registered
      */
-    private void updatePublishedFeedVersion(String feedId, String sourceName, FeedVersionSummary publishedVersion) {
+    static void updatePublishedFeedVersion(String feedId, String sourceName, FeedVersionSummary publishedVersion) {
         try {
             if (publishedVersion != null) {
                 if (publishedVersion.sentToExternalPublisher == null) {
