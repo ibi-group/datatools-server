@@ -12,7 +12,6 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.loader.FeedLoadResult;
-import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.loader.TableLoadResult;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -27,19 +26,13 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static com.conveyal.datatools.TestUtils.assertThatFeedHasNoErrorsOfType;
-import static com.conveyal.datatools.TestUtils.createFeedVersion;
-import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
-import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Tests for the various {@link MergeFeedsJob} merge types.
  */
-public class FlexMergeFeedsJobTest extends UnitTest {
+class FlexMergeFeedsJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(FlexMergeFeedsJobTest.class);
     private static final Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
     private static FeedVersion fakeAgencyWithFlexVersion1;
@@ -50,7 +43,7 @@ public class FlexMergeFeedsJobTest extends UnitTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeAll
-    public static void setUp() throws IOException {
+    static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
@@ -73,7 +66,7 @@ public class FlexMergeFeedsJobTest extends UnitTest {
      * Delete project on tear down (feed sources/versions will also be deleted).
      */
     @AfterAll
-    public static void tearDown() {
+    static void tearDown() {
         if (project != null) {
             project.delete();
         }
