@@ -73,6 +73,7 @@ public class FeedUpdater {
     public static final String SENT_TO_EXTERNAL_PUBLISHER_FIELD = "sentToExternalPublisher";
     public static final String PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD = "processedByExternalPublisher";
     public static final String FEED_SOURCE_ID_FIELD = "feedSourceId";
+    public static final String PUBLISHED_VERSION_ID_FIELD = "publishedVersionId";
 
     private Map<String, String> eTagForFeed;
     private final String feedBucket;
@@ -303,7 +304,7 @@ public class FeedUpdater {
                 // Set published namespace to the feed version and set the processedByExternalPublisher timestamp.
                 LOG.info("Latest published version (sent at {}) for {} is {}", publishedVersion.sentToExternalPublisher, feedId, publishedVersion.id);
                 Persistence.feedVersions.updateField(publishedVersion.id, PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, new Date());
-                Persistence.feedSources.updateField(publishedVersion.feedSourceId, "publishedVersionId", publishedVersion.namespace);
+                Persistence.feedSources.updateField(publishedVersion.feedSourceId, PUBLISHED_VERSION_ID_FIELD, publishedVersion.namespace);
             } else {
                 LOG.error("No published versions found for {} (Feed source {})", feedId, sourceName);
             }
@@ -439,7 +440,7 @@ public class FeedUpdater {
                 LOG.info("Found local version that matches latest file on S3  (SQL namespace={})", feedVersion.namespace);
                 if (!feedVersion.namespace.equals(feedSource.publishedVersionId)) {
                     LOG.info("Updating published version for feed {} to latest s3 published feed.", feedId);
-                    Persistence.feedSources.updateField(feedSource.id, "publishedVersionId", feedVersion.namespace);
+                    Persistence.feedSources.updateField(feedSource.id, PUBLISHED_VERSION_ID_FIELD, feedVersion.namespace);
                 } else {
                     LOG.info("No need to update published version (published s3 feed already matches feed source's published namespace).");
                 }
