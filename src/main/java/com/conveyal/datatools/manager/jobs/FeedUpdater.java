@@ -327,6 +327,7 @@ public class FeedUpdater {
             $project: {
                 _id: 1,
                 feedSourceId: 1,
+                namespace: 1,
                 sentToExternalPublisher: 1
             }
         },
@@ -366,6 +367,7 @@ public class FeedUpdater {
                 new BasicDBObject()
                     .append("_id", 1)
                     .append(FEED_SOURCE_ID_FIELD, 1)
+                    .append("namespace", 1)
                     .append(SENT_TO_EXTERNAL_PUBLISHER_FIELD, 1)
             ),
             match(
