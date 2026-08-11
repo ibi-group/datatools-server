@@ -320,48 +320,9 @@ public class FeedUpdater {
      * that the latest published version is guaranteed to be the one found in the "completed" folder, but it
      * could be that more than one versions were recently "published" and the latest published version was a bad
      * feed that failed processing by RTD.
+     * @see resources/mongo/getLatestVersionsSentForPublishing.js for equivalent mongosh query.
      */
     static Map<String, FeedVersionSummary> getLatestVersionsSentForPublishing(Collection<FeedSource> feedSources) {
-        /* Corresponding mongoshell query:
-        db.getCollection('FeedVersion').aggregate([
-        {
-            // Only keep needed fields to reduce the memory footprint of the query.
-            $project: {
-                _id: 1,
-                feedSourceId: 1,
-                namespace: 1,
-                sentToExternalPublisher: 1
-            }
-        },
-        {
-            $match: {
-                sentToExternalPublisher: { $exists: 1 },
-                //feedSourceId: {$in: <array>}
-            }
-        },
-        {
-            $group: {
-                _id: "$feedSourceId",
-                latestSentToExternalPublisher: { $max: "$sentToExternalPublisher" },
-                items: { $push: "$$ROOT" }
-            }
-        },
-        {
-            $unwind: "$items"
-        },
-        {
-            $match: {
-                $expr: { $eq: ["$items.sentToExternalPublisher", "$latestSentToExternalPublisher"] }
-            }
-        },
-        {
-            "$replaceRoot": {
-                "newRoot": "$items"
-            }
-        }
-        ])
-        */
-
         List<String> feedSourceIds = feedSources.stream().map(fs -> fs.id).collect(Collectors.toList());
 
         List<Bson> stages = Lists.newArrayList(
