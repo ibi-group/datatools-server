@@ -167,6 +167,7 @@ public class FeedUpdater {
                 else LOG.debug("No feeds updated (eTags on S3 match current list).");
             } catch (Exception e) {
                 LOG.error("Error updating feeds.", e);
+                e.printStackTrace();
             }
         }
     }
