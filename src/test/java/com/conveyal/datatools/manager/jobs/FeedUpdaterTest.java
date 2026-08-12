@@ -63,6 +63,9 @@ class FeedUpdaterTest {
     void afterEach() {
         // Delete feed versions created in each test.
         Persistence.feedVersions.removeFiltered(in("feedSourceId", FEED_SOURCE_1_ID, FEED_SOURCE_2_ID));
+
+        // Delete feed source publishedVersionId
+        Persistence.feedSources.updateField(FEED_SOURCE_1_ID, "publishedVersionId", null);
     }
 
     @Test
@@ -159,6 +162,18 @@ class FeedUpdaterTest {
         assertTrue(versions.contains("version-newly-sent"));
     }
 
+    @Test
+    void shouldUpdateProcessedFeeds() {
+        persistFeedVersion("version-to-update", FEED_SOURCE_1_ID, Date.from(Instant.now()), null);
+
+        Map<String, FeedVersionSummary> sentVersions = FeedUpdater.getLatestVersionsSentForPublishing(List.of(source1));
+        FeedVersionSummary versionToUpdate = sentVersions.get(FEED_SOURCE_1_ID);
+
+        FeedUpdater.updatePublishedFeedVersion(FEED_SOURCE_1_ID, "Source 1", versionToUpdate);
+        FeedSource updatedSource = Persistence.feedSources.getById(FEED_SOURCE_1_ID);
+        assertEquals("version-to-update_namespace", updatedSource.publishedVersionId);
+    }
+
     private static ExternalFeedSourceProperty makeFeedSourceProperty(String feedId, String feedSourceId) {
         return new ExternalFeedSourceProperty(feedSourceId, "MTC", AGENCY_ID_FIELDNAME, feedId);
     }
@@ -167,6 +182,7 @@ class FeedUpdaterTest {
         FeedVersion feedVersion = new FeedVersion();
         feedVersion.id = id;
         feedVersion.feedSourceId = feedSourceId;
+        feedVersion.namespace = id + "_namespace";
         feedVersion.sentToExternalPublisher = sentDate;
         feedVersion.processedByExternalPublisher = processedDate;
         Persistence.feedVersions.create(feedVersion);
