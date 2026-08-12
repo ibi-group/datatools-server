@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -13,6 +12,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -70,17 +70,16 @@ class FeedUpdaterTest {
 
     @Test
     void shouldGetFeedIdsFromS3ObjectSummaries() {
-        List<S3ObjectSummary> s3objects = Lists.newArrayList(
+        List<S3Object> s3objects = Lists.newArrayList(
                 "s3bucket/firstFeed.zip",
                 "s3bucket/otherFeed.zip",
                 "s3bucket/"
             )
             .stream()
-            .map(k -> {
-                S3ObjectSummary s3Obj = new S3ObjectSummary();
-                s3Obj.setKey(k);
-                return s3Obj;
-            })
+            .map(k -> S3Object.builder()
+                    .key(k)
+                    .build()
+            )
             .collect(Collectors.toList());
         List<String> expectedIds = Lists.newArrayList(
             FIRST_FEED,

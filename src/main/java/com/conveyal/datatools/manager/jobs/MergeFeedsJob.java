@@ -26,6 +26,8 @@ import com.google.common.collect.Lists;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -326,7 +328,8 @@ public class MergeFeedsJob extends FeedSourceJob {
             if (DataManager.useS3) {
                 String s3Key = String.join("/", "project", filename);
                 try {
-                    S3Utils.getDefaultS3Client().putObject(S3Utils.DEFAULT_BUCKET, s3Key, mergedTempFile);
+                    S3Utils.getDefaultS3Client().putObject(PutObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(s3Key)
+                        .build(), RequestBody.fromFile(mergedTempFile));
                 } catch (CheckedAWSException e) {
                     String message = "Could not upload store merged feed for new version";
                     logAndReportToBugsnag(e, message);

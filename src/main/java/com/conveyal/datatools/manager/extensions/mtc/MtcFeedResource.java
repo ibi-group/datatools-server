@@ -1,8 +1,5 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.common.utils.CloseableHttpURLConnection;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
@@ -17,6 +14,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -193,7 +194,7 @@ public class MtcFeedResource implements ExternalFeedResource {
     public void feedVersionCreated(
         FeedVersion feedVersion,
         String authHeader
-    ) throws AmazonServiceException, CheckedAWSException {
+    ) throws AwsServiceException, CheckedAWSException {
 
         if(s3Bucket == null) {
             LOG.error("Cannot push {} to S3 bucket. No bucket name specified.", feedVersion.id);
@@ -218,7 +219,8 @@ public class MtcFeedResource implements ExternalFeedResource {
         LOG.info("Pushing to MTC S3 Bucket: s3://{}/{}", s3Bucket, keyName);
         File file = feedVersion.retrieveGtfsFile();
         try {
-            getS3Client().putObject(new PutObjectRequest(s3Bucket, keyName, file));
+            getS3Client().putObject(PutObjectRequest.builder().bucket(s3Bucket).key(keyName)
+                .build(), RequestBody.fromFile(file));
         } catch (Exception e) {
             LOG.error("Could not upload feed version to s3.");
             e.printStackTrace();
@@ -376,7 +378,7 @@ public class MtcFeedResource implements ExternalFeedResource {
      * Note: In S3Utils, an AWSClientManager is used, however in practice, only the default client is invoked
      * (i.e. with role=null, region=null), so the logical path returns the original s3Client, which we are doing here.
      */
-    public static AmazonS3 getS3Client() {
+    public static S3Client getS3Client() {
         if (s3Wrapper == null) {
             s3Wrapper = getS3Wrapper();
         }

@@ -1,12 +1,10 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
@@ -14,6 +12,8 @@ import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.http.Header;
 import org.apache.http.message.BasicHeader;
+import software.amazon.awssdk.services.s3.S3Uri;
+import software.amazon.awssdk.services.s3.S3Utilities;
 
 import java.io.IOException;
 import java.net.URI;
@@ -51,9 +51,9 @@ public class PeliasUpdateJob extends MonitorableJob {
     /**
      * S3 URI to upload logs to
      */
-    private final AmazonS3URI logUploadS3URI;
+    private final S3Uri logUploadS3URI;
 
-    public PeliasUpdateJob(Auth0UserProfile owner, String name, Deployment deployment, AmazonS3URI logUploadS3URI) {
+    public PeliasUpdateJob(Auth0UserProfile owner, String name, Deployment deployment, S3Uri logUploadS3URI) {
         super(owner, name, JobType.UPDATE_PELIAS);
         this.deployment = deployment;
         this.timer = new Timer();
@@ -69,7 +69,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         }
 
         // Get log upload URI from deployment (the latest build artifacts folder is where the logs get uploaded to)
-        this.logUploadS3URI = new AmazonS3URI(deployment.deployJobSummaries.get(deployment.deployJobSummaries.size() - 1).buildArtifactsFolder);
+        this.logUploadS3URI = /*AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI. If you relied on this functionality in v1 you must update your code to manually encode the String.*/S3Utilities.builder().build().parseUri(URI.create(deployment.deployJobSummaries.get(deployment.deployJobSummaries.size() - 1).buildArtifactsFolder));
     }
 
     /**
