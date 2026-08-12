@@ -1,8 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.EC2ValidationResult;
@@ -18,6 +15,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.Instance;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
@@ -25,7 +25,6 @@ import spark.Response;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
@@ -68,7 +67,7 @@ public class ServerController {
         OtpServer server = getServerWithPermissions(req);
         // Ensure that there are no active EC2 instances associated with server. Halt deletion if so.
         List<Instance> activeInstances = server.retrieveEC2Instances().stream()
-            .filter(instance -> "running".equals(instance.getState().getName()))
+            .filter(instance -> "running".equals(instance.state().nameAsString()))
             .collect(Collectors.toList());
         if (activeInstances.size() > 0) {
             logMessageAndHalt(
@@ -87,9 +86,9 @@ public class ServerController {
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = EC2Utils.getIds(instances);
         try {
-            AmazonEC2 ec2Client = server.getEC2Client();
+            Ec2Client ec2Client = server.getEC2Client();
             EC2Utils.terminateInstances(ec2Client, ids);
-        } catch (AmazonServiceException | CheckedAWSException e) {
+        } catch (AwsServiceException | CheckedAWSException e) {
             logMessageAndHalt(req, 500, "Failed to terminate instances!", e);
         }
         for (Deployment deployment : Deployment.retrieveDeploymentForServerAndRouterId(server.id, null)) {

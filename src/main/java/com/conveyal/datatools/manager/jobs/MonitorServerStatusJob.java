@@ -282,7 +282,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
                     // Code 16 is running. Anything above that is either stopped, terminated or about to be stopped or
                     // terminated
                     if (reservationInstance.state().code() > 16) {
-                        throw new InstanceHealthException(reservationInstance.state().name().name());
+                        throw new InstanceHealthException(reservationInstance.state().nameAsString());
                     }
                 }
             }
