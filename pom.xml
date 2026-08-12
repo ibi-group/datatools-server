@@ -44,7 +44,7 @@
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
         <geotools.version>20.1</geotools.version>
-        <awsjavasdk.version>1.12.720</awsjavasdk.version>
+        <awsjavasdk.version>2.51.3</awsjavasdk.version>
     </properties>
     <build>
         <resources>
@@ -436,6 +436,11 @@
             <artifactId>snakeyaml</artifactId>
             <version>2.4</version>
         </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3-transfer-manager</artifactId>
+            <version>2.51.3</version>
+        </dependency>
         <!-- Used for writing csv for merged feeds. Note: this appears to be one of the only
           CSV libraries that will only quote values when necessary (e.g., there is a comma character
           contained within the value) and that will work with an output stream writer when writing
@@ -448,29 +453,29 @@
         </dependency>
         <!-- AWS individual module imports -->
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-s3</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-ec2</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ec2</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-iam</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>iam</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-elasticloadbalancingv2</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>elasticloadbalancingv2</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <!-- AWS STS allows Data Tools to assume other roles in order to deploy OTP to other AWS accounts. -->
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-sts</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sts</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <dependency>

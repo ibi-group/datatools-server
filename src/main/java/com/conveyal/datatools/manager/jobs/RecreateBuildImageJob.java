@@ -1,19 +1,12 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.ec2.model.CreateImageRequest;
-import com.amazonaws.services.ec2.model.CreateImageResult;
-import com.amazonaws.services.ec2.model.DeregisterImageRequest;
-import com.amazonaws.services.ec2.model.DescribeImagesRequest;
-import com.amazonaws.services.ec2.model.DescribeImagesResult;
-import com.amazonaws.services.ec2.model.Image;
-import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.TimeTracker;
+import software.amazon.awssdk.services.ec2.model.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -47,11 +40,12 @@ public class RecreateBuildImageJob extends MonitorableJob {
     public void jobLogic() {
         status.update("Creating build image", 5);
         // Create a new image of this instance.
-        CreateImageRequest createImageRequest = new CreateImageRequest()
-            .withInstanceId(graphBuildingInstances.get(0).getInstanceId())
-            .withName(otpServer.ec2Info.buildImageName)
-            .withDescription(otpServer.ec2Info.buildImageDescription);
-        CreateImageResult createImageResult = null;
+        CreateImageRequest createImageRequest = CreateImageRequest.builder()
+            .instanceId(graphBuildingInstances.get(0).instanceId())
+            .name(otpServer.ec2Info.buildImageName)
+            .description(otpServer.ec2Info.buildImageDescription)
+            .build();
+        CreateImageResponse createImageResult = null;
         try {
             createImageResult = parentDeployJob
                 .getEC2ClientForDeployJob()
@@ -64,13 +58,14 @@ public class RecreateBuildImageJob extends MonitorableJob {
         // Wait for the image to be created (it can take a few minutes). Also, make sure the parent DeployJob hasn't
         // failed this job already.
         TimeTracker imageCreationTracker = new TimeTracker(1, TimeUnit.HOURS);
-        String createdImageId = createImageResult.getImageId();
+        String createdImageId = createImageResult.imageId();
         status.update("Waiting for graph build image to be created...", 25);
         boolean imageCreated = false;
-        DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
-            .withImageIds(createdImageId);
+        DescribeImagesRequest describeImagesRequest = DescribeImagesRequest.builder()
+            .imageIds(createdImageId)
+            .build();
         while (!imageCreated && !status.error) {
-            DescribeImagesResult describeImagesResult = null;
+            DescribeImagesResponse describeImagesResult = null;
             try {
                 describeImagesResult = parentDeployJob
                     .getEC2ClientForDeployJob()
@@ -79,11 +74,11 @@ public class RecreateBuildImageJob extends MonitorableJob {
                 terminateInstanceAndFailWithMessage("Failed to make request to get image creation status!", e);
                 return;
             }
-            for (Image image : describeImagesResult.getImages()) {
-                if (image.getImageId().equals(createdImageId)) {
+            for (Image image : describeImagesResult.images()) {
+                if (image.imageId().equals(createdImageId)) {
                     // obtain the image state.
                     // See https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/ec2/model/ImageState.html
-                    String imageState = image.getState().toLowerCase();
+                    String imageState = image.state().name().toLowerCase();
                     if (imageState.equals("pending")) {
                         if (imageCreationTracker.hasTimedOut()) {
                             terminateInstanceAndFailWithMessage(
@@ -125,8 +120,9 @@ public class RecreateBuildImageJob extends MonitorableJob {
                 !graphBuildAmiId.equals(otpServer.ec2Info.amiId)
         ) {
             status.message = "Deregistering old build image";
-            DeregisterImageRequest deregisterImageRequest = new DeregisterImageRequest()
-                .withImageId(graphBuildAmiId);
+            DeregisterImageRequest deregisterImageRequest = DeregisterImageRequest.builder()
+                .imageId(graphBuildAmiId)
+                .build();
             try {
                 parentDeployJob.getEC2ClientForDeployJob().deregisterImage(deregisterImageRequest);
             } catch (Exception e) {

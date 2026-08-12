@@ -1,6 +1,6 @@
 package com.conveyal.datatools.common.utils.aws;
 
-import com.amazonaws.AmazonServiceException;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
 
 /**
  * A helper exception class that does not extend the RunTimeException class in order to make the compiler properly
@@ -14,7 +14,7 @@ public class CheckedAWSException extends Exception {
         originalException = null;
     }
 
-    public CheckedAWSException(AmazonServiceException e) {
+    public CheckedAWSException(AwsServiceException e) {
         super(e.getMessage());
         originalException = e;
     }
