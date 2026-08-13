@@ -15,6 +15,7 @@ import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
 import com.conveyal.datatools.manager.controllers.api.LabelController;
+import com.conveyal.datatools.manager.controllers.api.MetricsController;
 import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
@@ -70,6 +71,8 @@ public class DataManager {
     public static final String GTFS_PLUS_SUBDIR = "gtfsplus";
     private static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
+    public static long serverStartTime;
+
     // These fields hold YAML files that represent the server configuration.
     private static JsonNode envConfig;
     private static JsonNode serverConfig;
@@ -102,7 +105,7 @@ public class DataManager {
     public static final Map<String, RequestSummary> lastRequestForUser = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
-        long serverStartTime = System.currentTimeMillis();
+        serverStartTime = System.currentTimeMillis();
         initializeApplication(args);
 
         registerRoutes();
@@ -188,7 +191,11 @@ public class DataManager {
      * modules and sets other core routes (e.g., 404 response) and response headers (e.g., API content type is JSON).
      */
     static void registerRoutes() throws IOException {
+
         CorsFilter.apply();
+        if (isModuleEnabled("metrics")) {
+            MetricsController.register();
+        }
         // Initialize GTFS GraphQL API service
         // FIXME: Add user permissions check to ensure user has access to feeds.
         GraphQLController.initialize(GTFS_DATA_SOURCE, GTFS_API_PREFIX);
