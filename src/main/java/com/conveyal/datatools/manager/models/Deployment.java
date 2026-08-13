@@ -343,7 +343,7 @@ public class Deployment extends Model implements Serializable {
                 File gtfsFile = v.retrieveGtfsFile();
                 try (FileInputStream in = new FileInputStream(gtfsFile)) {
                     // Determine the entry name for the zip file.
-                    String entryName = getFeedSourceBundleFilename(v, gtfsFile);
+                    String entryName = getFeedSourceBundleFilename(v, gtfsFile.getName());
                     ZipEntry e = new ZipEntry(entryName);
                     out.putNextEntry(e);
                     ByteStreams.copy(in, out);
@@ -423,19 +423,6 @@ public class Deployment extends Model implements Serializable {
         // Fall back to the filename associated with the FeedVersion.
         LOG.info("Using fallback filename for zip entry: {}", fallbackName);
         return fallbackName;
-    }
-
-    /**
-     * Determine the entry name for a GTFS file within the deployment bundle.
-     * This prioritizes the FeedSource filename if available and valid, otherwise falls back
-     * to the original GTFS filename derived from the FeedVersion.
-     *
-     * @param feedVersion The FeedVersion being processed.
-     * @param gtfsFile    The GTFS file associated with the FeedVersion.
-     * @return The calculated entry name for the zip file.
-     */
-    public String getFeedSourceBundleFilename(FeedVersion feedVersion, File gtfsFile) {
-        return getFeedSourceBundleFilename(feedVersion, gtfsFile.getName());
     }
 
     /** Download config from provided URL. */
