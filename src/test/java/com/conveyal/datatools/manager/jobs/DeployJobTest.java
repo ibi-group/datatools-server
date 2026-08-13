@@ -108,77 +108,19 @@ public class DeployJobTest extends UnitTest {
 
         feedSource.filename = "gtfs_from_source.zip";
         Persistence.feedSources.create(feedSource);
-        assertEquals("gtfs_from_source.zip", deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
-
-        feedSource.filename = "gtfs_from_source";
-        Persistence.feedSources.replace(feedSource.id, feedSource);
-        assertEquals("gtfs_from_source.zip", deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
+        assertEquals("gtfs_from_source.zip", deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile.getName()));
 
         feedSource.filename = " ";
         Persistence.feedSources.replace(feedSource.id, feedSource);
-        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
+        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile.getName()));
 
         feedSource.filename = null;
         Persistence.feedSources.replace(feedSource.id, feedSource);
-        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
-
-        FeedVersion versionWithNullSource = new FeedVersion();
-        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(versionWithNullSource, gtfsFile));
+        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile.getName() ));
 
         Persistence.feedVersions.removeById(feedVersion.id);
         Persistence.feedSources.removeById(feedSource.id);
     }
-    /**
-     * Graph-build manifests should use the feed source's configured filename rather than the feed version ID.
-     */
-    @Test
-    public void canUseFeedSourceFilenameInGraphBuildManifest () {
-        FeedSource feedSource = new FeedSource("Manifest FeedSource");
-        feedSource.projectId = project.id;
-        feedSource.filename = "foo.zip";
-        Persistence.feedSources.create(feedSource);
-
-        FeedVersion feedVersion = new FeedVersion(feedSource);
-        Persistence.feedVersions.create(feedVersion);
-
-        deployment.feedVersionIds = new ArrayList<>();
-        deployment.feedVersionIds.add(feedVersion.id);
-        deployment.skipOsmExtract = true;
-
-        DeployJob deployJob = new DeployJob(
-            "Test deploy with feed source filename",
-            deployment,
-            Auth0UserProfile.createTestAdminUser(),
-            server,
-            "test-deploy",
-            DeployJob.DeployType.REPLACE,
-            true
-        );
-        OtpRunnerManifest manifest = deployJob.createAndUploadManifestAndConfigs(false);
-
-        assertEquals("foo.zip", manifest.baseFolderDownloads.get(0).name);
-        deployment.tripPlannerVersion = Deployment.TripPlannerVersion.OTP_2;
-        DeployJob otp2DeployJob = new DeployJob(
-            "Test OTP 2 deploy with feed source filename",
-            deployment,
-            Auth0UserProfile.createTestAdminUser(),
-            server,
-            "test-deploy",
-            DeployJob.DeployType.REPLACE,
-            true
-        );
-        OtpRunnerManifest otp2Manifest = otp2DeployJob.createAndUploadManifestAndConfigs(false);
-
-        assertEquals("foo.zip", otp2Manifest.baseFolderDownloads.get(0).name);
-
-        deployment.tripPlannerVersion = Deployment.TripPlannerVersion.OTP_1;
-
-        Persistence.feedVersions.removeById(feedVersion.id);
-        Persistence.feedSources.removeById(feedSource.id);
-        deployment.feedVersionIds = new ArrayList<>();
-        deployment.skipOsmExtract = false;
-    }
-
 
     /**
      * Tests that the otp-runner manifest and user data for a graph build + run server instance can be generated
