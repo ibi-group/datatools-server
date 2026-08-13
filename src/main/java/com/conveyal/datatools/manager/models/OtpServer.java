@@ -73,7 +73,7 @@ public class OtpServer extends Model {
         Filter serverFilter = Filter
             .builder()
             .name("tag:serverId")
-            .values(Collections.singletonList(id))
+            .values(id)
             .build();
         return EC2Utils.fetchEC2InstanceSummaries(getEC2Client(), serverFilter);
     }
@@ -86,7 +86,7 @@ public class OtpServer extends Model {
         Filter serverFilter = Filter
             .builder()
             .name("tag:serverId")
-            .values(Collections.singletonList(id))
+            .values(id)
             .build();
         return EC2Utils.fetchEC2Instances(getEC2Client(), serverFilter);
     }
