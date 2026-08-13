@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.services.s3.AmazonS3URI;
-import com.amazonaws.services.s3.model.DeleteObjectRequest;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
@@ -28,12 +26,16 @@ import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.s3.S3Uri;
+import software.amazon.awssdk.services.s3.S3Utilities;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import spark.Request;
 import spark.Response;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -136,12 +138,15 @@ public class DeploymentController {
             role = summaryToDownload.role;
             region = summaryToDownload.ec2Info == null ? null : summaryToDownload.ec2Info.region;
         }
-        AmazonS3URI uri = new AmazonS3URI(uriString);
+        /* AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI.
+           If you relied on this functionality in v1 you must update your code to manually encode the String. */
+        // Response to above: it looks like we are okay without encoding because uriString is set from raw text above.
+        S3Uri uri = S3Utilities.builder().build().parseUri(URI.create(uriString));
         // Assume the alternative role if needed to download the deploy artifact.
         return S3Utils.downloadObject(
             S3Utils.getS3Client(role, region),
-            uri.getBucket(),
-            String.join("/", uri.getKey(), filename),
+            uri.bucket().orElse(null),
+            String.join("/", uri.key().orElse(null), filename),
             false,
             req,
             res
@@ -401,8 +406,12 @@ public class DeploymentController {
                 // Only delete if the file does not exist in the deployment
                 if (!csvUrls.contains(existingCsvUrl)) {
                     try {
-                        AmazonS3URI s3URIToDelete = new AmazonS3URI(existingCsvUrl);
-                        S3Utils.getDefaultS3Client().deleteObject(new DeleteObjectRequest(s3URIToDelete.getBucket(), s3URIToDelete.getKey()));
+                        /* AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI.
+                           If you relied on this functionality in v1 you must update your code to manually encode the String. */
+                        // Upgrade note: it doesn't look we rely on encoding. We are building a URI to reference an entry in an S3 bucket.
+                        S3Uri s3URIToDelete = S3Utilities.builder().build().parseUri(URI.create(existingCsvUrl));
+                        S3Utils.getDefaultS3Client().deleteObject(DeleteObjectRequest.builder().bucket(s3URIToDelete.bucket().orElse(null)).key(s3URIToDelete.key().orElse(null))
+                            .build());
                     } catch(Exception e) {
                         logMessageAndHalt(req, 500, "Failed to delete file from S3.", e);
                     }
@@ -445,7 +454,7 @@ public class DeploymentController {
                 logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "It is not permitted to terminate an instance that is not associated with deployment " + deployment.id);
                 return false;
             }
-            int code = instances.get(instanceIdsForDeployment.indexOf(id)).state.getCode();
+            int code = instances.get(instanceIdsForDeployment.indexOf(id)).state.code();
             // 48 indicates instance is terminated, 32 indicates shutting down. Prohibit terminating an already
             if (code == 48 || code == 32) {
                 logMessageAndHalt(req, 400, "Instance is already terminated/shutting down: " + id);

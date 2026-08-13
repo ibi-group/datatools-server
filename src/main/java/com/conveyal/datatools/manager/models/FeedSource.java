@@ -1,9 +1,5 @@
 package com.conveyal.datatools.manager.models;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
-import com.amazonaws.services.s3.model.DeleteObjectsRequest;
-import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.FeedSourceJob;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
@@ -33,6 +29,13 @@ import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 
 import java.io.File;
 import java.io.IOException;
@@ -597,33 +600,36 @@ public class FeedSource extends Model implements Cloneable {
         // Note: If modules.enterprise.prefer_s3_links is not set and the feed source has a fetch URL,
         // this method will not be called, and the feed download link will point to the fetch URL instead.
         if (DataManager.useS3) {
-            AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
-            boolean sourceExists = defaultS3Client.doesObjectExist(S3Utils.DEFAULT_BUCKET, sourceKey);
-            ObjectMetadata sourceMetadata = sourceExists
-                    ? defaultS3Client.getObjectMetadata(S3Utils.DEFAULT_BUCKET, sourceKey)
-                    : null;
-            boolean latestExists = defaultS3Client.doesObjectExist(S3Utils.DEFAULT_BUCKET, latestVersionKey);
-            ObjectMetadata latestVersionMetadata = latestExists
-                    ? defaultS3Client.getObjectMetadata(S3Utils.DEFAULT_BUCKET, latestVersionKey)
-                    : null;
+            S3Client defaultS3Client = S3Utils.getDefaultS3Client();
+            HeadObjectResponse sourceMetadata = S3Utils.getHeadObject(defaultS3Client, S3Utils.DEFAULT_BUCKET, sourceKey);
+            HeadObjectResponse latestVersionMetadata = S3Utils.getHeadObject(defaultS3Client, S3Utils.DEFAULT_BUCKET, latestVersionKey);
+
             boolean latestVersionMatchesSource = sourceMetadata != null &&
                     latestVersionMetadata != null &&
-                    sourceMetadata.getETag().equals(latestVersionMetadata.getETag());
-            if (sourceExists && latestVersionMatchesSource) {
+                    /*AWS SDK for Java v2 migration: NOTE: V2's eTag() preserves surrounding quotes in the response, whereas V1's getETag() strips them - https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1s-ObjectMetadata-using-V1s-getETag*/
+sourceMetadata.eTag().replaceAll("^\"|\"$", "").equals(/*AWS SDK for Java v2 migration: NOTE: V2's eTag() preserves surrounding quotes in the response, whereas V1's getETag() strips them - https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1s-ObjectMetadata-using-V1s-getETag*/
+latestVersionMetadata.eTag().replaceAll("^\"|\"$", ""));
+            if (sourceMetadata != null && latestVersionMatchesSource) {
                 LOG.info("copying feed {} to s3 public folder", this);
-                defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, sourceKey, CannedAccessControlList.PublicRead);
-                defaultS3Client.copyObject(S3Utils.DEFAULT_BUCKET, sourceKey, S3Utils.DEFAULT_BUCKET, publicKey);
-                defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, publicKey, CannedAccessControlList.PublicRead);
+                /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
+                defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(sourceKey).acl(ObjectCannedACL.PUBLIC_READ));
+                defaultS3Client.copyObject(CopyObjectRequest.builder().sourceBucket(S3Utils.DEFAULT_BUCKET).sourceKey(sourceKey).destinationBucket(S3Utils.DEFAULT_BUCKET).destinationKey(publicKey)
+                    .build());
+                /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
+                defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(publicKey).acl(ObjectCannedACL.PUBLIC_READ));
             } else {
                 LOG.warn("Latest feed source {} on s3 at {} does not exist or does not match latest version. Using latest version instead.", this, sourceKey);
-                if (defaultS3Client.doesObjectExist(S3Utils.DEFAULT_BUCKET, latestVersionKey)) {
+                if (latestVersionMetadata != null) {
                     LOG.info("copying feed version {} to s3 public folder", versionId);
-                    defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, latestVersionKey, CannedAccessControlList.PublicRead);
-                    defaultS3Client.copyObject(S3Utils.DEFAULT_BUCKET, latestVersionKey, S3Utils.DEFAULT_BUCKET, publicKey);
-                    defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, publicKey, CannedAccessControlList.PublicRead);
+                    /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
+                    defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(latestVersionKey).acl(ObjectCannedACL.PUBLIC_READ));
+                    defaultS3Client.copyObject(CopyObjectRequest.builder().sourceBucket(S3Utils.DEFAULT_BUCKET).sourceKey(latestVersionKey).destinationBucket(S3Utils.DEFAULT_BUCKET).destinationKey(publicKey)
+                        .build());
+                    /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
+                    defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(publicKey).acl(ObjectCannedACL.PUBLIC_READ));
 
                     // also copy latest version to feedStore latest
-                    defaultS3Client.copyObject(S3Utils.DEFAULT_BUCKET, latestVersionKey, S3Utils.DEFAULT_BUCKET, sourceKey);
+                    defaultS3Client.copyObject(CopyObjectRequest.builder().sourceBucket(S3Utils.DEFAULT_BUCKET).sourceKey(latestVersionKey).destinationBucket(S3Utils.DEFAULT_BUCKET).destinationKey(sourceKey).build());
                 }
             }
         } else {
@@ -638,11 +644,12 @@ public class FeedSource extends Model implements Cloneable {
     public void makePrivate() throws CheckedAWSException {
         String sourceKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + this.id + ".zip";
         String publicKey = toPublicKey();
-        AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
-        if (defaultS3Client.doesObjectExist(S3Utils.DEFAULT_BUCKET, sourceKey)) {
+        S3Client defaultS3Client = S3Utils.getDefaultS3Client();
+        if (S3Utils.objectExists(defaultS3Client, S3Utils.DEFAULT_BUCKET, sourceKey)) {
             LOG.info("removing feed {} from s3 public folder", this);
-            defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, sourceKey, CannedAccessControlList.AuthenticatedRead);
-            defaultS3Client.deleteObject(S3Utils.DEFAULT_BUCKET, publicKey);
+            /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
+            defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(sourceKey).acl(ObjectCannedACL.AUTHENTICATED_READ));
+            defaultS3Client.deleteObject(DeleteObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(publicKey).build());
         }
     }
 
@@ -695,9 +702,15 @@ public class FeedSource extends Model implements Cloneable {
             }
             // Delete latest copy of feed source on S3.
             if (DataManager.useS3) {
-                AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
-                DeleteObjectsRequest delete = new DeleteObjectsRequest(S3Utils.DEFAULT_BUCKET);
-                delete.withKeys("public/" + this.name + ".zip", S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + this.id + ".zip");
+                S3Client defaultS3Client = S3Utils.getDefaultS3Client();
+                DeleteObjectsRequest delete = DeleteObjectsRequest
+                    .builder()
+                    .bucket(S3Utils.DEFAULT_BUCKET)
+                    .delete(reg -> reg.objects(
+                        ObjectIdentifier.builder().key("public/" + this.name + ".zip").build(),
+                        ObjectIdentifier.builder().key(S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + this.id + ".zip").build()
+                    ))
+                    .build();
                 defaultS3Client.deleteObjects(delete);
             }
             // Remove all external properties for this feed source.

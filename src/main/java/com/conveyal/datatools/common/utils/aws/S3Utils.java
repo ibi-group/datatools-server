@@ -1,26 +1,37 @@
 package com.conveyal.datatools.common.utils.aws;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.HttpMethod;
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
-import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
-import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.OtpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.profiles.ProfileFile;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import software.amazon.awssdk.utils.Validate;
 import spark.Request;
 import spark.Response;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -35,7 +46,7 @@ public class S3Utils {
     private static final Logger LOG = LoggerFactory.getLogger(S3Utils.class);
 
     private static final int REQUEST_TIMEOUT_MSEC = 30 * 1000;
-    private static final AWSCredentialsProvider DEFAULT_S3_CREDENTIALS;
+    private static final AwsCredentialsProvider DEFAULT_S3_CREDENTIALS;
     private static final S3ClientManagerImpl S3ClientManager;
 
     public static final String DEFAULT_BUCKET;
@@ -47,7 +58,7 @@ public class S3Utils {
 
     static {
         // Placeholder variables need to be used before setting the final variable to make sure initialization occurs
-        AWSCredentialsProvider tempS3CredentialsProvider = null;
+        AwsCredentialsProvider tempS3CredentialsProvider = null;
         String tempGtfsS3Bucket = null;
         S3ClientManagerImpl tempS3ClientManager = null;
 
@@ -71,12 +82,14 @@ public class S3Utils {
     }
 
     public static class S3Wrapper {
-        public final AWSCredentialsProvider credentials;
-        public final AmazonS3 s3Client;
+        public final AwsCredentialsProvider credentials;
+        public final S3Client s3Client;
+        public final String region;
 
-        public S3Wrapper(AWSCredentialsProvider credentials, AmazonS3 s3Client) {
+        public S3Wrapper(AwsCredentialsProvider credentials, S3Client s3Client, String region) {
             this.credentials = credentials;
             this.s3Client = s3Client;
+            this.region = region;
         }
     }
 
@@ -91,17 +104,24 @@ public class S3Utils {
         List<String> configCredentials,
         List<String> configRegions
     ) throws IllegalArgumentException {
-        AmazonS3 s3client = null;
-        AWSCredentialsProvider credentialsProvider = null;
+        S3Client s3client = null;
+        AwsCredentialsProvider credentialsProvider = null;
+        String finalRegion = null;
         try {
-            AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
+            S3ClientBuilder builder = S3Client.builder();
             // Iterate through the credentials and stop at the first non-null returned.
             // Default to the ambient IAM credentials, if any.
             for (String configCred : configCredentials) {
                 String credentialsFile = DataManager.getConfigPropertyAsText(configCred);
                 if (credentialsFile != null) {
                     try {
-                        credentialsProvider = new ProfileCredentialsProvider(credentialsFile, "default");
+                        credentialsProvider = ProfileCredentialsProvider.builder()
+                            .profileFile(file -> file
+                                .content(Paths.get(credentialsFile))
+                                .type(ProfileFile.Type.CONFIGURATION) // Expects all non-default profiles to be prefixed with "profile".
+                            )
+                            .profileName("default")
+                            .build();
                     } catch (IllegalArgumentException e) {
                         LOG.error("Invalid credentials from {}. Trying the next one.", configCred, e);
                     }
@@ -110,16 +130,18 @@ public class S3Utils {
             }
             if (credentialsProvider == null) {
                 // default credentials providers, e.g. IAM role
-                credentialsProvider = new DefaultAWSCredentialsProviderChain();
+                credentialsProvider = DefaultCredentialsProvider.builder()
+                    .build();
             }
-            builder.withCredentials(credentialsProvider);
+            builder.credentialsProvider(credentialsProvider);
 
             // Iterate through the regions and stop at the first non-null returned.
             // Otherwise defaults to value (typically provided in ~/.aws/config)
             for (String configRegion : configRegions) {
                 String region = DataManager.getConfigPropertyAsText(configRegion);
                 if (region != null) {
-                    builder.withRegion(region);
+                    builder.region(Region.of(region));
+                    finalRegion = region;
                     break;
                 }
             }
@@ -137,7 +159,7 @@ public class S3Utils {
             throw new IllegalArgumentException("Fatal error initializing the default s3Client");
         }
 
-        return new S3Wrapper(credentialsProvider, s3client);
+        return new S3Wrapper(credentialsProvider, s3client, finalRegion);
     }
 
     /**
@@ -162,24 +184,45 @@ public class S3Utils {
     /**
      * A class that manages the creation of S3 clients.
      */
-    private static class S3ClientManagerImpl extends AWSClientManager<AmazonS3> {
-        public S3ClientManagerImpl(AmazonS3 defaultClient) {
+    private static class S3ClientManagerImpl extends AWSClientManager<S3Client> {
+        public S3ClientManagerImpl(S3Client defaultClient) {
             super(defaultClient);
         }
 
         @Override
-        public AmazonS3 buildDefaultClientWithRegion(String region) {
-            return AmazonS3ClientBuilder.standard().withCredentials(DEFAULT_S3_CREDENTIALS).withRegion(region).build();
+        public S3Client buildDefaultClientWithRegion(String region) {
+            return S3Client.builder().credentialsProvider(DEFAULT_S3_CREDENTIALS).region(Region.of(region)).build();
         }
 
         @Override
-        public AmazonS3 buildCredentialedClientForRoleAndRegion(
-            AWSCredentialsProvider credentials, String region, String role
+        public S3Client buildCredentialedClientForRoleAndRegion(
+            AwsCredentialsProvider credentials, String region, String role
         ) {
-            AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
-            if (region != null) builder.withRegion(region);
-            return builder.withCredentials(credentials).build();
+            S3ClientBuilder builder = S3Client.builder();
+            if (region != null) builder.region(Region.of(region));
+            return builder.credentialsProvider(credentials).build();
         }
+    }
+
+    /**
+     * Attemps to get the head or metadata for an S3 object.
+     * @return an {@link HeadObjectResponse} if the requested object exists, null otherwise.
+     */
+    public static HeadObjectResponse getHeadObject(S3Client s3Client, String bucketName, String key) {
+        try {
+            Validate.notEmpty(bucketName, "The bucket name must not be null or an empty string.", "");
+            Validate.notEmpty(key, "The object key must not be null or an empty string.", "");
+            return s3Client.headObject(HeadObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build());
+        } catch (NoSuchKeyException e) {
+            return null;
+        }
+    }
+
+    public static boolean objectExists(S3Client s3Client, String bucketName, String key) {
+        return getHeadObject(s3Client, bucketName, key) != null;
     }
 
     /**
@@ -205,14 +248,14 @@ public class S3Utils {
      * @param res The response to write the download info to
      */
     public static String downloadObject(
-        AmazonS3 s3,
+        S3Client s3,
         String bucket,
         String key,
         boolean redirect,
         Request req,
         Response res
     ) {
-        if (!s3.doesObjectExist(bucket, key)) {
+        if (!objectExists(s3, bucket, key)) {
             logMessageAndHalt(
                 req,
                 500,
@@ -224,13 +267,16 @@ public class S3Utils {
         Date expiration = new Date();
         expiration.setTime(expiration.getTime() + REQUEST_TIMEOUT_MSEC);
 
-        GeneratePresignedUrlRequest presigned = new GeneratePresignedUrlRequest(bucket, key);
-        presigned.setExpiration(expiration);
-        presigned.setMethod(HttpMethod.GET);
         URL url;
-        try {
-            url = s3.generatePresignedUrl(presigned);
-        } catch (AmazonServiceException e) {
+        try (S3Presigner presigner = S3Presigner.create()) {
+            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofMillis(REQUEST_TIMEOUT_MSEC))
+                .getObjectRequest(objReq -> objReq.bucket(bucket).key(key))
+                .build();
+
+            PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(presignRequest);
+            url = presignedRequest.url();
+        } catch (AwsServiceException e) {
             logMessageAndHalt(req, 500, "Failed to download file from S3.", e);
             return null;
         }
@@ -251,25 +297,25 @@ public class S3Utils {
      * @param fileToUpload The file to upload to S3
      * @return             A URL where the file is publicly accessible
      */
-    public static String uploadObject(String keyName, File fileToUpload) throws AmazonServiceException, CheckedAWSException {
+    public static String uploadObject(String keyName, File fileToUpload) throws AwsServiceException, CheckedAWSException {
         String url = S3Utils.getDefaultBucketUrlForKey(keyName);
         // FIXME: This may need to change during feed store refactor
-        getDefaultS3Client().putObject(new PutObjectRequest(
-                S3Utils.DEFAULT_BUCKET, keyName, fileToUpload)
-                // grant public read
-                .withCannedAcl(CannedAccessControlList.PublicRead));
+        getDefaultS3Client().putObject(PutObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(keyName)
+            // grant public read
+            .acl(ObjectCannedACL.PUBLIC_READ)
+            .build(), RequestBody.fromFile(fileToUpload));
         return url;
     }
 
-    public static AmazonS3 getDefaultS3Client() throws CheckedAWSException {
+    public static S3Client getDefaultS3Client() throws CheckedAWSException {
         return getS3Client (null, null);
     }
 
-    public static AmazonS3 getS3Client(String role, String region) throws CheckedAWSException {
+    public static S3Client getS3Client(String role, String region) throws CheckedAWSException {
         return S3ClientManager.getClient(role, region);
     }
 
-    public static AmazonS3 getS3Client(OtpServer server) throws CheckedAWSException {
+    public static S3Client getS3Client(OtpServer server) throws CheckedAWSException {
         return S3Utils.getS3Client(server.role, server.getRegion());
     }
 
@@ -279,9 +325,11 @@ public class S3Utils {
      * there is a way to do this effectively without incurring AWS costs (although writing/deleting an empty file to S3
      * is probably minuscule).
      */
-    public static void verifyS3WritePermissions(AmazonS3 client, String s3Bucket) throws IOException {
+    public static void verifyS3WritePermissions(S3Client client, String s3Bucket) throws IOException {
         String key = UUID.randomUUID().toString();
-        client.putObject(s3Bucket, key, File.createTempFile("test", ".zip"));
-        client.deleteObject(s3Bucket, key);
+        client.putObject(PutObjectRequest.builder().bucket(s3Bucket).key(key)
+            .build(), RequestBody.fromFile(File.createTempFile("test", ".zip")));
+        client.deleteObject(DeleteObjectRequest.builder().bucket(s3Bucket).key(key)
+            .build());
     }
 }

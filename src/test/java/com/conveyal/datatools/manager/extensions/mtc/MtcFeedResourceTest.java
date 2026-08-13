@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.UnitTest;
@@ -24,6 +22,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -274,15 +274,15 @@ class MtcFeedResourceTest extends UnitTest {
         assertNotNull(s3wrapper);
 
         // Either application.data.s3_region or extensions.mtc.s3_region from server.yml.tmp.
-        assertEquals(overwriteDefaults ? "us-west-2" : "us-east-1", s3wrapper.s3Client.getRegion().toAWSRegion().getName());
+        assertEquals(overwriteDefaults ? "us-west-2" : "us-east-1", s3wrapper.region);
 
         // The credentials should reflect the content in the mock-aws-credentials file referenced above.
         if (overwriteDefaults) {
-            AWSCredentials credentials = s3wrapper.credentials.getCredentials();
-            assertEquals("mock-id-123", credentials.getAWSAccessKeyId());
-            assertEquals("mock-secret-123", credentials.getAWSSecretKey());
+            AwsCredentials credentials = s3wrapper.credentials.resolveCredentials();
+            assertEquals("mock-id-123", credentials.accessKeyId());
+            assertEquals("mock-secret-123", credentials.secretAccessKey());
         } else {
-            assertEquals(DefaultAWSCredentialsProviderChain.class, s3wrapper.credentials.getClass());
+            assertEquals(DefaultCredentialsProvider.class, s3wrapper.credentials.getClass());
         }
     }
 }
