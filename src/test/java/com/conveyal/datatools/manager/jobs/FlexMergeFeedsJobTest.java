@@ -97,8 +97,16 @@ class FlexMergeFeedsJobTest extends UnitTest {
         assertRowCount(r1.fareAttributes, r2.fareAttributes, merged.fareAttributes, "Fare attributes");
         assertRowCount(r1.fareRules, r2.fareRules, merged.fareRules, "Fare rules");
         assertRowCount(r1.frequencies, r2.frequencies, merged.frequencies, "Frequencies");
-        // FIXME: Export locations of unsupported types when merging feeds.
-        // assertRowCount(r1.locations, r2.locations, merged.locations, "Locations");
+        // For GeoJSON locations, the change from https://github.com/ibi-group/gtfs-lib/pull/28
+        // results in an additional two locations registered into feed versions 1 and 2 each.
+        // These additional locations are flagged with an error because the location type is not polygon or linestring,
+        // and they are not stored or exported during merge, so we subtract these locations from the expected count.
+        // The expected locations in the merged feed are unchanged.
+        assertEquals(
+            r1.locations.rowCount - r1.locations.errorCount + r2.locations.rowCount - r2.locations.errorCount,
+            merged.locations.rowCount
+        );
+
         assertRowCount(r1.locationGroup, r2.locationGroup, merged.locationGroup, "Location Groups");
         assertRowCount(r1.locationGroupStops, r2.locationGroupStops, merged.locationGroupStops, "Location Group Stops");
         assertRowCount(r1.locationShapes, r2.locationShapes, merged.locationShapes, "Location shapes");
