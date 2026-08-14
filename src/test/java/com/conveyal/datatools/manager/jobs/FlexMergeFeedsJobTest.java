@@ -12,7 +12,6 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.loader.FeedLoadResult;
-import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.loader.TableLoadResult;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -27,19 +26,13 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static com.conveyal.datatools.TestUtils.assertThatFeedHasNoErrorsOfType;
-import static com.conveyal.datatools.TestUtils.createFeedVersion;
-import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
-import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Tests for the various {@link MergeFeedsJob} merge types.
  */
-public class FlexMergeFeedsJobTest extends UnitTest {
+class FlexMergeFeedsJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(FlexMergeFeedsJobTest.class);
     private static final Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
     private static FeedVersion fakeAgencyWithFlexVersion1;
@@ -50,7 +43,7 @@ public class FlexMergeFeedsJobTest extends UnitTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeAll
-    public static void setUp() throws IOException {
+    static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
@@ -73,7 +66,7 @@ public class FlexMergeFeedsJobTest extends UnitTest {
      * Delete project on tear down (feed sources/versions will also be deleted).
      */
     @AfterAll
-    public static void tearDown() {
+    static void tearDown() {
         if (project != null) {
             project.delete();
         }
@@ -104,7 +97,16 @@ public class FlexMergeFeedsJobTest extends UnitTest {
         assertRowCount(r1.fareAttributes, r2.fareAttributes, merged.fareAttributes, "Fare attributes");
         assertRowCount(r1.fareRules, r2.fareRules, merged.fareRules, "Fare rules");
         assertRowCount(r1.frequencies, r2.frequencies, merged.frequencies, "Frequencies");
-        assertRowCount(r1.locations, r2.locations, merged.locations, "Locations");
+        // For GeoJSON locations, the change from https://github.com/ibi-group/gtfs-lib/pull/28
+        // results in an additional two locations registered into feed versions 1 and 2 each.
+        // These additional locations are flagged with an error because the location type is not polygon or linestring,
+        // and they are not stored or exported during merge, so we subtract these locations from the expected count.
+        // The expected locations in the merged feed are unchanged.
+        assertEquals(
+            r1.locations.rowCount - r1.locations.errorCount + r2.locations.rowCount - r2.locations.errorCount,
+            merged.locations.rowCount
+        );
+
         assertRowCount(r1.locationGroup, r2.locationGroup, merged.locationGroup, "Location Groups");
         assertRowCount(r1.locationGroupStops, r2.locationGroupStops, merged.locationGroupStops, "Location Group Stops");
         assertRowCount(r1.locationShapes, r2.locationShapes, merged.locationShapes, "Location shapes");
