@@ -17,8 +17,6 @@ import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.transfer.s3.S3TransferManager;
-import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
 import software.amazon.awssdk.transfer.s3.progress.TransferListener;
 
 import java.io.File;
@@ -197,20 +195,12 @@ public class FeedStore {
                     }
                 };
 
-                UploadFileRequest uploadRequest = UploadFileRequest
-                    .builder()
-                    .putObjectRequest(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(S3Utils.makeGtfsFolderObjectKey(s3FileName)))
-                    .source(gtfsFile)
-                    .addTransferListener(transferListener)
-                    .build();
-
-                S3TransferManager transferManager = S3TransferManager
-                    .builder()
-                    .s3Client(S3Utils.getDefaultS3AsyncClient())
-                    .build();
-                try (transferManager) {
-                    // You can block and wait for the upload to finish
-                    transferManager.uploadFile(uploadRequest).completionFuture().join();
+                try {
+                    S3Utils.uploadAndWaitForCompletion(upload -> upload
+                        .putObjectRequest(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(S3Utils.makeGtfsFolderObjectKey(s3FileName)))
+                        .source(gtfsFile)
+                        .addTransferListener(transferListener)
+                    );
                 } catch (SdkException e) {
                     LOG.error("Unable to upload file, upload aborted.", e);
                     return false;

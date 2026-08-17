@@ -25,6 +25,8 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import software.amazon.awssdk.transfer.s3.S3TransferManager;
+import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
 import software.amazon.awssdk.utils.Validate;
 import spark.Request;
 import spark.Response;
@@ -37,6 +39,7 @@ import java.time.Duration;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
@@ -342,6 +345,21 @@ public class S3Utils {
             .acl(ObjectCannedACL.PUBLIC_READ)
             .build(), RequestBody.fromFile(fileToUpload));
         return url;
+    }
+
+    public static void uploadAndWaitForCompletion(Consumer<UploadFileRequest.Builder> builderFunc) throws CheckedAWSException {
+        uploadAndWaitForCompletion(UploadFileRequest.builder().applyMutation(builderFunc).build());
+    }
+
+    public static void uploadAndWaitForCompletion(UploadFileRequest uploadFileRequest) throws CheckedAWSException {
+        try (S3TransferManager transferManager = S3TransferManager
+            .builder()
+            .s3Client(getDefaultS3AsyncClient())
+            .build()
+        ) {
+            // Wait for the upload to finish
+            transferManager.uploadFile(uploadFileRequest).completionFuture().join();
+        }
     }
 
     public static S3Client getDefaultS3Client() throws CheckedAWSException {

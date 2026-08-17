@@ -41,8 +41,6 @@ import software.amazon.awssdk.services.s3.S3Uri;
 import software.amazon.awssdk.services.s3.S3Utilities;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.transfer.s3.S3TransferManager;
-import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
 import software.amazon.awssdk.transfer.s3.progress.TransferListener;
 
 import java.io.File;
@@ -452,7 +450,7 @@ public class DeployJob extends MonitorableJob {
     /**
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
-    private void uploadBundleToS3() throws InterruptedException, IOException, CheckedAWSException {
+    private void uploadBundleToS3() throws IOException, CheckedAWSException {
         S3Uri uri = /*AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI. If you relied on this functionality in v1 you must update your code to manually encode the String.*/S3Utilities.builder().build().parseUri(URI.create(getS3BundleURI()));
         String bucket = uri.bucket().orElse(null);
         status.message = "Uploading bundle to " + getS3BundleURI();
@@ -466,55 +464,37 @@ public class DeployJob extends MonitorableJob {
             }
 
             @Override
-            public void transferComplete(Context.TransferComplete context) {
-                // Equivalent to ProgressEventType.TRANSFER_COMPLETED_EVENT
-                System.out.println("Transfer completed");
-            }
-
-            @Override
             public void transferFailed(Context.TransferFailed context) {
-                // Equivalent to ProgressEventType.TRANSFER_FAILED_EVENT
-                System.out.println("Transfer failed: " + context.exception().getMessage());
+                var exception = context.exception();
+                status.fail(exception.getMessage(), new Exception(exception));
             }
         };
 
-        UploadFileRequest bundleUploadRequest = UploadFileRequest
-            .builder()
+        S3Utils.uploadAndWaitForCompletion(upload -> upload
             .putObjectRequest(req -> req.bucket(bucket).key(uri.key().orElse(null)))
             .source(deploymentTempFile)
             .addTransferListener(transferListener)
-            .build();
-
-        // Use Transfer Manager so we can monitor S3 bundle upload progress.
-        S3TransferManager transferManager = S3TransferManager.builder()
-            .s3Client(getS3AsyncClientForDeployJob())
-            .build();
-        try (transferManager) {
-            // Wait for transfer completion.
-            transferManager.uploadFile(bundleUploadRequest).completionFuture().join();
-
-            // Check if router config exists and upload as separate file using transfer manager. Note: this is because we
-            // need the router-config separately from the bundle for EC2 instances that download the graph only.
-            byte[] routerConfigAsBytes = deployment.generateRouterConfig();
-            if (routerConfigAsBytes != null) {
-                LOG.info("Uploading router-config.json to s3 bucket");
-                // Write router config to temp file.
-                File routerConfigFile = File.createTempFile("router-config", ".json");
-                try (FileOutputStream out = new FileOutputStream(routerConfigFile)) {
-                    out.write(routerConfigAsBytes);
-                }
-                UploadFileRequest routerConfigUploadRequest = UploadFileRequest
-                    .builder()
-                    .putObjectRequest(req -> req.bucket(bucket).key(getS3FolderURI().key().orElse(null) + "/" + ROUTER_CONFIG_FILENAME))
-                    .source(routerConfigFile)
-                    // no transfer listener for router config upload, it is a small file.
-                    .build();
-
-                // Upload router config (wait for transfer completion).
-                transferManager.uploadFile(routerConfigUploadRequest).completionFuture().join();
-                // Delete temp file.
-                routerConfigFile.delete();
+        );
+        
+        // Check if router config exists and upload as separate file using transfer manager. Note: this is because we
+        // need the router-config separately from the bundle for EC2 instances that download the graph only.
+        byte[] routerConfigAsBytes = deployment.generateRouterConfig();
+        if (routerConfigAsBytes != null) {
+            LOG.info("Uploading router-config.json to s3 bucket");
+            // Write router config to temp file.
+            File routerConfigFile = File.createTempFile("router-config", ".json");
+            try (FileOutputStream out = new FileOutputStream(routerConfigFile)) {
+                out.write(routerConfigAsBytes);
             }
+
+            S3Utils.uploadAndWaitForCompletion(upload -> upload
+                .putObjectRequest(req -> req.bucket(bucket).key(getS3FolderURI().key().orElse(null) + "/" + ROUTER_CONFIG_FILENAME))
+                .source(routerConfigFile)
+                // no transfer listener for router config upload, it is a small file.
+            );
+
+            // Delete temp file.
+            routerConfigFile.delete();
         }
 
         // copy to [name]-latest.zip
@@ -967,7 +947,7 @@ public class DeployJob extends MonitorableJob {
         if (userData == null) {
             // Fail job if it is not already failed.
             if (!status.error) status.fail("Error constructing EC2 user data.");
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
         // The subnet ID should only change if starting up a server in some other AWS account. This is not
         // likely to be a requirement.
@@ -999,7 +979,7 @@ public class DeployJob extends MonitorableJob {
                 ),
                 amiCheckException
             );
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
 
         // Pick proper instance type depending on whether graph is being built and what is defined.
@@ -1013,7 +993,7 @@ public class DeployJob extends MonitorableJob {
                 instanceType,
                 EC2Utils.DEFAULT_INSTANCE_TYPE
             ), e);
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
         status.message = String.format("Starting up %d new instance(s) to run OTP", count);
 
@@ -1027,14 +1007,12 @@ public class DeployJob extends MonitorableJob {
             .ebsOptimized(EBS_OPTIMIZED)
             .minCount(count)
             .maxCount(count)
-            .iamInstanceProfile(IamInstanceProfileSpecification.builder().arn(otpServer.ec2Info.iamInstanceProfileArn)
-                .build())
+            .iamInstanceProfile(profile -> profile.arn(otpServer.ec2Info.iamInstanceProfileArn))
             .imageId(amiId)
             .keyName(otpServer.ec2Info.keyName)
             // This will have the instance terminate when it is shut down.
             .instanceInitiatedShutdownBehavior("terminate")
-            .metadataOptions(InstanceMetadataOptionsRequest.builder().httpTokens("optional").httpEndpoint("enabled")
-                .build())
+            .metadataOptions(req -> req.httpTokens("optional").httpEndpoint("enabled"))
             .userData(Base64.encodeBase64String(userData.getBytes()))
             .build();
         List<Instance> instances;
@@ -1044,7 +1022,7 @@ public class DeployJob extends MonitorableJob {
             instances = getEC2ClientForDeployJob().runInstances(runInstancesRequest).instances();
         } catch (Exception e) {
             status.fail(String.format("DeployJob failed due to a problem with AWS: %s", e.getMessage()), e);
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
 
         status.message = "Waiting for instance(s) to start";
@@ -1057,7 +1035,7 @@ public class DeployJob extends MonitorableJob {
             LOG.info("Instance status is OK after {} ms", (System.currentTimeMillis() - beginWaiting));
         } catch (Exception e) {
             status.fail("Waiter for instance status check failed. You may need to terminate the failed instances.", e);
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
 
         String tagKey = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_key");
