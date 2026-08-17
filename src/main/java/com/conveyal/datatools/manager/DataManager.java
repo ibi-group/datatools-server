@@ -3,7 +3,6 @@ package com.conveyal.datatools.manager;
 import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.datatools.common.utils.RequestSummary;
 import com.conveyal.datatools.common.utils.Scheduler;
-import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
@@ -455,18 +454,25 @@ public class DataManager {
      * In a test environment allows for overriding a specific config value on the server config object.
      */
     public static void overrideConfigProperty(String name, String value) {
-        String parts[] = name.split("\\.");
+        String[] parts = name.split("\\.");
         ObjectNode node = (ObjectNode) serverConfig;
 
-        //Loop through the dot separated field names to obtain final node and override that node's value.
+        // Loop through the dot separated field names to obtain final node and override that node's value.
         for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
             if (i < parts.length - 1) {
-                if (!node.has(parts[i])) {
-                    node.set(parts[i], JsonUtil.objectMapper.createObjectNode());
+                if (!node.has(part)) {
+                    node.set(part, JsonUtil.objectMapper.createObjectNode());
                 }
-                node = (ObjectNode) node.get(parts[i]);
+                node = (ObjectNode) node.get(part);
             } else {
-                node.put(parts[i], value);
+                // If a value is null, delete the corresponding node instead of put-ting the node value
+                // (After node.put(part, null), calling getConfigPropertyAsText will return "null".
+                if (value == null) {
+                    node.remove(part);
+                } else {
+                    node.put(part, value);
+                }
             }
         }
     }

@@ -109,11 +109,7 @@ class MtcFeedResourceTest extends UnitTest {
     @AfterEach
     void resetState() {
         DataManager.overrideConfigProperty(CONFIG_MTC_CREDENTIALS, defaultMtcAwsCredentials);
-
-        String currentMtcRegion = getConfigPropertyAsText(CONFIG_MTC_REGION);
-        if (currentMtcRegion != null && !currentMtcRegion.equals(defaultMtcAwsRegion)) {
-            DataManager.overrideConfigProperty(CONFIG_MTC_REGION, defaultMtcAwsRegion);
-        }
+        DataManager.overrideConfigProperty(CONFIG_MTC_REGION, defaultMtcAwsRegion);
     }
 
     @Test
@@ -262,7 +258,7 @@ class MtcFeedResourceTest extends UnitTest {
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = { false, true })
+    @ValueSource(booleans = { true, false })
     void canUseCorrectMtcCredentials(boolean overwriteDefaults) {
         if (overwriteDefaults) {
             DataManager.overrideConfigProperty(CONFIG_MTC_REGION, "us-west-2");
