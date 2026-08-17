@@ -1,14 +1,5 @@
 package com.conveyal.datatools.manager.persistence;
 
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.model.CopyObjectRequest;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.transfer.TransferManager;
-import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
-import com.amazonaws.services.s3.transfer.Upload;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
@@ -19,6 +10,16 @@ import gnu.trove.list.array.TLongArrayList;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.transfer.s3.S3TransferManager;
+import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
+import software.amazon.awssdk.transfer.s3.progress.TransferListener;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -66,7 +67,8 @@ public class FeedStore {
     public void deleteFeed (String id) throws CheckedAWSException {
         // If the application is using s3 storage, delete the remote copy.
         if (DataManager.useS3){
-            S3Utils.getDefaultS3Client().deleteObject(S3Utils.DEFAULT_BUCKET, S3Utils.makeGtfsFolderObjectKey(id));
+            S3Utils.getDefaultS3Client().deleteObject(DeleteObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(S3Utils.makeGtfsFolderObjectKey(id))
+                .build());
         }
         // Always delete local copy (whether storing exclusively on local disk or using s3).
         File feed = getLocalFeed(id);
@@ -96,18 +98,16 @@ public class FeedStore {
             String uri = S3Utils.getDefaultBucketUriForKey(key);
             LOG.info("Downloading feed from {}", uri);
             try (
-                S3Object object = S3Utils.getDefaultS3Client().getObject(
-                    new GetObjectRequest(S3Utils.DEFAULT_BUCKET, key)
-                );
-                InputStream objectData = object.getObjectContent();
+                ResponseInputStream<GetObjectResponse> responseStream = S3Utils.getDefaultS3Client().getObject(
+                    GetObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(key).build())
             ) {
                 try {
-                    return createTempFile(id, objectData);
+                    return createTempFile(id, responseStream);
                 } catch (IOException e) {
                     // TODO: Log to bugsnag?
                     LOG.error("Error creating temp file", e);
                 }
-            } catch (AmazonServiceException | CheckedAWSException | IOException e) {
+            } catch (AwsServiceException | CheckedAWSException | IOException e) {
                 LOG.error("Error downloading " + uri, e);
                 return null;
             }
@@ -179,54 +179,54 @@ public class FeedStore {
         if (S3Utils.DEFAULT_BUCKET != null) {
             try {
                 LOG.info("Uploading feed {} to S3 from {}", s3FileName, gtfsFile.getAbsolutePath());
-                TransferManager tm = TransferManagerBuilder.standard().withS3Client(S3Utils.getDefaultS3Client()).build();
-                PutObjectRequest request = new PutObjectRequest(S3Utils.DEFAULT_BUCKET, S3Utils.makeGtfsFolderObjectKey(s3FileName), gtfsFile);
                 // Subscribe to the event and provide event handler.
                 TLongList transferredBytes = new TLongArrayList();
                 long totalBytes = gtfsFile.length();
                 LOG.info("Total kilobytes: {}", totalBytes / 1000);
-                request.setGeneralProgressListener(progressEvent -> {
-                    if (transferredBytes.size() == 75) {
-                        LOG.info("Each dot is {} kilobytes",transferredBytes.sum() / 1000);
-                    }
-                    if (transferredBytes.size() % 75 == 0) {
-                        System.out.print(".");
-                    }
-//                    LOG.info("Uploaded {}/{}", transferredBytes.sum(), totalBytes);
-                    transferredBytes.add(progressEvent.getBytesTransferred());
-                });
-                // TransferManager processes all transfers asynchronously,
-                // so this call will return immediately.
-                Upload upload = tm.upload(request);
 
-                try {
+                TransferListener transferListener = new TransferListener() {
+                    @Override
+                    public void bytesTransferred(Context.BytesTransferred context) {
+                        if (transferredBytes.size() == 75) {
+                            LOG.info("Each dot is {} kilobytes", transferredBytes.sum() / 1000);
+                        }
+                        if (transferredBytes.size() % 75 == 0) {
+                            System.out.print(".");
+                        }
+                        transferredBytes.add(context.progressSnapshot().transferredBytes());
+                    }
+                };
+
+                UploadFileRequest uploadRequest = UploadFileRequest
+                    .builder()
+                    .putObjectRequest(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(S3Utils.makeGtfsFolderObjectKey(s3FileName)))
+                    .source(gtfsFile)
+                    .addTransferListener(transferListener)
+                    .build();
+
+                S3TransferManager transferManager = S3TransferManager
+                    .builder()
+                    .s3Client(S3Utils.getDefaultS3AsyncClient())
+                    .build();
+                try (transferManager) {
                     // You can block and wait for the upload to finish
-                    upload.waitForCompletion();
-                } catch (AmazonClientException | InterruptedException e) {
+                    transferManager.uploadFile(uploadRequest).completionFuture().join();
+                } catch (SdkException e) {
                     LOG.error("Unable to upload file, upload aborted.", e);
                     return false;
                 }
-
-                // Shutdown the Transfer Manager, but don't shut down the underlying S3 client.
-                // The default behavior for shutdownNow shut's down the underlying s3 client
-                // which will cause any following s3 operations to fail.
-                tm.shutdownNow(false);
 
                 if (feedSource != null){
                     LOG.info("Copying feed on s3 to latest version");
 
                     // copy to [feedSourceId].zip
                     String copyKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + feedSource.id + ".zip";
-                    CopyObjectRequest copyObjRequest = new CopyObjectRequest(
-                        S3Utils.DEFAULT_BUCKET,
-                        S3Utils.makeGtfsFolderObjectKey(s3FileName),
-                        S3Utils.DEFAULT_BUCKET,
-                        copyKey
-                    );
+                    CopyObjectRequest copyObjRequest = CopyObjectRequest.builder().sourceBucket(S3Utils.DEFAULT_BUCKET).sourceKey(S3Utils.makeGtfsFolderObjectKey(s3FileName)).destinationBucket(S3Utils.DEFAULT_BUCKET).destinationKey(copyKey)
+                        .build();
                     S3Utils.getDefaultS3Client().copyObject(copyObjRequest);
                 }
                 return true;
-            } catch (AmazonServiceException | CheckedAWSException e) {
+            } catch (AwsServiceException | CheckedAWSException e) {
                 LOG.error("Error uploading feed to S3", e);
                 return false;
             }

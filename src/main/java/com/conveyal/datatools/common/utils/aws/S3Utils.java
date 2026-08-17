@@ -12,6 +12,8 @@ import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.profiles.ProfileFile;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.services.s3.S3AsyncClientBuilder;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -48,6 +50,7 @@ public class S3Utils {
     private static final int REQUEST_TIMEOUT_MSEC = 30 * 1000;
     private static final AwsCredentialsProvider DEFAULT_S3_CREDENTIALS;
     private static final S3ClientManagerImpl S3ClientManager;
+    private static final S3AsyncClientManagerImpl S3AsyncClientManager;
 
     public static final String DEFAULT_BUCKET;
     public static final String DEFAULT_BUCKET_GTFS_FOLDER = "gtfs/";
@@ -61,12 +64,14 @@ public class S3Utils {
         AwsCredentialsProvider tempS3CredentialsProvider = null;
         String tempGtfsS3Bucket = null;
         S3ClientManagerImpl tempS3ClientManager = null;
+        S3AsyncClientManagerImpl tempS3AsyncClientManager = null;
 
         // Only configure s3 if the config requires doing so
         if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")) {
             S3Wrapper build = buildS3Wrapper(List.of(APP_DATA_CREDS_FILE), List.of(APP_DATA_S3_REGION));
             tempS3CredentialsProvider = build.credentials;
             tempS3ClientManager = new S3ClientManagerImpl(build.s3Client);
+            tempS3AsyncClientManager = new S3AsyncClientManagerImpl(build.s3AsyncClient);
 
             // s3 storage
             tempGtfsS3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
@@ -78,17 +83,20 @@ public class S3Utils {
         // initialize final fields
         DEFAULT_S3_CREDENTIALS = tempS3CredentialsProvider;
         S3ClientManager = tempS3ClientManager;
+        S3AsyncClientManager = tempS3AsyncClientManager;
         DEFAULT_BUCKET = tempGtfsS3Bucket;
     }
 
     public static class S3Wrapper {
         public final AwsCredentialsProvider credentials;
         public final S3Client s3Client;
+        public final S3AsyncClient s3AsyncClient;
         public final String region;
 
-        public S3Wrapper(AwsCredentialsProvider credentials, S3Client s3Client, String region) {
+        public S3Wrapper(AwsCredentialsProvider credentials, S3Client s3Client, S3AsyncClient s3AsyncClient, String region) {
             this.credentials = credentials;
             this.s3Client = s3Client;
+            this.s3AsyncClient = s3AsyncClient;
             this.region = region;
         }
     }
@@ -105,10 +113,12 @@ public class S3Utils {
         List<String> configRegions
     ) throws IllegalArgumentException {
         S3Client s3client = null;
+        S3AsyncClient s3AsyncClient = null;
         AwsCredentialsProvider credentialsProvider = null;
         String finalRegion = null;
         try {
             S3ClientBuilder builder = S3Client.builder();
+            S3AsyncClientBuilder asyncBuilder = S3AsyncClient.builder();
             // Iterate through the credentials and stop at the first non-null returned.
             // Default to the ambient IAM credentials, if any.
             for (String configCred : configCredentials) {
@@ -134,6 +144,7 @@ public class S3Utils {
                     .build();
             }
             builder.credentialsProvider(credentialsProvider);
+            asyncBuilder.credentialsProvider(credentialsProvider);
 
             // Iterate through the regions and stop at the first non-null returned.
             // Otherwise defaults to value (typically provided in ~/.aws/config)
@@ -141,12 +152,14 @@ public class S3Utils {
                 String region = DataManager.getConfigPropertyAsText(configRegion);
                 if (region != null) {
                     builder.region(Region.of(region));
+                    asyncBuilder.region(Region.of(region));
                     finalRegion = region;
                     break;
                 }
             }
 
             s3client = builder.build();
+            s3AsyncClient = asyncBuilder.build();
         } catch (Exception e) {
             LOG.error(
                 "S3 client not initialized correctly. Must provide config property {} or specify region in ~/.aws/config",
@@ -159,7 +172,7 @@ public class S3Utils {
             throw new IllegalArgumentException("Fatal error initializing the default s3Client");
         }
 
-        return new S3Wrapper(credentialsProvider, s3client, finalRegion);
+        return new S3Wrapper(credentialsProvider, s3client, s3AsyncClient, finalRegion);
     }
 
     /**
@@ -199,6 +212,30 @@ public class S3Utils {
             AwsCredentialsProvider credentials, String region, String role
         ) {
             S3ClientBuilder builder = S3Client.builder();
+            if (region != null) builder.region(Region.of(region));
+            return builder.credentialsProvider(credentials).build();
+        }
+    }
+
+    /**
+     * A class that manages the creation of S3 clients.
+     */
+    // TODO: merge these two impl classes
+    private static class S3AsyncClientManagerImpl extends AWSClientManager<S3AsyncClient> {
+        public S3AsyncClientManagerImpl(S3AsyncClient defaultClient) {
+            super(defaultClient);
+        }
+
+        @Override
+        public S3AsyncClient buildDefaultClientWithRegion(String region) {
+            return S3AsyncClient.builder().credentialsProvider(DEFAULT_S3_CREDENTIALS).region(Region.of(region)).build();
+        }
+
+        @Override
+        public S3AsyncClient buildCredentialedClientForRoleAndRegion(
+            AwsCredentialsProvider credentials, String region, String role
+        ) {
+            S3AsyncClientBuilder builder = S3AsyncClient.builder();
             if (region != null) builder.region(Region.of(region));
             return builder.credentialsProvider(credentials).build();
         }
@@ -317,6 +354,14 @@ public class S3Utils {
 
     public static S3Client getS3Client(OtpServer server) throws CheckedAWSException {
         return S3Utils.getS3Client(server.role, server.getRegion());
+    }
+
+    public static S3AsyncClient getDefaultS3AsyncClient() throws CheckedAWSException {
+        return getS3AsyncClient (null, null);
+    }
+
+    public static S3AsyncClient getS3AsyncClient(String role, String region) throws CheckedAWSException {
+        return S3AsyncClientManager.getClient(role, region);
     }
 
     /**
