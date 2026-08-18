@@ -359,9 +359,7 @@ public class DeployJob extends MonitorableJob {
                         // add GTFS data
                         for (String feedVersionId : deployment.feedVersionIds) {
                             CustomFile gtfsFile = new CustomFile();
-                            // OTP 2.x must have the string `gtfs` somewhere inside the filename, so prepend the filename
-                            // with the string `gtfs-`.
-                            gtfsFile.filename = String.format("gtfs-%s", feedVersionId);
+                            gtfsFile.filename = getGraphBuildFeedFilename(feedVersionId);
                             gtfsFile.uri = S3Utils.getS3FeedUri(feedVersionId);
                             addCustomFileAsBaseFolderDownload(manifest, gtfsFile);
                         }
@@ -1217,9 +1215,7 @@ public class DeployJob extends MonitorableJob {
                     // add GTFS data
                     for (String feedVersionId : deployment.feedVersionIds) {
                         CustomFile gtfsFile = new CustomFile();
-                        // OTP 2.x must have the string `gtfs` somewhere inside the filename, so prepend the filename
-                        // with the string `gtfs-`.
-                        gtfsFile.filename = String.format("gtfs-%s", feedVersionId);
+                        gtfsFile.filename = getGraphBuildFeedFilename(feedVersionId);
                         gtfsFile.uri = S3Utils.getS3FeedUri(feedVersionId);
                         addCustomFileAsBaseFolderDownload(manifest, gtfsFile);
                     }
@@ -1308,6 +1304,18 @@ public class DeployJob extends MonitorableJob {
             return null;
         }
         return manifest;
+    }
+
+    /**
+     * Determine the name used when otp-runner downloads a feed for graph building.
+     * Preserve the existing feed-version fallback while honoring the FeedSource filename exactly when configured.
+     */
+    private String getGraphBuildFeedFilename(String feedVersionId) {
+        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
+        return deployment.getFeedSourceBundleFilename(
+            feedVersion,
+            String.format("gtfs-%s", feedVersionId)
+        );
     }
 
     /**

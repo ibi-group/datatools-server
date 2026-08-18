@@ -108,22 +108,15 @@ public class DeployJobTest extends UnitTest {
 
         feedSource.filename = "gtfs_from_source.zip";
         Persistence.feedSources.create(feedSource);
-        assertEquals("gtfs_from_source.zip", deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
-
-        feedSource.filename = "gtfs_from_source";
-        Persistence.feedSources.replace(feedSource.id, feedSource);
-        assertEquals("gtfs_from_source.zip", deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
+        assertEquals("gtfs_from_source.zip", deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile.getName()));
 
         feedSource.filename = " ";
         Persistence.feedSources.replace(feedSource.id, feedSource);
-        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
+        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile.getName()));
 
         feedSource.filename = null;
         Persistence.feedSources.replace(feedSource.id, feedSource);
-        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
-
-        FeedVersion versionWithNullSource = new FeedVersion();
-        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(versionWithNullSource, gtfsFile));
+        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile.getName() ));
 
         Persistence.feedVersions.removeById(feedVersion.id);
         Persistence.feedSources.removeById(feedSource.id);

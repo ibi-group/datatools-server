@@ -343,7 +343,7 @@ public class Deployment extends Model implements Serializable {
                 File gtfsFile = v.retrieveGtfsFile();
                 try (FileInputStream in = new FileInputStream(gtfsFile)) {
                     // Determine the entry name for the zip file.
-                    String entryName = getFeedSourceBundleFilename(v, gtfsFile);
+                    String entryName = getFeedSourceBundleFilename(v, gtfsFile.getName());
                     ZipEntry e = new ZipEntry(entryName);
                     out.putNextEntry(e);
                     ByteStreams.copy(in, out);
@@ -403,26 +403,26 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Determine the entry name for a GTFS file within the deployment bundle.
-     * This prioritizes the FeedSource filename if available and valid, otherwise falls back
-     * to the original GTFS filename derived from the FeedVersion.
+     * Determine the entry name for a GTFS file within a deployment.
+     * This prioritizes the FeedSource filename if available and valid, otherwise it falls back
+     * to the provided filename.
      *
-     * @param feedVersion The FeedVersion being processed.
-     * @param gtfsFile    The GTFS file associated with the FeedVersion.
-     * @return The calculated entry name for the zip file.
+     * @param feedVersion    The FeedVersion being processed.
+     * @param fallbackName   The filename to use when the FeedSource has no configured filename.
+     * @return The calculated filename for the GTFS file.
      */
-    public String getFeedSourceBundleFilename(FeedVersion feedVersion, File gtfsFile) {
-        String gtfsFileName = gtfsFile.getName();
-        FeedSource fs = feedVersion.parentFeedSource();
+    public String getFeedSourceBundleFilename(FeedVersion feedVersion, String fallbackName) {
+        FeedSource fs = feedVersion == null ? null : feedVersion.parentFeedSource();
 
         if (fs != null && !Strings.isBlank(fs.filename)) {
             // Use FeedSource filename if available, ensuring it ends with .zip
-            LOG.info("Using FeedSource filename for zip entry: {}", gtfsFileName);
+            LOG.info("Using FeedSource filename for zip entry: {}", fs.filename);
             return fs.filename.endsWith(".zip") ? fs.filename : fs.filename + ".zip";
-        } 
-        // Fallback to the original GTFS filename derived from FeedVersion
-        LOG.info("Using FeedVersion filename for zip entry: {}", gtfsFileName);
-        return gtfsFileName;
+        }
+
+        // Fall back to the filename associated with the FeedVersion.
+        LOG.info("Using fallback filename for zip entry: {}", fallbackName);
+        return fallbackName;
     }
 
     /** Download config from provided URL. */
