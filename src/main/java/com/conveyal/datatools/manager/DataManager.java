@@ -228,6 +228,13 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_PRODUCTS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_TRANSFER_RULES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
+
+            // NOTE: Booking rules, locations and location shapes are GTFS Flex additions.
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.BOOKING_RULES, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATIONS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_GROUP, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_GROUP_STOPS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_SHAPES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.NETWORKS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.RIDER_CATEGORIES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);

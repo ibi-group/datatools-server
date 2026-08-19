@@ -11,6 +11,9 @@ public class ReferenceTableDiscovery {
 
     public static final String REF_TABLE_SEPARATOR = "#~#";
 
+    /**
+     * Tables that have two or more foreign references.
+     */
     public enum ReferenceTableKey {
 
         TRIP_SERVICE_ID_KEY(
@@ -21,6 +24,22 @@ public class ReferenceTableDiscovery {
                 Table.CALENDAR.name,
                 Table.CALENDAR_DATES.name,
                 Table.SCHEDULE_EXCEPTIONS.name
+            )
+        ),
+        LOCATION_GROUP_STOPS_STOP_ID_KEY(
+            String.join(
+                REF_TABLE_SEPARATOR,
+                Table.LOCATION_GROUP_STOPS.name,
+                "stop_id",
+                Table.STOPS.name
+            )
+        ),
+        STOP_TIMES_STOP_ID_KEY(
+            String.join(
+                REF_TABLE_SEPARATOR,
+                Table.STOP_TIMES.name,
+                "stop_id",
+                Table.STOPS.name
             )
         );
 
@@ -84,6 +103,16 @@ public class ReferenceTableDiscovery {
             mergeFeedsResult.skippedIds.contains(calendarDatesKey)
         ) {
             return Table.CALENDAR_DATES;
+        }
+        return null;
+    }
+
+    /**
+     * Defines the reference table as a stop if the field value matches a stop id.
+     */
+    public static Table getStopReferenceTable(String fieldValue, MergeFeedsResult mergeFeedsResult) {
+        if (mergeFeedsResult.stopIds.contains(fieldValue)) {
+            return Table.STOPS;
         }
         return null;
     }

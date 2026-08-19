@@ -306,6 +306,7 @@ public class FeedVersion extends Model implements Serializable {
             assignGtfsFileAttributes(gtfsFile);
             String gtfsFilePath = gtfsFile.getPath();
             this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
+
             if (this.feedLoadResult.fatalException != null) {
                 status.fail("Could not load feed due to " + feedLoadResult.fatalException);
                 return;
@@ -449,7 +450,6 @@ public class FeedVersion extends Model implements Serializable {
             // Wait for the file to be entirely copied into the directory.
             // 5 seconds + ~1 second per 10mb
             Thread.sleep(5000 + (this.fileSize / 10000));
-            File gtfsZip = this.retrieveGtfsFile();
             // Namespace based folders avoid clash for validation being run on multiple versions of a feed.
             // TODO: do we know that there will always be a namespace?
             String validatorOutputDirectory = "/tmp/datatools_gtfs/" + this.namespace + "/";
@@ -457,7 +457,7 @@ public class FeedVersion extends Model implements Serializable {
             status.update("MobilityData Analysis...", 20);
             // Set up MobilityData validator.
             ValidationRunnerConfig.Builder builder = ValidationRunnerConfig.builder();
-            builder.setGtfsSource(gtfsZip.toURI());
+            builder.setGtfsSource(this.retrieveGtfsFile().toURI());
             builder.setOutputDirectory(Path.of(validatorOutputDirectory));
             ValidationRunnerConfig mbValidatorConfig = builder.build();
 
@@ -656,6 +656,7 @@ public class FeedVersion extends Model implements Serializable {
 
             deleteFeedVersionFile();
             deleteDBSchema(namespace);
+
             // Remove this FeedVersion from all Deployments associated with this FeedVersion's FeedSource's Project
             // TODO TEST THOROUGHLY THAT THIS UPDATE EXPRESSION IS CORRECT
             // Although outright deleting the feedVersion from deployments could be surprising and shouldn't be done anyway.

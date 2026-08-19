@@ -231,6 +231,7 @@ public class MergeLineContext {
 
     public void startNewRow() throws IOException {
         keyValue = csvReader.get(keyFieldIndex);
+        setForeignReferenceKeyValues();
         // Get the spec fields to export
         List<Field> specFields = table.specFields();
         // Filter the spec fields on the set of fields found in all feeds to be merged.
@@ -240,8 +241,24 @@ public class MergeLineContext {
     }
 
     /**
-     * Determine which reference table to use. If there is only one reference use this. If there are multiple references
-     * determine the context and then the correct reference table to use.
+     * Build a list of table key id values to be used in foreign key field look-ups.
+     */
+    private void setForeignReferenceKeyValues() {
+        switch (table.name) {
+            case "stops":
+                mergeFeedsResult.stopIds.add(getIdWithScope(keyValue));
+                break;
+            case "location_group_stops":
+                mergeFeedsResult.locationGroupStopIds.add(getIdWithScope(keyValue));
+                break;
+            default:
+                // nothing.
+        }
+    }
+
+    /**
+     * Determine which reference table to use. If there is only one reference use this. If there are multiple
+     * references, determine the context and then the correct reference table to use.
      */
     private Table getReferenceTable(FieldContext fieldContext, Field field) {
         if (field.referenceTables.size() == 1) {
@@ -256,7 +273,12 @@ public class MergeLineContext {
                     getTableScopedValue(Table.CALENDAR, fieldContext.getValue()),
                     getTableScopedValue(Table.CALENDAR_DATES, fieldContext.getValue())
                 );
-            // Include other cases as multiple references are added e.g. flex!.
+            case STOP_TIMES_STOP_ID_KEY:
+            case LOCATION_GROUP_STOPS_STOP_ID_KEY:
+                return ReferenceTableDiscovery.getStopReferenceTable(
+                    fieldContext.getValueToWrite(),
+                    mergeFeedsResult
+                );
             default:
                 return null;
         }

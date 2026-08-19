@@ -22,6 +22,7 @@ import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.connections.ConnectionResponse;
 import com.conveyal.datatools.manager.utils.connections.HttpURLConnectionResponse;
 import com.conveyal.gtfs.GTFS;
+import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -178,6 +179,14 @@ public class FeedSource extends Model implements Cloneable {
     public String publishedVersionId;
 
     public String editorNamespace;
+
+    /**
+     * If this feed source references a feed version that is GTFS Flex, this value will permanently be set to true.
+     * This is evaluated every time a feed version is retrieved as different feed versions may or may not be flex.
+     */
+    public boolean flex;
+
+    public boolean flexUIFeaturesEnabled;
 
     /**
      * Create a new feed.
@@ -387,6 +396,7 @@ public class FeedSource extends Model implements Cloneable {
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
             status.completeSuccessfully(message);
+            presetFlex(version);
             return version;
         }
     }
@@ -428,10 +438,16 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public FeedVersion retrieveLatest() {
-        return Persistence.feedVersions.getOneFiltered(
+        FeedVersion newestVersion = Persistence.feedVersions.getOneFiltered(
             eq("feedSourceId", this.id),
             Sorts.descending("version")
         );
+        if (newestVersion == null) {
+            // Is this what happens if there are none?
+            return null;
+        }
+        presetFlex(newestVersion);
+        return newestVersion;
     }
 
     /**
@@ -447,6 +463,7 @@ public class FeedSource extends Model implements Cloneable {
             // Is this what happens if there are none?
             return null;
         }
+        presetFlex(publishedVersion);
         return publishedVersion;
     }
 
@@ -763,5 +780,20 @@ public class FeedSource extends Model implements Cloneable {
             .map(rule -> rule.getActiveTransformations(target, clazz))
             .flatMap(Collection::stream)
             .collect(Collectors.toList());
+    }
+
+    /**
+     * If a flex feed version is loaded, set this feed source to permanently be a flex feed source. Subsequent feed
+     * versions which are not flex will have no affected.
+     */
+    public void presetFlex(FeedVersion feedVersion) {
+        boolean isFlexFeedVersion = false;
+        if (feedVersion.feedLoadResult != null) isFlexFeedVersion = feedVersion.feedLoadResult.isGTFSFlex();
+        if (!flex && isFlexFeedVersion) {
+            // If the feed version is flex (and the feed source was not flex) permanently enable flex.
+            flex = flexUIFeaturesEnabled = true;
+            Persistence.feedSources.updateField(this.id, "flexUIFeaturesEnabled", true);
+            Persistence.feedSources.updateField(this.id, "flex", true);
+        }
     }
 }

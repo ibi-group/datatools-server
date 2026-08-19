@@ -9,6 +9,7 @@ import com.google.common.collect.Sets;
 import java.io.Closeable;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -23,6 +24,8 @@ public class FeedMergeContext implements Closeable {
     public final boolean tripIdsMatch;
     public final LocalDate futureFirstCalendarStartDate;
     public final Set<String> sharedTripIds;
+    public Set<String> locationIds = new HashSet<>();
+
 
     public FeedMergeContext(Set<FeedVersion> feedVersions, Auth0UserProfile owner) throws IOException {
         feedsToMerge = MergeFeedUtils.collectAndSortFeeds(feedVersions, owner);

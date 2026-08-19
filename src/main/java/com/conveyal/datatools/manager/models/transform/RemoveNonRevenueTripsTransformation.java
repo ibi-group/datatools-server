@@ -59,6 +59,9 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             Files.copy(originalZipPath, tempZipPath, StandardCopyOption.REPLACE_EXISTING);
 
             Table gtfsTable = GtfsUtils.getGtfsTable("stop_times");
+            if (gtfsTable == null) {
+                return;
+            }
             CsvReader csvReaderForStopTimes = CsvReaderUtil.getCsvReaderAccordingToFileName(
                 gtfsTable,
                 new ZipFile(tempZipPath.toAbsolutePath().toString()),
@@ -78,6 +81,9 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             );
 
             gtfsTable = GtfsUtils.getGtfsTable("trips");
+            if (gtfsTable == null) {
+                return;
+            }
             CsvReader csvReaderForTrips = CsvReaderUtil.getCsvReaderAccordingToFileName(
                 gtfsTable,
                 new ZipFile(tempZipPath.toAbsolutePath().toString()),
