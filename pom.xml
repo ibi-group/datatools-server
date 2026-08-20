@@ -442,11 +442,6 @@
             <artifactId>snakeyaml</artifactId>
             <version>2.4</version>
         </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3-transfer-manager</artifactId>
-            <version>2.51.3</version>
-        </dependency>
         <!-- Used for writing csv for merged feeds. Note: this appears to be one of the only
           CSV libraries that will only quote values when necessary (e.g., there is a comma character
           contained within the value) and that will work with an output stream writer when writing
@@ -458,6 +453,27 @@
             <version>2.4.0</version>
         </dependency>
         <!-- AWS individual module imports -->
+        <!-- AWS signin, sso, and ssooidc enable local development using federated access (aws sso login). -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>signin</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sso</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssooidc</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3-transfer-manager</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
