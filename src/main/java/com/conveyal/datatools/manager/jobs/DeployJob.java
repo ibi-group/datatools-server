@@ -31,6 +31,7 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.ec2.waiters.Ec2Waiter;
@@ -106,6 +107,7 @@ public class DeployJob extends MonitorableJob {
      * status files can be created. This is that directory.
      */
     private static final String EC2_WEB_DIR = "/usr/share/nginx/client";
+    public static final S3Utilities S3_URI_UTILS = S3Utilities.builder().region(Region.AWS_GLOBAL).build();
 
     /**
      * S3 bucket to upload deployment to. If not null, uses {@link OtpServer#s3Bucket}. Otherwise, defaults to 
@@ -451,7 +453,8 @@ public class DeployJob extends MonitorableJob {
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
     private void uploadBundleToS3() throws IOException, CheckedAWSException {
-        S3Uri uri = /*AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI. If you relied on this functionality in v1 you must update your code to manually encode the String.*/S3Utilities.builder().build().parseUri(URI.create(getS3BundleURI()));
+        S3Uri uri = /*AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI. If you relied on this functionality in v1 you must update your code to manually encode the String.*/
+            S3_URI_UTILS.parseUri(URI.create(getS3BundleURI()));
         String bucket = uri.bucket().orElse(null);
         status.message = "Uploading bundle to " + getS3BundleURI();
         status.uploadingS3 = true;
@@ -1512,7 +1515,7 @@ public class DeployJob extends MonitorableJob {
     public S3Uri getS3FolderURI() {
         /* AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI.
            If you relied on this functionality in v1 you must update your code to manually encode the String. */
-        return S3Utilities.builder().build().parseUri(URI.create(getRawS3URI()));
+        return S3_URI_UTILS.parseUri(URI.create(getRawS3URI()));
     }
 
     @JsonIgnore

@@ -27,7 +27,6 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.s3.S3Uri;
-import software.amazon.awssdk.services.s3.S3Utilities;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import spark.Request;
 import spark.Response;
@@ -45,6 +44,7 @@ import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
+import static com.conveyal.datatools.manager.jobs.DeployJob.S3_URI_UTILS;
 import static com.conveyal.datatools.manager.jobs.DeployJob.bundlePrefix;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -141,7 +141,7 @@ public class DeploymentController {
         /* AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI.
            If you relied on this functionality in v1 you must update your code to manually encode the String. */
         // Response to above: it looks like we are okay without encoding because uriString is set from raw text above.
-        S3Uri uri = S3Utilities.builder().build().parseUri(URI.create(uriString));
+        S3Uri uri = S3_URI_UTILS.parseUri(URI.create(uriString));
         // Assume the alternative role if needed to download the deploy artifact.
         return S3Utils.downloadObject(
             S3Utils.getS3Client(role, region),
@@ -409,7 +409,7 @@ public class DeploymentController {
                         /* AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI.
                            If you relied on this functionality in v1 you must update your code to manually encode the String. */
                         // Upgrade note: it doesn't look we rely on encoding. We are building a URI to reference an entry in an S3 bucket.
-                        S3Uri s3URIToDelete = S3Utilities.builder().build().parseUri(URI.create(existingCsvUrl));
+                        S3Uri s3URIToDelete = S3_URI_UTILS.parseUri(URI.create(existingCsvUrl));
                         S3Utils.getDefaultS3Client().deleteObject(DeleteObjectRequest.builder().bucket(s3URIToDelete.bucket().orElse(null)).key(s3URIToDelete.key().orElse(null))
                             .build());
                     } catch(Exception e) {
