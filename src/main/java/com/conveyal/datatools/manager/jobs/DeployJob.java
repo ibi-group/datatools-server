@@ -878,7 +878,7 @@ public class DeployJob extends MonitorableJob {
             } else {
                 // Deregister and terminate previous EC2 servers running that were associated with this server.
                 if (deployType.equals(DeployType.REPLACE)) {
-                    List<String> previousInstanceIds = previousInstances.stream().filter(instance -> "running".equals(instance.state.name()))
+                    List<String> previousInstanceIds = previousInstances.stream().filter(instance -> "running".equals(instance.state.getName()))
                         .map(instance -> instance.instanceId).collect(Collectors.toList());
                     // If there were previous instances assigned to the server, deregister/terminate them (now that the new
                     // instances are up and running).

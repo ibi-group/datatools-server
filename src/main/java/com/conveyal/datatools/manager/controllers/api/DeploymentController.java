@@ -454,7 +454,7 @@ public class DeploymentController {
                 logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "It is not permitted to terminate an instance that is not associated with deployment " + deployment.id);
                 return false;
             }
-            int code = instances.get(instanceIdsForDeployment.indexOf(id)).state.code();
+            int code = instances.get(instanceIdsForDeployment.indexOf(id)).state.getCode();
             // 48 indicates instance is terminated, 32 indicates shutting down. Prohibit terminating an already
             if (code == 48 || code == 32) {
                 logMessageAndHalt(req, 400, "Instance is already terminated/shutting down: " + id);

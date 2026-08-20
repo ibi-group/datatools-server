@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.common.utils.aws.InstanceStateAws1;
 import software.amazon.awssdk.services.ec2.model.Instance;
 import software.amazon.awssdk.services.ec2.model.InstanceState;
 import software.amazon.awssdk.services.ec2.model.Tag;
@@ -23,7 +24,7 @@ public class EC2InstanceSummary implements Serializable {
     public String jobId;
     public String deploymentId;
     public String name;
-    public InstanceState state;
+    public InstanceStateAws1 state;
     public String availabilityZone;
     public Date launchTime;
     public String stateTransitionReason;
@@ -46,7 +47,10 @@ public class EC2InstanceSummary implements Serializable {
             if (tag.key().equals("jobId")) jobId = tag.value();
             if (tag.key().equals("Name")) name = tag.value();
         }
-        state = ec2Instance.state();
+        InstanceState instanceState = ec2Instance.state();
+        state = new InstanceStateAws1()
+            .withName(instanceState.nameAsString())
+            .withCode(instanceState.code());
         availabilityZone = ec2Instance.placement().availabilityZone();
         launchTime = Date.from(ec2Instance.launchTime());
         stateTransitionReason = ec2Instance.stateTransitionReason();
