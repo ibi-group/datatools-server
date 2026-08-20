@@ -442,14 +442,6 @@ public class DeployJob extends MonitorableJob {
     }
 
     /**
-     * Similar to above, but creating a async client instead.
-     */
-    @JsonIgnore
-    public S3AsyncClient getS3AsyncClientForDeployJob() throws CheckedAWSException {
-        return S3Utils.getS3AsyncClient(otpServer.role, customRegion);
-    }
-
-    /**
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
     private void uploadBundleToS3() throws IOException, CheckedAWSException {
