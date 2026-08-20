@@ -16,6 +16,7 @@ import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3AsyncClientBuilder;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.S3Uri;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
@@ -33,7 +34,10 @@ import spark.Response;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Date;
@@ -394,5 +398,12 @@ public class S3Utils {
             .build(), RequestBody.fromFile(File.createTempFile("test", ".zip")));
         client.deleteObject(DeleteObjectRequest.builder().bucket(s3Bucket).key(key)
             .build());
+    }
+
+    /**
+     * Create a S3Uri from a string after encoding it.
+     */
+    public static S3Uri makeUri(String uriString) {
+        return S3Uri.builder().uri(URI.create(URLEncoder.encode(uriString, StandardCharsets.UTF_8))).build();
     }
 }

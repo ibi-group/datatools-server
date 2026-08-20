@@ -34,7 +34,6 @@ import spark.Response;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -44,7 +43,6 @@ import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
-import static com.conveyal.datatools.manager.jobs.DeployJob.S3_URI_UTILS;
 import static com.conveyal.datatools.manager.jobs.DeployJob.bundlePrefix;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -138,10 +136,7 @@ public class DeploymentController {
             role = summaryToDownload.role;
             region = summaryToDownload.ec2Info == null ? null : summaryToDownload.ec2Info.region;
         }
-        /* AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI.
-           If you relied on this functionality in v1 you must update your code to manually encode the String. */
-        // Response to above: it looks like we are okay without encoding because uriString is set from raw text above.
-        S3Uri uri = S3_URI_UTILS.parseUri(URI.create(uriString));
+        S3Uri uri = S3Utils.makeUri(uriString);
         // Assume the alternative role if needed to download the deploy artifact.
         return S3Utils.downloadObject(
             S3Utils.getS3Client(role, region),
@@ -406,10 +401,7 @@ public class DeploymentController {
                 // Only delete if the file does not exist in the deployment
                 if (!csvUrls.contains(existingCsvUrl)) {
                     try {
-                        /* AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI.
-                           If you relied on this functionality in v1 you must update your code to manually encode the String. */
-                        // Upgrade note: it doesn't look we rely on encoding. We are building a URI to reference an entry in an S3 bucket.
-                        S3Uri s3URIToDelete = S3_URI_UTILS.parseUri(URI.create(existingCsvUrl));
+                        S3Uri s3URIToDelete = S3Utils.makeUri(existingCsvUrl);
                         S3Utils.getDefaultS3Client().deleteObject(DeleteObjectRequest.builder().bucket(s3URIToDelete.bucket().orElse(null)).key(s3URIToDelete.key().orElse(null))
                             .build());
                     } catch(Exception e) {

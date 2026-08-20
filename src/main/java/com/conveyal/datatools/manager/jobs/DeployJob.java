@@ -31,15 +31,20 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.ec2.model.CreateTagsRequest;
+import software.amazon.awssdk.services.ec2.model.Filter;
+import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.InstanceNetworkInterfaceSpecification;
+import software.amazon.awssdk.services.ec2.model.InstanceStateChange;
+import software.amazon.awssdk.services.ec2.model.InstanceType;
+import software.amazon.awssdk.services.ec2.model.RunInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.Tag;
+import software.amazon.awssdk.services.ec2.model.TerminateInstancesResponse;
 import software.amazon.awssdk.services.ec2.waiters.Ec2Waiter;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
-import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Uri;
-import software.amazon.awssdk.services.s3.S3Utilities;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.transfer.s3.progress.TransferListener;
@@ -53,7 +58,6 @@ import java.io.InputStream;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
-import java.net.URI;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
@@ -107,7 +111,6 @@ public class DeployJob extends MonitorableJob {
      * status files can be created. This is that directory.
      */
     private static final String EC2_WEB_DIR = "/usr/share/nginx/client";
-    public static final S3Utilities S3_URI_UTILS = S3Utilities.builder().region(Region.AWS_GLOBAL).build();
 
     /**
      * S3 bucket to upload deployment to. If not null, uses {@link OtpServer#s3Bucket}. Otherwise, defaults to 
@@ -445,10 +448,10 @@ public class DeployJob extends MonitorableJob {
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
     private void uploadBundleToS3() throws IOException, CheckedAWSException {
-        S3Uri uri = /*AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI. If you relied on this functionality in v1 you must update your code to manually encode the String.*/
-            S3_URI_UTILS.parseUri(URI.create(getS3BundleURI()));
+        String bundleURI = getS3BundleURI();
+        S3Uri uri = S3Utils.makeUri(bundleURI);
         String bucket = uri.bucket().orElse(null);
-        status.message = "Uploading bundle to " + getS3BundleURI();
+        status.message = "Uploading bundle to " + bundleURI;
         status.uploadingS3 = true;
         LOG.info("Uploading deployment {} to {}", deployment.name, uri);
 
@@ -498,7 +501,7 @@ public class DeployJob extends MonitorableJob {
             .build();
         getS3ClientForDeployJob().copyObject(copyObjRequest);
         LOG.info("Copied to s3://{}/{}", bucket, copyKey);
-        LOG.info("Uploaded to {}", getS3BundleURI());
+        LOG.info("Uploaded to {}", bundleURI);
         status.update("Upload to S3 complete.", status.percentComplete + 10);
         status.uploadingS3 = false;
     }
@@ -1505,9 +1508,7 @@ public class DeployJob extends MonitorableJob {
 
     @JsonIgnore
     public S3Uri getS3FolderURI() {
-        /* AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI.
-           If you relied on this functionality in v1 you must update your code to manually encode the String. */
-        return S3_URI_UTILS.parseUri(URI.create(getRawS3URI()));
+        return S3Utils.makeUri(getRawS3URI());
     }
 
     @JsonIgnore
