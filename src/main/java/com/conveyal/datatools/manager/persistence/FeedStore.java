@@ -133,7 +133,7 @@ public class FeedStore {
      * future use. Note: uploading the file to S3 is handled elsewhere as a finishing step, e.g., at the
      * conclusion of a successful feed processing/validation step.
      */
-    public File newFeed (String id, InputStream inputStream, FeedSource feedSource) throws IOException {
+    public File newFeed(String id, InputStream inputStream, FeedSource feedSource) throws IOException {
         // write feed to specified ID.
         // NOTE: depending on the feed store, there may not be a feedSource provided (e.g., gtfsplus)
         File file = new File(path, id);
