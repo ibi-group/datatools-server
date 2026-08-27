@@ -62,6 +62,7 @@ public class S3Utils {
     public static final String APP_DATA_S3_REGION = "application.data.s3_region";
 
     public static final String APP_DATA_CREDS_FILE = "application.data.s3_credentials_file";
+    public static final String QUOTES_REGEX = "^\"|\"$";
 
     static {
         // Placeholder variables need to be used before setting the final variable to make sure initialization occurs
@@ -399,5 +400,22 @@ public class S3Utils {
      */
     public static S3Uri makeUri(String uriString) {
         return S3Uri.builder().uri(URI.create(uriString)).build();
+    }
+
+    /**
+     * Whether etags match, accounting for formatting changes moving from AWS SDK v1 to v2.
+     */
+    public static boolean eTagsMatch(String etag1, String etag2) {
+        return cleanETag(etag1).equals(cleanETag(etag2));
+    }
+
+    /**
+     * Returns a cleaned etag without quotes, accounting for formatting changes moving from AWS SDK v1 to v2.
+     * AWS SDK for Java v2 migration: NOTE: V2's eTag() preserves surrounding quotes in the response,
+     * whereas V1's getETag() strips them.
+     * <a href="https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1s-ObjectMetadata-using-V1s-getETag">...</a>
+     */
+    public static String cleanETag(String etag) {
+        return etag.replaceAll(QUOTES_REGEX, "");
     }
 }

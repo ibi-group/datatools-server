@@ -604,8 +604,7 @@ public class FeedSource extends Model implements Cloneable {
 
             boolean latestVersionMatchesSource = sourceMetadata != null &&
                     latestVersionMetadata != null &&
-                    /*AWS SDK for Java v2 migration: NOTE: V2's eTag() preserves surrounding quotes in the response, whereas V1's getETag() strips them - https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1s-ObjectMetadata-using-V1s-getETag*/
-                    sourceMetadata.eTag().replaceAll("^\"|\"$", "").equals(latestVersionMetadata.eTag().replaceAll("^\"|\"$", ""));
+                    S3Utils.eTagsMatch(sourceMetadata.eTag(), latestVersionMetadata.eTag());
             if (sourceMetadata != null && latestVersionMatchesSource) {
                 LOG.info("copying feed {} to s3 public folder", this);
                 defaultS3Client.putObjectAcl(

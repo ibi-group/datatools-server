@@ -1,6 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -200,8 +200,7 @@ public class FeedUpdater {
 
         LOG.debug(eTagForFeed.toString());
         for (S3Object objSummary : filteredObjectSummaries) {
-            String eTag = /*AWS SDK for Java v2 migration: NOTE: V2's eTag() preserves surrounding quotes in the response, whereas V1's getETag() strips them - https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1s-ObjectMetadata-using-V1s-getETag*/
-                objSummary.eTag().replaceAll("^\"|\"$", "");
+            String eTag = S3Utils.cleanETag(objSummary.eTag());
             String keyName = objSummary.key();
             LOG.debug("{} etag = {}", keyName, eTag);
 
