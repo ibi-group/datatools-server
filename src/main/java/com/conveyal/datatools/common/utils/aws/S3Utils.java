@@ -18,7 +18,6 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Uri;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
@@ -145,8 +144,7 @@ public class S3Utils {
             }
             if (credentialsProvider == null) {
                 // default credentials providers, e.g. IAM role
-                credentialsProvider = DefaultCredentialsProvider.builder()
-                    .build();
+                credentialsProvider = DefaultCredentialsProvider.builder().build();
             }
             builder.credentialsProvider(credentialsProvider);
             asyncBuilder.credentialsProvider(credentialsProvider);
@@ -254,10 +252,7 @@ public class S3Utils {
         try {
             Validate.notEmpty(bucketName, "The bucket name must not be null or an empty string.", "");
             Validate.notEmpty(key, "The object key must not be null or an empty string.", "");
-            return s3Client.headObject(HeadObjectRequest.builder()
-                .bucket(bucketName)
-                .key(key)
-                .build());
+            return s3Client.headObject(req -> req.bucket(bucketName).key(key));
         } catch (NoSuchKeyException e) {
             return null;
         }
@@ -340,13 +335,14 @@ public class S3Utils {
      * @return             A URL where the file is publicly accessible
      */
     public static String uploadObject(String keyName, File fileToUpload) throws AwsServiceException, CheckedAWSException {
-        String url = S3Utils.getDefaultBucketUrlForKey(keyName);
-        // FIXME: This may need to change during feed store refactor
-        getDefaultS3Client().putObject(PutObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(keyName)
-            // grant public read
-            .acl(ObjectCannedACL.PUBLIC_READ)
-            .build(), RequestBody.fromFile(fileToUpload));
-        return url;
+        getDefaultS3Client().putObject(
+            req -> req
+                .bucket(S3Utils.DEFAULT_BUCKET)
+                .key(keyName)
+                .acl(ObjectCannedACL.PUBLIC_READ),
+            RequestBody.fromFile(fileToUpload)
+        );
+        return S3Utils.getDefaultBucketUrlForKey(keyName);
     }
 
     public static void uploadAndWaitForCompletion(Consumer<UploadFileRequest.Builder> builderFunc) throws CheckedAWSException {
