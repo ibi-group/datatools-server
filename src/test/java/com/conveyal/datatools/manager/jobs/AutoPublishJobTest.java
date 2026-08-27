@@ -312,10 +312,10 @@ public class AutoPublishJobTest extends UnitTest {
                 return new ArrayList<>();
             } else {
                 S3Object objSummary = S3Object.builder()
+                    .eTag("test-etag")
+                    .key(String.format("%s/%s", TEST_COMPLETED_FOLDER, agencyId))
+                    .lastModified(publishDate.toInstant())
                     .build();
-                objSummary = objSummary.toBuilder().eTag("test-etag").build();
-                objSummary = objSummary.toBuilder().key(String.format("%s/%s", TEST_COMPLETED_FOLDER, agencyId)).build();
-                objSummary = objSummary.toBuilder().lastModified(publishDate.toInstant()).build();
                 return Lists.newArrayList(objSummary);
             }
         }
