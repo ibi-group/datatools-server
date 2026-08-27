@@ -30,8 +30,6 @@ import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
@@ -607,29 +605,60 @@ public class FeedSource extends Model implements Cloneable {
             boolean latestVersionMatchesSource = sourceMetadata != null &&
                     latestVersionMetadata != null &&
                     /*AWS SDK for Java v2 migration: NOTE: V2's eTag() preserves surrounding quotes in the response, whereas V1's getETag() strips them - https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1s-ObjectMetadata-using-V1s-getETag*/
-sourceMetadata.eTag().replaceAll("^\"|\"$", "").equals(/*AWS SDK for Java v2 migration: NOTE: V2's eTag() preserves surrounding quotes in the response, whereas V1's getETag() strips them - https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1s-ObjectMetadata-using-V1s-getETag*/
-latestVersionMetadata.eTag().replaceAll("^\"|\"$", ""));
+                    sourceMetadata.eTag().replaceAll("^\"|\"$", "").equals(latestVersionMetadata.eTag().replaceAll("^\"|\"$", ""));
             if (sourceMetadata != null && latestVersionMatchesSource) {
                 LOG.info("copying feed {} to s3 public folder", this);
-                /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
-                defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(sourceKey).acl(ObjectCannedACL.PUBLIC_READ));
-                defaultS3Client.copyObject(CopyObjectRequest.builder().sourceBucket(S3Utils.DEFAULT_BUCKET).sourceKey(sourceKey).destinationBucket(S3Utils.DEFAULT_BUCKET).destinationKey(publicKey)
-                    .build());
-                /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
-                defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(publicKey).acl(ObjectCannedACL.PUBLIC_READ));
+                defaultS3Client.putObjectAcl(
+                    req -> req
+                        .bucket(S3Utils.DEFAULT_BUCKET)
+                        .key(sourceKey)
+                        .acl(ObjectCannedACL.PUBLIC_READ)
+                );
+                defaultS3Client.copyObject(
+                    req -> req
+                        .sourceBucket(S3Utils.DEFAULT_BUCKET)
+                        .sourceKey(sourceKey)
+                        .destinationBucket(S3Utils.DEFAULT_BUCKET)
+                        .destinationKey(publicKey)
+                );
+                defaultS3Client.putObjectAcl(
+                    req -> req
+                        .bucket(S3Utils.DEFAULT_BUCKET)
+                        .key(publicKey)
+                        .acl(ObjectCannedACL.PUBLIC_READ)
+                );
             } else {
                 LOG.warn("Latest feed source {} on s3 at {} does not exist or does not match latest version. Using latest version instead.", this, sourceKey);
                 if (latestVersionMetadata != null) {
                     LOG.info("copying feed version {} to s3 public folder", versionId);
-                    /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
-                    defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(latestVersionKey).acl(ObjectCannedACL.PUBLIC_READ));
-                    defaultS3Client.copyObject(CopyObjectRequest.builder().sourceBucket(S3Utils.DEFAULT_BUCKET).sourceKey(latestVersionKey).destinationBucket(S3Utils.DEFAULT_BUCKET).destinationKey(publicKey)
-                        .build());
-                    /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
-                    defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(publicKey).acl(ObjectCannedACL.PUBLIC_READ));
+                    defaultS3Client.putObjectAcl(
+                        req -> req
+                            .bucket(S3Utils.DEFAULT_BUCKET)
+                            .key(latestVersionKey)
+                            .acl(ObjectCannedACL.PUBLIC_READ)
+                    );
+                    defaultS3Client.copyObject(
+                        req -> req
+                            .sourceBucket(S3Utils.DEFAULT_BUCKET)
+                            .sourceKey(latestVersionKey)
+                            .destinationBucket(S3Utils.DEFAULT_BUCKET)
+                            .destinationKey(publicKey)
+                    );
+                    defaultS3Client.putObjectAcl(
+                        req -> req
+                            .bucket(S3Utils.DEFAULT_BUCKET)
+                            .key(publicKey)
+                            .acl(ObjectCannedACL.PUBLIC_READ)
+                    );
 
                     // also copy latest version to feedStore latest
-                    defaultS3Client.copyObject(CopyObjectRequest.builder().sourceBucket(S3Utils.DEFAULT_BUCKET).sourceKey(latestVersionKey).destinationBucket(S3Utils.DEFAULT_BUCKET).destinationKey(sourceKey).build());
+                    defaultS3Client.copyObject(
+                        req -> req
+                            .sourceBucket(S3Utils.DEFAULT_BUCKET)
+                            .sourceKey(latestVersionKey)
+                            .destinationBucket(S3Utils.DEFAULT_BUCKET)
+                            .destinationKey(sourceKey)
+                    );
                 }
             }
         } else {
@@ -647,9 +676,13 @@ latestVersionMetadata.eTag().replaceAll("^\"|\"$", ""));
         S3Client defaultS3Client = S3Utils.getDefaultS3Client();
         if (S3Utils.objectExists(defaultS3Client, S3Utils.DEFAULT_BUCKET, sourceKey)) {
             LOG.info("removing feed {} from s3 public folder", this);
-            /*AWS SDK for Java v2 migration: Transform for AccessControlList and CannedAccessControlList not supported. In v2, CannedAccessControlList is replaced by BucketCannedACL for buckets and ObjectCannedACL for objects. Please reference https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html#V1-AccessControlList*/
-            defaultS3Client.putObjectAcl(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(sourceKey).acl(ObjectCannedACL.AUTHENTICATED_READ));
-            defaultS3Client.deleteObject(DeleteObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(publicKey).build());
+            defaultS3Client.putObjectAcl(
+                req -> req
+                    .bucket(S3Utils.DEFAULT_BUCKET)
+                    .key(sourceKey)
+                    .acl(ObjectCannedACL.AUTHENTICATED_READ)
+            );
+            defaultS3Client.deleteObject(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(publicKey));
         }
     }
 
