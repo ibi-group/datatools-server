@@ -6,7 +6,11 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.TimeTracker;
-import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.ec2.model.CreateImageRequest;
+import software.amazon.awssdk.services.ec2.model.CreateImageResponse;
+import software.amazon.awssdk.services.ec2.model.DescribeImagesResponse;
+import software.amazon.awssdk.services.ec2.model.Image;
+import software.amazon.awssdk.services.ec2.model.Instance;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -61,15 +65,12 @@ public class RecreateBuildImageJob extends MonitorableJob {
         String createdImageId = createImageResult.imageId();
         status.update("Waiting for graph build image to be created...", 25);
         boolean imageCreated = false;
-        DescribeImagesRequest describeImagesRequest = DescribeImagesRequest.builder()
-            .imageIds(createdImageId)
-            .build();
         while (!imageCreated && !status.error) {
             DescribeImagesResponse describeImagesResult = null;
             try {
                 describeImagesResult = parentDeployJob
                     .getEC2ClientForDeployJob()
-                    .describeImages(describeImagesRequest);
+                    .describeImages(req -> req.imageIds(createdImageId));
             } catch (Exception e) {
                 terminateInstanceAndFailWithMessage("Failed to make request to get image creation status!", e);
                 return;
@@ -120,11 +121,8 @@ public class RecreateBuildImageJob extends MonitorableJob {
                 !graphBuildAmiId.equals(otpServer.ec2Info.amiId)
         ) {
             status.message = "Deregistering old build image";
-            DeregisterImageRequest deregisterImageRequest = DeregisterImageRequest.builder()
-                .imageId(graphBuildAmiId)
-                .build();
             try {
-                parentDeployJob.getEC2ClientForDeployJob().deregisterImage(deregisterImageRequest);
+                parentDeployJob.getEC2ClientForDeployJob().deregisterImage(req -> req.imageId(graphBuildAmiId));
             } catch (Exception e) {
                 terminateInstanceAndFailWithMessage("Failed to deregister previous graph building image!", e);
                 return;

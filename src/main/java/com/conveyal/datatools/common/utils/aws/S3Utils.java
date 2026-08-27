@@ -17,14 +17,10 @@ import software.amazon.awssdk.services.s3.S3AsyncClientBuilder;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Uri;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
-import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
 import software.amazon.awssdk.utils.Validate;
@@ -307,13 +303,13 @@ public class S3Utils {
 
         URL url;
         try (S3Presigner presigner = S3Presigner.create()) {
-            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMillis(REQUEST_TIMEOUT_MSEC))
-                .getObjectRequest(objReq -> objReq.bucket(bucket).key(key))
-                .build();
-
-            PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(presignRequest);
-            url = presignedRequest.url();
+            url = presigner
+                .presignGetObject(
+                    sign -> sign
+                        .signatureDuration(Duration.ofMillis(REQUEST_TIMEOUT_MSEC))
+                        .getObjectRequest(objReq -> objReq.bucket(bucket).key(key))
+                )
+                .url();
         } catch (AwsServiceException e) {
             logMessageAndHalt(req, 500, "Failed to download file from S3.", e);
             return null;
@@ -389,10 +385,11 @@ public class S3Utils {
      */
     public static void verifyS3WritePermissions(S3Client client, String s3Bucket) throws IOException {
         String key = UUID.randomUUID().toString();
-        client.putObject(PutObjectRequest.builder().bucket(s3Bucket).key(key)
-            .build(), RequestBody.fromFile(File.createTempFile("test", ".zip")));
-        client.deleteObject(DeleteObjectRequest.builder().bucket(s3Bucket).key(key)
-            .build());
+        client.putObject(
+            req -> req.bucket(s3Bucket).key(key),
+            RequestBody.fromFile(File.createTempFile("test", ".zip"))
+        );
+        client.deleteObject(req -> req.bucket(s3Bucket).key(key));
     }
 
     /**

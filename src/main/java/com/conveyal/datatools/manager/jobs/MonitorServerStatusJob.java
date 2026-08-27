@@ -18,12 +18,10 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.services.ec2.model.DescribeInstancesRequest;
 import software.amazon.awssdk.services.ec2.model.DescribeInstancesResponse;
 import software.amazon.awssdk.services.ec2.model.Instance;
 import software.amazon.awssdk.services.ec2.model.Reservation;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
-import software.amazon.awssdk.services.elasticloadbalancingv2.model.DescribeTargetHealthRequest;
 import software.amazon.awssdk.services.elasticloadbalancingv2.model.DescribeTargetHealthResponse;
 import software.amazon.awssdk.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
 import software.amazon.awssdk.services.elasticloadbalancingv2.model.TargetDescription;
@@ -151,8 +149,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // REGISTER INSTANCE WITH LOAD BALANCER
             RegisterTargetsRequest registerTargetsRequest = RegisterTargetsRequest.builder()
                 .targetGroupArn(otpServer.ec2Info.targetGroupArn)
-                .targets(TargetDescription.builder().id(instance.instanceId())
-                    .build())
+                .targets(TargetDescription.builder().id(instance.instanceId()).build())
                 .build();
             boolean targetAddedSuccessfully = false;
             // Wait for two minutes for targets to register.
@@ -166,10 +163,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 elbClient.registerTargets(registerTargetsRequest);
                 waitAndCheckInstanceHealth("instance to register with ELB target group");
                 // Check that the instance ID shows up in the health check.
-                DescribeTargetHealthRequest healthRequest = DescribeTargetHealthRequest.builder()
-                    .targetGroupArn(otpServer.ec2Info.targetGroupArn)
-                    .build();
-                DescribeTargetHealthResponse healthResult = elbClient.describeTargetHealth(healthRequest);
+                DescribeTargetHealthResponse healthResult = elbClient.describeTargetHealth(
+                    req -> req.targetGroupArn(otpServer.ec2Info.targetGroupArn)
+                );
                 for (TargetHealthDescription health : healthResult.targetHealthDescriptions()) {
                     if (instance.instanceId().equals(health.target().id())) {
                         LOG.info("Instance {} successfully added to target group!", instance.instanceId());
@@ -255,12 +251,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * ${@link MonitorServerStatusJob#MAX_INSTANCE_HEALTH_RETRIES} value.
      */
     private void checkInstanceHealth(int attemptNumber) throws InstanceHealthException, InterruptedException {
-        DescribeInstancesRequest request = DescribeInstancesRequest.builder()
-            .instanceIds(Collections.singletonList(instance.instanceId()))
-            .build();
         DescribeInstancesResponse result;
         try {
-            result = deployJob.getEC2ClientForDeployJob().describeInstances(request);
+            result = deployJob.getEC2ClientForDeployJob().describeInstances(req -> req.instanceIds(instance.instanceId()));
         } catch (Exception e) {
             LOG.warn(
                 "Failed on attempt {}/{} to execute request to obtain instance health!",
