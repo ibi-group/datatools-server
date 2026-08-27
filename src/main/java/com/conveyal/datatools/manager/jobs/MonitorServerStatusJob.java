@@ -213,7 +213,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * Gets the expected path to the otp-runner logs that get uploaded to s3
      */
     private String getOtpRunnerLogS3Path() {
-        return String.format("%s/%s-otp-runner.log", deployJob.getS3FolderURI(), instance.instanceId());
+        return String.format("%s/%s-otp-runner.log", deployJob.getRawS3URI(), instance.instanceId());
     }
 
     /**

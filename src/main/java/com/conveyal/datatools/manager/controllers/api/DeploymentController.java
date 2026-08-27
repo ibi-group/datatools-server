@@ -117,7 +117,7 @@ public class DeploymentController {
             // See if there is an ongoing job for the provided jobId.
             MonitorableJob job = JobUtils.getJobByJobId(jobId);
             if (job instanceof DeployJob) {
-                uriString = ((DeployJob) job).getS3FolderURI().toString();
+                uriString = ((DeployJob) job).getRawS3URI();
             } else {
                 // Try to construct the URI string
                 OtpServer server = Persistence.servers.getById(deployment.deployedTo);
