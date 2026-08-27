@@ -497,9 +497,13 @@ public class DeployJob extends MonitorableJob {
 
         // copy to [name]-latest.zip
         String copyKey = getLatestS3BundleKey();
-        CopyObjectRequest copyObjRequest = CopyObjectRequest.builder().sourceBucket(bucket).sourceKey(uri.key().orElse(null)).destinationBucket(uri.bucket().orElse(null)).destinationKey(copyKey)
-            .build();
-        getS3ClientForDeployJob().copyObject(copyObjRequest);
+        getS3ClientForDeployJob().copyObject(
+            req -> req
+                .sourceBucket(bucket)
+                .sourceKey(uri.key().orElse(null))
+                .destinationBucket(uri.bucket().orElse(null))
+                .destinationKey(copyKey)
+        );
         LOG.info("Copied to s3://{}/{}", bucket, copyKey);
         LOG.info("Uploaded to {}", bundleURI);
         status.update("Upload to S3 complete.", status.percentComplete + 10);
@@ -1432,8 +1436,10 @@ public class DeployJob extends MonitorableJob {
         if (dryRun) return true;
         status.message = String.format("uploading %s to S3", filename);
         try {
-            getS3ClientForDeployJob().putObject(PutObjectRequest.builder().bucket(s3Bucket).key(String.format("%s/%s", jobRelativePath, filename))
-                .build(), RequestBody.fromString(contents));
+            getS3ClientForDeployJob().putObject(
+                req -> req.bucket(s3Bucket).key(String.format("%s/%s", jobRelativePath, filename)),
+                RequestBody.fromString(contents)
+            );
         } catch (Exception e) {
             status.fail(String.format("Failed to upload file %s", filename), e);
             return false;
