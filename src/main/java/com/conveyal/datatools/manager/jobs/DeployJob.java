@@ -1204,7 +1204,7 @@ public class DeployJob extends MonitorableJob {
             : "1.x";
         manifest.prefixLogUploadsWithInstanceId = true;
         manifest.serverStartupTimeoutSeconds = 3300;
-        manifest.s3UploadPath = getS3FolderURI().toString();
+        manifest.s3UploadPath = getS3FolderURI().uri().toString();
         manifest.statusFileLocation = String.format("%s/%s", EC2_WEB_DIR, OTP_RUNNER_STATUS_FILE);
         manifest.uploadOtpRunnerLogs = true;
         // add settings applicable to current instance. Two different manifest files are generated when deploying with
@@ -1524,7 +1524,7 @@ public class DeployJob extends MonitorableJob {
     /** Join list of paths to S3 URI for job folder to create a fully qualified URI (e.g., s3://bucket/path/to/file). */
     private String joinToS3FolderUri(CharSequence... paths) {
         List<CharSequence> pathList = new ArrayList<>();
-        pathList.add(getS3FolderURI().toString());
+        pathList.add(getS3FolderURI().uri().toString());
         pathList.addAll(Arrays.asList(paths));
         return String.join("/", pathList);
     }

@@ -36,8 +36,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Date;
@@ -404,6 +402,6 @@ public class S3Utils {
      * Create a S3Uri from a string after encoding it.
      */
     public static S3Uri makeUri(String uriString) {
-        return S3Uri.builder().uri(URI.create(URLEncoder.encode(uriString, StandardCharsets.UTF_8))).build();
+        return S3Uri.builder().uri(URI.create(uriString)).build();
     }
 }
