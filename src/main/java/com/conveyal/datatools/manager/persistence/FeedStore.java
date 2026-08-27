@@ -13,9 +13,6 @@ import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
-import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.transfer.s3.progress.TransferListener;
 
@@ -65,8 +62,11 @@ public class FeedStore {
     public void deleteFeed (String id) throws CheckedAWSException {
         // If the application is using s3 storage, delete the remote copy.
         if (DataManager.useS3){
-            S3Utils.getDefaultS3Client().deleteObject(DeleteObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(S3Utils.makeGtfsFolderObjectKey(id))
-                .build());
+            S3Utils.getDefaultS3Client().deleteObject(
+                req -> req
+                    .bucket(S3Utils.DEFAULT_BUCKET)
+                    .key(S3Utils.makeGtfsFolderObjectKey(id))
+            );
         }
         // Always delete local copy (whether storing exclusively on local disk or using s3).
         File feed = getLocalFeed(id);
@@ -97,7 +97,8 @@ public class FeedStore {
             LOG.info("Downloading feed from {}", uri);
             try (
                 ResponseInputStream<GetObjectResponse> responseStream = S3Utils.getDefaultS3Client().getObject(
-                    GetObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(key).build())
+                    req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(key)
+                )
             ) {
                 try {
                     return createTempFile(id, responseStream);
@@ -197,7 +198,11 @@ public class FeedStore {
 
                 try {
                     S3Utils.uploadAndWaitForCompletion(upload -> upload
-                        .putObjectRequest(req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(S3Utils.makeGtfsFolderObjectKey(s3FileName)))
+                        .putObjectRequest(
+                            req -> req
+                                .bucket(S3Utils.DEFAULT_BUCKET)
+                                .key(S3Utils.makeGtfsFolderObjectKey(s3FileName))
+                        )
                         .source(gtfsFile)
                         .addTransferListener(transferListener)
                     );
@@ -211,9 +216,13 @@ public class FeedStore {
 
                     // copy to [feedSourceId].zip
                     String copyKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + feedSource.id + ".zip";
-                    CopyObjectRequest copyObjRequest = CopyObjectRequest.builder().sourceBucket(S3Utils.DEFAULT_BUCKET).sourceKey(S3Utils.makeGtfsFolderObjectKey(s3FileName)).destinationBucket(S3Utils.DEFAULT_BUCKET).destinationKey(copyKey)
-                        .build();
-                    S3Utils.getDefaultS3Client().copyObject(copyObjRequest);
+                    S3Utils.getDefaultS3Client().copyObject(
+                        req -> req
+                            .sourceBucket(S3Utils.DEFAULT_BUCKET)
+                            .sourceKey(S3Utils.makeGtfsFolderObjectKey(s3FileName))
+                            .destinationBucket(S3Utils.DEFAULT_BUCKET)
+                            .destinationKey(copyKey)
+                    );
                 }
                 return true;
             } catch (AwsServiceException | CheckedAWSException e) {
