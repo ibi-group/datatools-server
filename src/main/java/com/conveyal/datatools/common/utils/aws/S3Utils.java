@@ -218,9 +218,8 @@ public class S3Utils {
     }
 
     /**
-     * A class that manages the creation of S3 clients.
+     * A class that manages the creation of S3 Async clients.
      */
-    // TODO: merge these two impl classes
     private static class S3AsyncClientManagerImpl extends AWSClientManager<S3AsyncClient> {
         public S3AsyncClientManagerImpl(S3AsyncClient defaultClient) {
             super(defaultClient);
