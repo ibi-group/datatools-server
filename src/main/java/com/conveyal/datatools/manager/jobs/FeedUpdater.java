@@ -378,11 +378,12 @@ public class FeedUpdater {
     private FeedVersion findMatchingFeedVersion(
         String keyName,
         FeedSource feedSource
-    ) throws AwsServiceException, IOException, CheckedAWSException {
+    ) throws AwsServiceException, IOException {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
-        ResponseInputStream<GetObjectResponse> object = MtcFeedResource.getS3Client().getObject(GetObjectRequest.builder().bucket(feedBucket).key(keyName)
-            .build());
+        ResponseInputStream<GetObjectResponse> object = MtcFeedResource.getS3Client().getObject(
+            req -> req.bucket(feedBucket).key(keyName)
+        );
         File file = new File(FeedStore.basePath, filename);
         try (
             InputStream in = object;
@@ -430,7 +431,7 @@ public class FeedUpdater {
         @Override
         public List<S3Object> retrieveCompletedFeeds() {
             ListObjectsResponse gtfsList = MtcFeedResource.getS3Client().listObjects(
-                ListObjectsRequest.builder().bucket(feedBucket).prefix(bucketFolder).build()
+                list -> list.bucket(feedBucket).prefix(bucketFolder)
             );
             return gtfsList.contents();
         }

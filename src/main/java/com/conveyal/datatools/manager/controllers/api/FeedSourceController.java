@@ -27,7 +27,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import spark.Request;
 import spark.Response;
 
@@ -233,8 +232,11 @@ public class FeedSourceController {
         // If feed just changed from public to private, delete feed from public repo if it's present there.
         if (formerFeedSource.isPublic && !updatedFeedSource.isPublic) {
             LOG.info("Deleting {} as feed is being adjusted from public to private.", updatedFeedSource.toPublicKey());
-            S3Utils.getDefaultS3Client().deleteObject(DeleteObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(updatedFeedSource.toPublicKey())
-                .build());
+            S3Utils.getDefaultS3Client().deleteObject(
+                delete -> delete
+                    .bucket(S3Utils.DEFAULT_BUCKET)
+                    .key(updatedFeedSource.toPublicKey())
+            );
         }
 
         if (shouldNotifyUsersOnFeedUpdated(formerFeedSource, updatedFeedSource)) {

@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -77,8 +76,10 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
         if (DataManager.useS3) {
             String s3Key = String.format("%s/%s", bucketPrefix, filename);
             try {
-                S3Utils.getDefaultS3Client().putObject(PutObjectRequest.builder().bucket(S3Utils.DEFAULT_BUCKET).key(s3Key)
-                    .build(), RequestBody.fromFile(tempFile));
+                S3Utils.getDefaultS3Client().putObject(
+                    req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(s3Key),
+                    RequestBody.fromFile(tempFile)
+                );
             } catch (AwsServiceException | CheckedAWSException e) {
                 status.fail("Failed to upload file to S3", e);
                 return;

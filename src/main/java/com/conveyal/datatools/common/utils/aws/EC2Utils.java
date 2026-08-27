@@ -11,10 +11,24 @@ import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.Ec2ClientBuilder;
-import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.ec2.model.DescribeImagesResponse;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesResponse;
+import software.amazon.awssdk.services.ec2.model.DescribeKeyPairsResponse;
+import software.amazon.awssdk.services.ec2.model.DescribeSubnetsResponse;
+import software.amazon.awssdk.services.ec2.model.Ec2Exception;
+import software.amazon.awssdk.services.ec2.model.Filter;
+import software.amazon.awssdk.services.ec2.model.Image;
+import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.InstanceType;
+import software.amazon.awssdk.services.ec2.model.KeyPairInfo;
+import software.amazon.awssdk.services.ec2.model.Reservation;
+import software.amazon.awssdk.services.ec2.model.Subnet;
+import software.amazon.awssdk.services.ec2.model.TerminateInstancesResponse;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2ClientBuilder;
-import software.amazon.awssdk.services.elasticloadbalancingv2.model.*;
+import software.amazon.awssdk.services.elasticloadbalancingv2.model.ElasticLoadBalancingV2Exception;
+import software.amazon.awssdk.services.elasticloadbalancingv2.model.LoadBalancer;
+import software.amazon.awssdk.services.elasticloadbalancingv2.model.TargetDescription;
 import software.amazon.awssdk.services.elasticloadbalancingv2.model.TargetGroup;
 
 import java.util.ArrayList;
@@ -97,9 +111,7 @@ public class EC2Utils {
 
     /** Determine if AMI ID exists (and is gettable by the application's AWS credentials). */
     public static boolean amiExists(Ec2Client ec2Client, String amiId) {
-        DescribeImagesRequest request = DescribeImagesRequest.builder().imageIds(amiId)
-            .build();
-        DescribeImagesResponse result = ec2Client.describeImages(request);
+        DescribeImagesResponse result = ec2Client.describeImages(req -> req.imageIds(amiId));
         // Iterate over AMIs to find a matching ID.
         for (Image image : result.images()) {
             if (image.imageId().equals(amiId) && image.state().name().equalsIgnoreCase("available")) return true;
@@ -118,15 +130,14 @@ public class EC2Utils {
     ) {
         LOG.info("De-registering instances from load balancer {}", instanceIds);
         TargetDescription[] targetDescriptions = instanceIds.stream()
-            .map(id -> TargetDescription.builder().id(id)
-                .build())
+            .map(id -> TargetDescription.builder().id(id).build())
             .toArray(TargetDescription[]::new);
         try {
-            DeregisterTargetsRequest request = DeregisterTargetsRequest.builder()
-                .targetGroupArn(targetGroupArn)
-                .targets(targetDescriptions)
-                .build();
-            getELBClient(role, region).deregisterTargets(request);
+            getELBClient(role, region).deregisterTargets(
+                req -> req
+                    .targetGroupArn(targetGroupArn)
+                    .targets(targetDescriptions)
+            );
             terminateInstances(getEC2Client(role, region), instanceIds);
         } catch (AwsServiceException | CheckedAWSException e) {
             LOG.warn("Could not terminate EC2 instances: {}", String.join(",", instanceIds), e);
@@ -147,10 +158,8 @@ public class EC2Utils {
      */
     public static List<Instance> fetchEC2Instances(Ec2Client ec2Client, Filter... filters) {
         if (ec2Client == null) throw new IllegalArgumentException("Must provide EC2Client");
+        DescribeInstancesResponse result = ec2Client.describeInstances(req -> req.filters(filters));
         List<Instance> instances = new ArrayList<>();
-        DescribeInstancesRequest request = DescribeInstancesRequest.builder().filters(filters)
-            .build();
-        DescribeInstancesResponse result = ec2Client.describeInstances(request);
         for (Reservation reservation : result.reservations()) {
             instances.addAll(reservation.instances());
         }
@@ -179,17 +188,15 @@ public class EC2Utils {
         String targetGroupArn
     ) {
         try {
-            DescribeTargetGroupsRequest targetGroupsRequest = DescribeTargetGroupsRequest.builder()
-                .targetGroupArns(targetGroupArn)
-                .build();
-            List<TargetGroup> targetGroups = elbClient.describeTargetGroups(targetGroupsRequest).targetGroups();
+            List<TargetGroup> targetGroups = elbClient
+                .describeTargetGroups(req -> req.targetGroupArns(targetGroupArn))
+                .targetGroups();
             for (TargetGroup tg : targetGroups) {
-                DescribeLoadBalancersRequest request = DescribeLoadBalancersRequest.builder()
-                    .loadBalancerArns(tg.loadBalancerArns())
-                    .build();
-                DescribeLoadBalancersResponse result = elbClient.describeLoadBalancers(request);
                 // Return the first load balancer
-                return result.loadBalancers().iterator().next();
+                return elbClient
+                    .describeLoadBalancers(req -> req.loadBalancerArns(tg.loadBalancerArns()))
+                    .loadBalancers()
+                    .iterator().next();
             }
         } catch (ElasticLoadBalancingV2Exception e) {
             LOG.warn("Invalid value for Target Group ARN: {}", targetGroupArn);
@@ -208,15 +215,13 @@ public class EC2Utils {
         Ec2Client ec2Client,
         Collection<String> instanceIds
     ) throws CheckedAWSException {
-        if (instanceIds.size() == 0) {
+        if (instanceIds.isEmpty()) {
             LOG.warn("No instance IDs provided in list. Skipping termination request.");
             return null;
         }
         LOG.info("Terminating EC2 instances {}", instanceIds);
-        TerminateInstancesRequest request = TerminateInstancesRequest.builder().instanceIds(instanceIds)
-            .build();
         try {
-            return ec2Client.terminateInstances(request);
+            return ec2Client.terminateInstances(req -> req.instanceIds(instanceIds));
         } catch (Ec2Exception e) {
             throw new CheckedAWSException(e);
         }
@@ -285,11 +290,10 @@ public class EC2Utils {
         if (!otpServer.ec2Info.recreateBuildImage) return result;
         String buildImageName = otpServer.ec2Info.buildImageName;
         try {
-            DescribeImagesRequest describeImagesRequest = DescribeImagesRequest.builder()
+            DescribeImagesResponse describeImagesResult = otpServer.getEC2Client().describeImages(
                 // limit AMIs to only those owned by the current ec2 user.
-                .owners("self")
-                .build();
-            DescribeImagesResponse describeImagesResult = otpServer.getEC2Client().describeImages(describeImagesRequest);
+                req -> req.owners("self")
+            );
             // Iterate over AMIs to see if any images have a duplicate name.
             for (Image image : describeImagesResult.images()) {
                 if (image.name().equals(buildImageName)) {
@@ -382,11 +386,9 @@ public class EC2Utils {
         String message = "Server must have valid subnet ID";
         // Make request for all subnets associated with load balancer's vpc
         Filter filter = Filter.builder().name("vpc-id").values(loadBalancer.vpcId()).build();
-        DescribeSubnetsRequest describeSubnetsRequest = DescribeSubnetsRequest.builder().filters(filter)
-            .build();
         DescribeSubnetsResponse describeSubnetsResult;
         try {
-            describeSubnetsResult = otpServer.getEC2Client().describeSubnets(describeSubnetsRequest);
+            describeSubnetsResult = otpServer.getEC2Client().describeSubnets(req -> req.filters(filter));
         } catch (CheckedAWSException e) {
             result.setInvalid(message, e);
             return result;

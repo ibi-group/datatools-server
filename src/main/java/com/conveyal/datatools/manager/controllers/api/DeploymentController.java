@@ -27,7 +27,6 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.s3.S3Uri;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import spark.Request;
 import spark.Response;
 
@@ -402,8 +401,11 @@ public class DeploymentController {
                 if (!csvUrls.contains(existingCsvUrl)) {
                     try {
                         S3Uri s3URIToDelete = S3Utils.makeUri(existingCsvUrl);
-                        S3Utils.getDefaultS3Client().deleteObject(DeleteObjectRequest.builder().bucket(s3URIToDelete.bucket().orElse(null)).key(s3URIToDelete.key().orElse(null))
-                            .build());
+                        S3Utils.getDefaultS3Client().deleteObject(
+                            delete -> delete
+                                .bucket(s3URIToDelete.bucket().orElse(null))
+                                .key(s3URIToDelete.key().orElse(null))
+                        );
                     } catch(Exception e) {
                         logMessageAndHalt(req, 500, "Failed to delete file from S3.", e);
                     }
