@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.s3.S3AsyncClientBuilder;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Uri;
+import software.amazon.awssdk.services.s3.S3Utilities;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
@@ -51,6 +52,7 @@ public class S3Utils {
     private static final AwsCredentialsProvider DEFAULT_S3_CREDENTIALS;
     private static final S3ClientManagerImpl S3ClientManager;
     private static final S3AsyncClientManagerImpl S3AsyncClientManager;
+    private static final S3Utilities S3_GLOBAL_UTILS = S3Utilities.builder().region(Region.AWS_GLOBAL).build();
 
     public static final String DEFAULT_BUCKET;
     public static final String DEFAULT_BUCKET_GTFS_FOLDER = "gtfs/";
@@ -396,10 +398,10 @@ public class S3Utils {
     }
 
     /**
-     * Create a S3Uri from a string after encoding it.
+     * Create a S3Uri from a string from which a bucket or key can be extracted.
      */
     public static S3Uri makeUri(String uriString) {
-        return S3Uri.builder().uri(URI.create(uriString)).build();
+        return S3_GLOBAL_UTILS.parseUri(URI.create(uriString));
     }
 
     /**

@@ -12,9 +12,7 @@ import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.http.Header;
 import org.apache.http.message.BasicHeader;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Uri;
-import software.amazon.awssdk.services.s3.S3Utilities;
 
 import java.io.IOException;
 import java.net.URI;
@@ -70,8 +68,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         }
 
         // Get log upload URI from deployment (the latest build artifacts folder is where the logs get uploaded to)
-        /*AWS SDK for Java v2 migration: v2 S3Uri does not URL-encode a String URI. If you relied on this functionality in v1 you must update your code to manually encode the String.*/
-        this.logUploadS3URI = S3Utilities.builder().region(Region.AWS_GLOBAL).build().parseUri(URI.create(deployment.deployJobSummaries.get(deployment.deployJobSummaries.size() - 1).buildArtifactsFolder));
+        this.logUploadS3URI = S3Utils.makeUri(deployment.deployJobSummaries.get(deployment.deployJobSummaries.size() - 1).buildArtifactsFolder);
     }
 
     /**

@@ -484,7 +484,7 @@ public class DeployJob extends MonitorableJob {
             }
 
             S3Utils.uploadAndWaitForCompletion(upload -> upload
-                .putObjectRequest(req -> req.bucket(bucket).key(getS3FolderURI().key().orElse(null) + "/" + ROUTER_CONFIG_FILENAME))
+                .putObjectRequest(req -> req.bucket(bucket).key(getJobRelativePath() + "/" + ROUTER_CONFIG_FILENAME))
                 .source(routerConfigFile)
                 // no transfer listener for router config upload, it is a small file.
             );
@@ -1508,11 +1508,6 @@ public class DeployJob extends MonitorableJob {
     @JsonIgnore
     public String getJobRelativePath() {
         return jobRelativePath;
-    }
-
-    @JsonIgnore
-    public S3Uri getS3FolderURI() {
-        return S3Utils.makeUri(getRawS3URI());
     }
 
     @JsonIgnore
