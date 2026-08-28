@@ -26,13 +26,16 @@ import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Uri;
+import software.amazon.awssdk.services.s3.S3Utilities;
 import spark.Request;
 import spark.Response;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -135,10 +138,14 @@ public class DeploymentController {
             role = summaryToDownload.role;
             region = summaryToDownload.ec2Info == null ? null : summaryToDownload.ec2Info.region;
         }
-        S3Uri uri = S3Utils.makeUri(uriString);
+
+        Region awsRegion = region != null ? Region.of(region) : Region.AWS_GLOBAL;
+        S3Uri uri = S3Utilities.builder().region(awsRegion).build().parseUri(URI.create(uriString));
+
         // Assume the alternative role if needed to download the deploy artifact.
         return S3Utils.downloadObject(
             S3Utils.getS3Client(role, region),
+            region,
             uri.bucket().orElse(null),
             String.join("/", uri.key().orElse(null), filename),
             false,

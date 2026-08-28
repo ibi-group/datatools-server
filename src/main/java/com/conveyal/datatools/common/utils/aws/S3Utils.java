@@ -263,7 +263,8 @@ public class S3Utils {
      */
     public static String downloadObject(String bucket, String key, boolean redirect, Request req, Response res) {
         try {
-            return downloadObject(getDefaultS3Client(), bucket, key, redirect, req, res);
+            // The default client is invoked with a null/unspecified region parameter.
+            return downloadObject(getDefaultS3Client(), null, bucket, key, redirect, req, res);
         } catch (CheckedAWSException e) {
             logMessageAndHalt(req, 500, "Failed to download file from S3.", e);
             return null;
@@ -282,6 +283,7 @@ public class S3Utils {
      */
     public static String downloadObject(
         S3Client s3,
+        String region,
         String bucket,
         String key,
         boolean redirect,
@@ -301,7 +303,9 @@ public class S3Utils {
         expiration.setTime(expiration.getTime() + REQUEST_TIMEOUT_MSEC);
 
         URL url;
-        try (S3Presigner presigner = S3Presigner.create()) {
+
+        Region awsRegion = region != null ? Region.of(region) : Region.AWS_GLOBAL;
+        try (S3Presigner presigner = S3Presigner.builder().region(awsRegion).build()) {
             url = presigner
                 .presignGetObject(
                     sign -> sign
