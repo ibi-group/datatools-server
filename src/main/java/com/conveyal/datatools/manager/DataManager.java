@@ -3,7 +3,7 @@ package com.conveyal.datatools.manager;
 import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.datatools.common.utils.RequestSummary;
 import com.conveyal.datatools.common.utils.Scheduler;
-import com.conveyal.datatools.common.utils.aws.S3Utils;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
@@ -55,7 +55,6 @@ import java.util.Properties;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
-import static com.conveyal.datatools.common.utils.SparkUtils.logResponse;
 import static spark.Service.SPARK_DEFAULT_PORT;
 import static spark.Spark.after;
 import static spark.Spark.before;
@@ -130,7 +129,7 @@ public class DataManager {
 
         // Optionally set port for server. Otherwise, Spark defaults to 4567.
         if (hasConfigProperty("application.port")) {
-            PORT = Integer.parseInt(getConfigPropertyAsText("application.port"));
+            PORT = getConfigProperty("application.port").asInt();
             port(PORT);
         }
         useS3 = "true".equals(getConfigPropertyAsText("application.data.use_s3_storage"));
@@ -339,9 +338,7 @@ public class DataManager {
         });
 
         // add logger
-        after((request, response) -> {
-            logResponse(request, response);
-        });
+        after(SparkUtils::logResponse);
     }
 
     /**
@@ -363,10 +360,10 @@ public class DataManager {
     }
 
     private static boolean hasConfigProperty(JsonNode config, String name) {
-        String parts[] = name.split("\\.");
+        String[] parts = name.split("\\.");
         JsonNode node = config;
         for (int i = 0; i < parts.length; i++) {
-            if(node == null) return false;
+            if (node == null) return false;
             node = node.get(parts[i]);
         }
         return node != null;
@@ -393,10 +390,10 @@ public class DataManager {
     }
 
     private static JsonNode getConfigProperty(JsonNode config, String name) {
-        String parts[] = name.split("\\.");
+        String[] parts = name.split("\\.");
         JsonNode node = config;
-        for(int i = 0; i < parts.length; i++) {
-            if(node == null) {
+        for (int i = 0; i < parts.length; i++) {
+            if (node == null) {
                 LOG.warn("Config property {} not found", name);
                 return null;
             }
@@ -455,18 +452,25 @@ public class DataManager {
      * In a test environment allows for overriding a specific config value on the server config object.
      */
     public static void overrideConfigProperty(String name, String value) {
-        String parts[] = name.split("\\.");
+        String[] parts = name.split("\\.");
         ObjectNode node = (ObjectNode) serverConfig;
 
-        //Loop through the dot separated field names to obtain final node and override that node's value.
+        // Loop through the dot separated field names to obtain final node and override that node's value.
         for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
             if (i < parts.length - 1) {
-                if (!node.has(parts[i])) {
-                    node.set(parts[i], JsonUtil.objectMapper.createObjectNode());
+                if (!node.has(part)) {
+                    node.set(part, JsonUtil.objectMapper.createObjectNode());
                 }
-                node = (ObjectNode) node.get(parts[i]);
+                node = (ObjectNode) node.get(part);
             } else {
-                node.put(parts[i], value);
+                // If a value is null, delete the corresponding node instead of put-ting the node value
+                // (After node.put(part, null), calling getConfigPropertyAsText will return "null".)
+                if (value == null) {
+                    node.remove(part);
+                } else {
+                    node.put(part, value);
+                }
             }
         }
     }
