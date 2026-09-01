@@ -64,6 +64,13 @@ public class NotifyUsersForSubscriptionJob extends NotifyUsersJob {
                     deployment.projectId,
                     deployment.id
                 );
+                // Add build log text.
+                html += String.format(
+                        "<p>View <a href='%s/api/manager/secure/deployments/%s/artifact/otp-build.log?filename=otp-build.log&jobId=%s&redirect=true'>deployment otp-build.log</a>.</p>",
+                        APPLICATION_URL,
+                        deployment.id,
+                        deployment.latest().jobId
+                );
                 break;
             default:
                 LOG.warn("Notifications not supported for subscription type {}", subType[0]);

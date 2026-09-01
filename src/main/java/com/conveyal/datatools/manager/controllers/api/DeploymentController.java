@@ -103,6 +103,7 @@ public class DeploymentController {
         }
         // If a jobId query param is provided, find the matching job summary.
         String jobId = req.queryParams("jobId");
+
         if (jobId != null) {
             for (DeployJob.DeploySummary summary : deployment.deployJobSummaries) {
                 if (summary.jobId.equals(jobId)) {
@@ -137,12 +138,16 @@ public class DeploymentController {
             region = summaryToDownload.ec2Info == null ? null : summaryToDownload.ec2Info.region;
         }
         AmazonS3URI uri = new AmazonS3URI(uriString);
+
+        // If a redirect query param is provided, pass it along to the download method.
+        boolean redirect = Boolean.parseBoolean(req.queryParams("redirect"));
+
         // Assume the alternative role if needed to download the deploy artifact.
         return S3Utils.downloadObject(
             S3Utils.getS3Client(role, region),
             uri.getBucket(),
             String.join("/", uri.getKey(), filename),
-            false,
+            redirect,
             req,
             res
         );
@@ -603,6 +608,9 @@ public class DeploymentController {
         options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
         get(apiPrefix + "secure/deployments/:id/artifact", DeploymentController::downloadBuildArtifact);
+        // This path allows the downloaded artifact file to be named anything. Without this line, the downloaded file
+        // will be named `artifact`.
+        get(apiPrefix + "secure/deployments/:id/artifact/:expectedFileName", DeploymentController::downloadBuildArtifact);
         get(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::fetchEC2InstanceSummaries, slimJson::write);
         delete(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::terminateEC2InstanceForDeployment, slimJson::write);
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, fullJson::write);
