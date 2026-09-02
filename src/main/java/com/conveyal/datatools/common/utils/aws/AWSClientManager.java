@@ -67,7 +67,13 @@ public abstract class AWSClientManager<T> {
             throw new CheckedAWSException("Failed to obtain AWS credentials");
         }
         LOG.info("Successfully created role-based session credentials");
-        StaticCredentialsProvider credentialsProvider = StaticCredentialsProvider.create(AwsSessionCredentials.create(credentials.accessKeyId(), credentials.secretAccessKey(), credentials.sessionToken()));
+        StaticCredentialsProvider credentialsProvider = StaticCredentialsProvider.create(
+            AwsSessionCredentials.create(
+                credentials.accessKeyId(),
+                credentials.secretAccessKey(),
+                credentials.sessionToken()
+            )
+        );
         session = new ExpiringAsset<>(credentialsProvider, DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS);
         // store the credentials provider in a lookup by role for future use
         crendentialsProvidersByRole.put(role, session);
