@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.models;
 
-import com.amazonaws.services.ec2.model.Filter;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.DataManager;
@@ -22,6 +21,7 @@ import org.apache.logging.log4j.util.Strings;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.ec2.model.Filter;
 
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
@@ -146,7 +146,11 @@ public class Deployment extends Model implements Serializable {
     /** Fetch ec2 instances tagged with this deployment's ID. */
     public List<EC2InstanceSummary> retrieveEC2Instances() throws CheckedAWSException {
         if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
-        Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
+        Filter deploymentFilter = Filter
+            .builder()
+            .name("tag:deploymentId")
+            .values(id)
+            .build();
         // Check if the latest deployment used alternative credentials/AWS role.
         String role = null;
         String region = null;

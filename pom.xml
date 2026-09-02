@@ -44,7 +44,7 @@
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
         <geotools.version>20.1</geotools.version>
-        <awsjavasdk.version>1.12.720</awsjavasdk.version>
+        <awsjavasdk.version>2.51.3</awsjavasdk.version>
     </properties>
     <build>
         <resources>
@@ -220,6 +220,13 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.client5</groupId>
+                <artifactId>httpclient5</artifactId>
+                <version>5.6.2</version>
+                <type>jar</type>
+                <scope>runtime</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     <dependencies>
@@ -284,7 +291,6 @@
         </dependency>
         <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
-         - AWS S3 SDK - putting/getting objects into/out of S3.
          -->
         <dependency>
             <groupId>com.github.ibi-group</groupId>
@@ -447,30 +453,51 @@
             <version>2.4.0</version>
         </dependency>
         <!-- AWS individual module imports -->
+        <!-- AWS signin, sso, and ssooidc enable local development using federated access (aws sso login). -->
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-s3</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>signin</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-ec2</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sso</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-iam</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssooidc</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-elasticloadbalancingv2</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3-transfer-manager</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ec2</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>iam</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>elasticloadbalancingv2</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <!-- AWS STS allows Data Tools to assume other roles in order to deploy OTP to other AWS accounts. -->
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-sts</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sts</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
         <dependency>

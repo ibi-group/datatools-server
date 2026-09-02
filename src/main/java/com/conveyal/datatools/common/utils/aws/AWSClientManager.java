@@ -1,14 +1,13 @@
 package com.conveyal.datatools.common.utils.aws;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.AWSSessionCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicSessionCredentials;
-import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
 import com.conveyal.datatools.common.utils.ExpiringAsset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 
 import java.util.HashMap;
 
@@ -26,7 +25,7 @@ public abstract class AWSClientManager<T> {
     private static final Logger LOG = LoggerFactory.getLogger(AWSClientManager.class);
 
     private static final long DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS = 800 * 1000;
-    private static final HashMap<String, ExpiringAsset<AWSStaticCredentialsProvider>> crendentialsProvidersByRole =
+    private static final HashMap<String, ExpiringAsset<StaticCredentialsProvider>> crendentialsProvidersByRole =
         new HashMap<>();
 
     protected final T defaultClient;
@@ -43,35 +42,36 @@ public abstract class AWSClientManager<T> {
      * https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html). The credentials can be
      * then used for creating a temporary client.
      */
-    private static ExpiringAsset<AWSStaticCredentialsProvider> getCredentialsForRole(
+    private static ExpiringAsset<StaticCredentialsProvider> getCredentialsForRole(
         String role
     ) throws CheckedAWSException {
         String roleSessionName = "data-tools-session";
         // check if an active credentials provider exists for this role
-        ExpiringAsset<AWSStaticCredentialsProvider> session = crendentialsProvidersByRole.get(role);
+        ExpiringAsset<StaticCredentialsProvider> session = crendentialsProvidersByRole.get(role);
         if (session != null && session.isActive()) {
             LOG.debug("Returning active role-based session credentials");
             return session;
         }
         // either a session hasn't been created or an existing one has expired. Create a new session.
-        STSAssumeRoleSessionCredentialsProvider sessionProvider = new STSAssumeRoleSessionCredentialsProvider
-            .Builder(
-                role,
-                roleSessionName
+        StsAssumeRoleCredentialsProvider sessionProvider = StsAssumeRoleCredentialsProvider
+            .builder()
+            .refreshRequest(r ->
+                    r.roleSessionName(roleSessionName)
+                    .roleArn(role)
             )
             .build();
-        AWSSessionCredentials credentials;
-        try {
-            credentials = sessionProvider.getCredentials();
-        } catch (AmazonServiceException e) {
+        AwsSessionCredentials credentials;
+        try (sessionProvider) {
+            credentials = (AwsSessionCredentials) sessionProvider.resolveCredentials();
+        } catch (AwsServiceException e) {
             throw new CheckedAWSException("Failed to obtain AWS credentials");
         }
         LOG.info("Successfully created role-based session credentials");
-        AWSStaticCredentialsProvider credentialsProvider = new AWSStaticCredentialsProvider(
-            new BasicSessionCredentials(
-                credentials.getAWSAccessKeyId(),
-                credentials.getAWSSecretKey(),
-                credentials.getSessionToken()
+        StaticCredentialsProvider credentialsProvider = StaticCredentialsProvider.create(
+            AwsSessionCredentials.create(
+                credentials.accessKeyId(),
+                credentials.secretAccessKey(),
+                credentials.sessionToken()
             )
         );
         session = new ExpiringAsset<>(credentialsProvider, DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS);
@@ -89,7 +89,7 @@ public abstract class AWSClientManager<T> {
      * An abstract method where the implementation will create a client with the specified role and region.
      */
     protected abstract T buildCredentialedClientForRoleAndRegion(
-        AWSCredentialsProvider credentials, String region, String role
+        AwsCredentialsProvider credentials, String region, String role
     ) throws CheckedAWSException;
 
     /**
@@ -127,7 +127,7 @@ public abstract class AWSClientManager<T> {
         }
 
         // Either a new client hasn't been created or it has expired. Create a new client and cache it.
-        ExpiringAsset<AWSStaticCredentialsProvider> session = getCredentialsForRole(role);
+        ExpiringAsset<StaticCredentialsProvider> session = getCredentialsForRole(role);
         T credentialedClientForRoleAndRegion = buildCredentialedClientForRoleAndRegion(session.asset, region, role);
         LOG.info("Successfully created role-based {} client", getClientClassName());
         clientsByRoleAndRegion.put(

@@ -1,28 +1,5 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.event.ProgressListener;
-import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.model.CreateTagsRequest;
-import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
-import com.amazonaws.services.ec2.model.Filter;
-import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
-import com.amazonaws.services.ec2.model.Instance;
-import com.amazonaws.services.ec2.model.InstanceMetadataOptionsRequest;
-import com.amazonaws.services.ec2.model.InstanceNetworkInterfaceSpecification;
-import com.amazonaws.services.ec2.model.InstanceStateChange;
-import com.amazonaws.services.ec2.model.InstanceType;
-import com.amazonaws.services.ec2.model.RunInstancesRequest;
-import com.amazonaws.services.ec2.model.Tag;
-import com.amazonaws.services.ec2.model.TerminateInstancesResult;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3URI;
-import com.amazonaws.services.s3.model.CopyObjectRequest;
-import com.amazonaws.services.s3.transfer.TransferManager;
-import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
-import com.amazonaws.services.s3.transfer.Upload;
-import com.amazonaws.waiters.Waiter;
-import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.CloseableHttpURLConnection;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
@@ -53,6 +30,22 @@ import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.CreateTagsRequest;
+import software.amazon.awssdk.services.ec2.model.Filter;
+import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.InstanceNetworkInterfaceSpecification;
+import software.amazon.awssdk.services.ec2.model.InstanceStateChange;
+import software.amazon.awssdk.services.ec2.model.InstanceType;
+import software.amazon.awssdk.services.ec2.model.RunInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.Tag;
+import software.amazon.awssdk.services.ec2.model.TerminateInstancesResponse;
+import software.amazon.awssdk.services.ec2.waiters.Ec2Waiter;
+import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Uri;
+import software.amazon.awssdk.transfer.s3.progress.TransferListener;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -423,7 +416,7 @@ public class DeployJob extends MonitorableJob {
      * that a client is obtained that has a session that eventually expires.
      */
     @JsonIgnore
-    public AmazonEC2 getEC2ClientForDeployJob() throws CheckedAWSException {
+    public Ec2Client getEC2ClientForDeployJob() throws CheckedAWSException {
         return EC2Utils.getEC2Client(otpServer.role, customRegion);
     }
 
@@ -433,7 +426,7 @@ public class DeployJob extends MonitorableJob {
      * that a client is obtained that has a session that eventually expires.
      */
     @JsonIgnore
-    public AmazonElasticLoadBalancing getELBClientForDeployJob() throws CheckedAWSException {
+    public ElasticLoadBalancingV2Client getELBClientForDeployJob() throws CheckedAWSException {
         return EC2Utils.getELBClient(otpServer.role, customRegion);
     }
 
@@ -443,29 +436,40 @@ public class DeployJob extends MonitorableJob {
      * that a client is obtained that has a session that eventually expires.
      */
     @JsonIgnore
-    public AmazonS3 getS3ClientForDeployJob() throws CheckedAWSException {
+    public S3Client getS3ClientForDeployJob() throws CheckedAWSException {
         return S3Utils.getS3Client(otpServer.role, customRegion);
     }
 
     /**
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
-    private void uploadBundleToS3() throws InterruptedException, IOException, CheckedAWSException {
-        AmazonS3URI uri = new AmazonS3URI(getS3BundleURI());
-        String bucket = uri.getBucket();
-        status.message = "Uploading bundle to " + getS3BundleURI();
+    private void uploadBundleToS3() throws IOException, CheckedAWSException {
+        String bundleURI = getS3BundleURI();
+        S3Uri uri = S3Utils.makeUri(bundleURI);
+        String bucket = uri.bucket().orElse(null);
+        status.message = "Uploading bundle to " + bundleURI;
         status.uploadingS3 = true;
-        LOG.info("Uploading deployment {} to {}", deployment.name, uri.toString());
-        // Use Transfer Manager so we can monitor S3 bundle upload progress.
-        TransferManager transferManager = TransferManagerBuilder
-            .standard()
-            .withS3Client(getS3ClientForDeployJob())
-            .build();
-        final Upload uploadBundle = transferManager.upload(bucket, uri.getKey(), deploymentTempFile);
-        uploadBundle.addProgressListener(
-            (ProgressListener) progressEvent -> status.percentUploaded = uploadBundle.getProgress().getPercentTransferred()
+        LOG.info("Uploading deployment {} to {}", deployment.name, uri);
+
+        TransferListener transferListener = new TransferListener() {
+            @Override
+            public void bytesTransferred(Context.BytesTransferred context) {
+                status.percentUploaded = context.progressSnapshot().ratioTransferred().orElse(0);
+            }
+
+            @Override
+            public void transferFailed(Context.TransferFailed context) {
+                var exception = context.exception();
+                status.fail(exception.getMessage(), new Exception(exception));
+            }
+        };
+
+        S3Utils.uploadAndWaitForCompletion(upload -> upload
+            .putObjectRequest(req -> req.bucket(bucket).key(uri.key().orElse(null)))
+            .source(deploymentTempFile)
+            .addTransferListener(transferListener)
         );
-        uploadBundle.waitForCompletion();
+        
         // Check if router config exists and upload as separate file using transfer manager. Note: this is because we
         // need the router-config separately from the bundle for EC2 instances that download the graph only.
         byte[] routerConfigAsBytes = deployment.generateRouterConfig();
@@ -476,24 +480,28 @@ public class DeployJob extends MonitorableJob {
             try (FileOutputStream out = new FileOutputStream(routerConfigFile)) {
                 out.write(routerConfigAsBytes);
             }
-            // Upload router config.
-            transferManager
-                .upload(bucket, getS3FolderURI().getKey() + "/" + ROUTER_CONFIG_FILENAME, routerConfigFile)
-                .waitForCompletion();
+
+            S3Utils.uploadAndWaitForCompletion(upload -> upload
+                .putObjectRequest(req -> req.bucket(bucket).key(getJobRelativePath() + "/" + ROUTER_CONFIG_FILENAME))
+                .source(routerConfigFile)
+                // no transfer listener for router config upload, it is a small file.
+            );
+
             // Delete temp file.
             routerConfigFile.delete();
         }
-        // Shutdown the Transfer Manager, but don't shut down the underlying S3 client.
-        // The default behavior for shutdownNow shut's down the underlying s3 client
-        // which will cause any following s3 operations to fail.
-        transferManager.shutdownNow(false);
 
         // copy to [name]-latest.zip
         String copyKey = getLatestS3BundleKey();
-        CopyObjectRequest copyObjRequest = new CopyObjectRequest(bucket, uri.getKey(), uri.getBucket(), copyKey);
-        getS3ClientForDeployJob().copyObject(copyObjRequest);
+        getS3ClientForDeployJob().copyObject(
+            req -> req
+                .sourceBucket(bucket)
+                .sourceKey(uri.key().orElse(null))
+                .destinationBucket(uri.bucket().orElse(null))
+                .destinationKey(copyKey)
+        );
         LOG.info("Copied to s3://{}/{}", bucket, copyKey);
-        LOG.info("Uploaded to {}", getS3BundleURI());
+        LOG.info("Uploaded to {}", bundleURI);
         status.update("Upload to S3 complete.", status.percentComplete + 10);
         status.uploadingS3 = false;
     }
@@ -844,7 +852,7 @@ public class DeployJob extends MonitorableJob {
                     numFailedInstances++;
                     String id = job.getInstanceId();
                     LOG.warn("Error encountered while monitoring server {}. Terminating.", id);
-                    remainingInstances.removeIf(instance -> instance.getInstanceId().equals(id));
+                    remainingInstances.removeIf(instance -> instance.instanceId().equals(id));
                     try {
                         // terminate instance without failing overall deploy job. That happens later.
                         EC2Utils.terminateInstances(getEC2ClientForDeployJob(), id);
@@ -937,16 +945,17 @@ public class DeployJob extends MonitorableJob {
         if (userData == null) {
             // Fail job if it is not already failed.
             if (!status.error) status.fail("Error constructing EC2 user data.");
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
         // The subnet ID should only change if starting up a server in some other AWS account. This is not
         // likely to be a requirement.
         // Define network interface so that a public IP can be associated with server.
-        InstanceNetworkInterfaceSpecification interfaceSpecification = new InstanceNetworkInterfaceSpecification()
-                .withSubnetId(otpServer.ec2Info.subnetId)
-                .withAssociatePublicIpAddress(true)
-                .withGroups(otpServer.ec2Info.securityGroupId)
-                .withDeviceIndex(0);
+        InstanceNetworkInterfaceSpecification interfaceSpecification = InstanceNetworkInterfaceSpecification.builder()
+            .subnetId(otpServer.ec2Info.subnetId)
+            .associatePublicIpAddress(true)
+            .groups(otpServer.ec2Info.securityGroupId)
+            .deviceIndex(0)
+            .build();
         // Pick proper ami depending on whether graph is being built and what is defined.
         String amiId = otpServer.ec2Info.getAmiId(graphAlreadyBuilt);
         // Verify that AMI is correctly defined.
@@ -968,7 +977,7 @@ public class DeployJob extends MonitorableJob {
                 ),
                 amiCheckException
             );
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
 
         // Pick proper instance type depending on whether graph is being built and what is defined.
@@ -982,74 +991,73 @@ public class DeployJob extends MonitorableJob {
                 instanceType,
                 EC2Utils.DEFAULT_INSTANCE_TYPE
             ), e);
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
         status.message = String.format("Starting up %d new instance(s) to run OTP", count);
 
-        RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
-                .withNetworkInterfaces(interfaceSpecification)
-                .withInstanceType(instanceType)
-                // TODO: Optimize for EBS to support large systems like NYSDOT.
-                //  This may incur additional costs and may need to be replaced with some other setting
-                //  if it is proves too expensive. However, it may be the easiest way to resolve the
-                //  issue where downloading a graph larger than 3GB slows to a halt.
-                .withEbsOptimized(EBS_OPTIMIZED)
-                .withMinCount(count)
-                .withMaxCount(count)
-                .withIamInstanceProfile(new IamInstanceProfileSpecification().withArn(otpServer.ec2Info.iamInstanceProfileArn))
-                .withImageId(amiId)
-                .withKeyName(otpServer.ec2Info.keyName)
-                // This will have the instance terminate when it is shut down.
-                .withInstanceInitiatedShutdownBehavior("terminate")
-                .withMetadataOptions(new InstanceMetadataOptionsRequest().withHttpTokens("optional").withHttpEndpoint("enabled"))
-                .withUserData(Base64.encodeBase64String(userData.getBytes()));
+        RunInstancesRequest runInstancesRequest = RunInstancesRequest.builder()
+            .networkInterfaces(interfaceSpecification)
+            .instanceType(instanceType)
+            // TODO: Optimize for EBS to support large systems like NYSDOT.
+            //  This may incur additional costs and may need to be replaced with some other setting
+            //  if it is proves too expensive. However, it may be the easiest way to resolve the
+            //  issue where downloading a graph larger than 3GB slows to a halt.
+            .ebsOptimized(EBS_OPTIMIZED)
+            .minCount(count)
+            .maxCount(count)
+            .iamInstanceProfile(profile -> profile.arn(otpServer.ec2Info.iamInstanceProfileArn))
+            .imageId(amiId)
+            .keyName(otpServer.ec2Info.keyName)
+            // This will have the instance terminate when it is shut down.
+            .instanceInitiatedShutdownBehavior("terminate")
+            .metadataOptions(req -> req.httpTokens("optional").httpEndpoint("enabled"))
+            .userData(Base64.encodeBase64String(userData.getBytes()))
+            .build();
         List<Instance> instances;
         try {
             // attempt to start the instances. Sometimes, AWS does not have enough availability of the desired instance
             // type and can throw an error at this point.
-            instances = getEC2ClientForDeployJob().runInstances(runInstancesRequest).getReservation().getInstances();
+            instances = getEC2ClientForDeployJob().runInstances(runInstancesRequest).instances();
         } catch (Exception e) {
             status.fail(String.format("DeployJob failed due to a problem with AWS: %s", e.getMessage()), e);
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
 
         status.message = "Waiting for instance(s) to start";
         List<String> instanceIds = EC2Utils.getIds(instances);
         Set<String> instanceIpAddresses = new HashSet<>();
         // Wait so that create tags request does not fail because instances not found.
-        try {
-            Waiter<DescribeInstanceStatusRequest> waiter = getEC2ClientForDeployJob().waiters().instanceStatusOk();
+        try (Ec2Waiter waiter = getEC2ClientForDeployJob().waiter()) {
             long beginWaiting = System.currentTimeMillis();
-            waiter.run(new WaiterParameters<>(new DescribeInstanceStatusRequest().withInstanceIds(instanceIds)));
+            waiter.waitUntilInstanceStatusOk(req -> req.instanceIds(instanceIds));
             LOG.info("Instance status is OK after {} ms", (System.currentTimeMillis() - beginWaiting));
         } catch (Exception e) {
             status.fail("Waiter for instance status check failed. You may need to terminate the failed instances.", e);
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
+
+        String tagKey = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_key");
+        String tagValue = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_value");
         for (Instance instance : instances) {
             // Note: The public IP addresses will likely be null at this point because they take a few seconds to
             // initialize.
             String serverName = String.format("%s %s (%s) %d %s", deployment.tripPlannerVersion, deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
             LOG.info("Creating tags for new EC2 instance {}", serverName);
             try {
-                CreateTagsRequest createTagsRequest = new CreateTagsRequest()
-                        .withTags(new Tag("Name", serverName))
-                        .withTags(new Tag("projectId", deployment.projectId))
-                        .withTags(new Tag("deploymentId", deployment.id))
-                        .withTags(new Tag("jobId", this.jobId))
-                        .withTags(new Tag("serverId", otpServer.id))
-                        .withTags(new Tag("routerId", getRouterId()))
-                        .withTags(new Tag("user", retrieveEmail()))
-                        .withResources(instance.getInstanceId());
+                CreateTagsRequest createTagsRequest = CreateTagsRequest.builder()
+                    .tags(
+                        Tag.builder().key("Name").value(serverName).build(),
+                        Tag.builder().key("projectId").value(deployment.projectId).build(),
+                        Tag.builder().key("deploymentId").value(deployment.id).build(),
+                        Tag.builder().key("jobId").value(this.jobId).build(),
+                        Tag.builder().key("serverId").value(otpServer.id).build(),
+                        Tag.builder().key("routerId").value(getRouterId()).build(),
+                        Tag.builder().key("user").value(retrieveEmail()).build(),
+                        Tag.builder().key(tagKey).value(tagValue).build()
+                    )
+                    .resources(instance.instanceId())
+                    .build();
 
-                String tagKey = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_key");
-                String tagValue = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_value");
-
-                Tag customTag = new Tag();
-                customTag.setKey(tagKey);
-                customTag.setValue(tagValue);
-
-                createTagsRequest = createTagsRequest.withTags(customTag);
                 getEC2ClientForDeployJob().createTags(createTagsRequest);
             } catch (Exception e) {
                 status.fail("Failed to create tags for instances.", e);
@@ -1060,7 +1068,7 @@ public class DeployJob extends MonitorableJob {
         TimeTracker ipCheckTracker = new TimeTracker(10, TimeUnit.MINUTES);
         // Store the instances with updated IP addresses here.
         List<Instance> updatedInstances = new ArrayList<>();
-        Filter instanceIdFilter = new Filter("instance-id", instanceIds);
+        Filter instanceIdFilter = Filter.builder().name("instance-id").values(instanceIds).build();
         // While all of the IPs have not been established, keep checking the EC2 instances, waiting a few seconds between
         // each check.
         String ipCheckMessage = "Checking that public IP address(es) have initialized for EC2 instance(s).";
@@ -1082,7 +1090,7 @@ public class DeployJob extends MonitorableJob {
                 return updatedInstances;
             }
             for (Instance instance : instancesWithIps) {
-                String publicIp = instance.getPublicIpAddress();
+                String publicIp = instance.publicIpAddress();
                 // If IP has been found, store the updated instance and IP.
                 if (publicIp != null) {
                     instanceIpAddresses.add(publicIp);
@@ -1112,7 +1120,7 @@ public class DeployJob extends MonitorableJob {
      * an error and adds to the status message as needed.
      */
     private boolean terminateInstances(List<Instance> instances) {
-        TerminateInstancesResult terminateInstancesResult;
+        TerminateInstancesResponse terminateInstancesResult;
         try {
             terminateInstancesResult = EC2Utils.terminateInstances(getEC2ClientForDeployJob(), instances);
         } catch (Exception e) {
@@ -1125,13 +1133,13 @@ public class DeployJob extends MonitorableJob {
 
         // verify that all instances have terminated
         boolean allInstancesTerminatedProperly = true;
-        for (InstanceStateChange terminatingInstance : terminateInstancesResult.getTerminatingInstances()) {
+        for (InstanceStateChange terminatingInstance : terminateInstancesResult.terminatingInstances()) {
             // instance state code == 32 means the instance is preparing to be terminated.
             // instance state code == 48 means it has been terminated.
-            int instanceStateCode = terminatingInstance.getCurrentState().getCode();
+            int instanceStateCode = terminatingInstance.currentState().code();
             if (instanceStateCode != 32 && instanceStateCode != 48) {
                 failJobWithAppendedMessage(
-                    String.format("Instance %s failed to properly terminate!", terminatingInstance.getInstanceId())
+                    String.format("Instance %s failed to properly terminate!", terminatingInstance.instanceId())
                 );
                 allInstancesTerminatedProperly = false;
             }
@@ -1196,7 +1204,7 @@ public class DeployJob extends MonitorableJob {
             : "1.x";
         manifest.prefixLogUploadsWithInstanceId = true;
         manifest.serverStartupTimeoutSeconds = 3300;
-        manifest.s3UploadPath = getS3FolderURI().toString();
+        manifest.s3UploadPath = getRawS3URI();
         manifest.statusFileLocation = String.format("%s/%s", EC2_WEB_DIR, OTP_RUNNER_STATUS_FILE);
         manifest.uploadOtpRunnerLogs = true;
         // add settings applicable to current instance. Two different manifest files are generated when deploying with
@@ -1434,7 +1442,10 @@ public class DeployJob extends MonitorableJob {
         if (dryRun) return true;
         status.message = String.format("uploading %s to S3", filename);
         try {
-            getS3ClientForDeployJob().putObject(s3Bucket, String.format("%s/%s", jobRelativePath, filename), contents);
+            getS3ClientForDeployJob().putObject(
+                req -> req.bucket(s3Bucket).key(String.format("%s/%s", jobRelativePath, filename)),
+                RequestBody.fromString(contents)
+            );
         } catch (Exception e) {
             status.fail(String.format("Failed to upload file %s", filename), e);
             return false;
@@ -1508,8 +1519,8 @@ public class DeployJob extends MonitorableJob {
     }
 
     @JsonIgnore
-    public AmazonS3URI getS3FolderURI() {
-        return new AmazonS3URI(String.format("s3://%s/%s", otpServer.s3Bucket, getJobRelativePath()));
+   public String getRawS3URI() {
+        return String.format("s3://%s/%s", otpServer.s3Bucket, getJobRelativePath());
     }
 
     @JsonIgnore
@@ -1520,7 +1531,7 @@ public class DeployJob extends MonitorableJob {
     /** Join list of paths to S3 URI for job folder to create a fully qualified URI (e.g., s3://bucket/path/to/file). */
     private String joinToS3FolderUri(CharSequence... paths) {
         List<CharSequence> pathList = new ArrayList<>();
-        pathList.add(getS3FolderURI().toString());
+        pathList.add(getRawS3URI());
         pathList.addAll(Arrays.asList(paths));
         return String.join("/", pathList);
     }
@@ -1588,7 +1599,7 @@ public class DeployJob extends MonitorableJob {
             this.role = job.otpServer.role;
             this.s3Bucket = job.s3Bucket;
             this.status = job.status;
-            this.buildArtifactsFolder = job.getS3FolderURI().toString();
+            this.buildArtifactsFolder = job.getRawS3URI();
         }
     }
 
