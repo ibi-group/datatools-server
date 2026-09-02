@@ -18,7 +18,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.ResponseInputStream;
-import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsResponse;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -121,7 +123,7 @@ public class FeedUpdater {
     public static List<String> getFeedIds(List<S3Object> s3objects) {
         return s3objects.stream()
             .map(FeedUpdater::getFeedId)
-            .filter(id -> id.length() != 0)
+            .filter(id -> !id.isEmpty())
             .collect(Collectors.toList());
     }
 
