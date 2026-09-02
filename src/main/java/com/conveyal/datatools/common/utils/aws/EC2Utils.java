@@ -341,8 +341,8 @@ public class EC2Utils {
             return result;
         }
         DescribeKeyPairsResponse response = ec2Client.describeKeyPairs();
-        for (KeyPairInfo key_pair : response.keyPairs()) {
-            if (key_pair.keyName().equals(keyName)) return result;
+        for (KeyPairInfo keyPair : response.keyPairs()) {
+            if (keyPair.keyName().equals(keyName)) return result;
         }
         result.setInvalid(message);
         return result;
