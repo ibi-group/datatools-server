@@ -348,12 +348,19 @@ public class MergeFeedsJobTest extends UnitTest {
 
         assertFeedMergeSucceeded(mergeFeedsJob);
 
-        // 3 records should be loaded into Postgres (independently of the UI-performed GTFS+ loading).
+        // 3 records should be loaded into Postgres.
         assertEquals(3, mergeFeedsJob.mergedVersion.feedLoadResult.riderCategories.rowCount);
 
-        // GTFS+ rider_category_description field should be imported from the merged feed.
+        // GTFS+ rider_category_description field should be imported in Postgres from the merged feed.
+        // From the Fares V2 spec, only the rider_category_id field is present because the other fields are
+        // missing from the original feeds before merging.
         SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
-        sqlAssert.riderCategories.assertCount(3, "(rider_category_description = '') IS FALSE");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_id = '1'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_id = '2'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_id = '5'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_description = 'Youth'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_description = 'Adult'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_description = 'Eligible Discount (Senior / Disabled / Medicare cardholder)'");
     }
 
     /**
