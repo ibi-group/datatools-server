@@ -313,7 +313,7 @@ public class MergeFeedsJobTest extends UnitTest {
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
-        // Result should fail.
+        // Result should succeed.
         assertFalse(
             mergeFeedsJob.mergeFeedsResult.failed,
             "Merge feeds job should succeed with CHECK_STOP_TIMES strategy."
@@ -331,6 +331,29 @@ public class MergeFeedsJobTest extends UnitTest {
 
         // expect that the record in calendar table has the correct start_date.
         sqlAssert.calendar.assertCount(1, "start_date='20170918' and monday=1");
+    }
+
+    /**
+     * Ensures that an MTC merge of feeds will merge rider_categories.txt successfully according to MTC's GTFS+ spec,
+     * ignoring the GTFS Fares V2 spec fields.
+     */
+    @Test
+    void mergeMTCShouldMergeRiderCategoriesUsingGTFSPlusFields() throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(fakeTransitBase);
+        versions.add(fakeTransitFuture);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+
+        assertFeedMergeSucceeded(mergeFeedsJob);
+
+        // 3 records should be loaded into Postgres (independently of the UI-performed GTFS+ loading).
+        assertEquals(3, mergeFeedsJob.mergedVersion.feedLoadResult.riderCategories.rowCount);
+
+        // GTFS+ rider_category_description field should be imported from the merged feed.
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.riderCategories.assertCount(3, "(rider_category_description = '') IS FALSE");
     }
 
     /**
