@@ -5,14 +5,18 @@ import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
+import com.conveyal.datatools.manager.jobs.feedmerge.FeedToMerge;
 import com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType;
 import com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.MergeFeedUtils;
 import com.conveyal.datatools.manager.utils.SqlAssert;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
+import com.conveyal.gtfs.loader.Field;
+import com.conveyal.gtfs.loader.Table;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -23,7 +27,9 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.TestUtils.assertThatFeedHasNoErrorsOfType;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
@@ -325,6 +331,28 @@ public class MergeFeedsJobTest extends UnitTest {
 
         // expect that the record in calendar table has the correct start_date.
         sqlAssert.calendar.assertCount(1, "start_date='20170918' and monday=1");
+    }
+
+    /**
+     * Ensures that custom/proprietary fields in a feed CSV file are detected without duplication.
+     */
+    @Test
+    void canGetAllFields() throws SQLException, IOException {
+        // A proprietary (GTFS+) field rider_category_description should be loaded in both feeds.
+        SqlAssert sqlBaseAssert = new SqlAssert(fakeTransitBase);
+        sqlBaseAssert.riderCategories.assertCount(2, "(rider_category_description = '') IS FALSE");
+        SqlAssert sqlFutureAssert = new SqlAssert(fakeTransitFuture);
+        sqlFutureAssert.riderCategories.assertCount(3, "(rider_category_description = '') IS FALSE");
+
+        Set<Field> allFields = MergeFeedUtils.getAllFields(
+            List.of(new FeedToMerge(fakeTransitBase), new FeedToMerge(fakeTransitFuture)),
+            Table.RIDER_CATEGORIES
+        );
+
+        assertEquals(2, allFields.size());
+
+        Set<String> fieldNames = allFields.stream().map(f -> f.name).collect(Collectors.toSet());
+        assertEquals(Set.of("rider_category_id", "rider_category_description"), fieldNames);
     }
 
     /**

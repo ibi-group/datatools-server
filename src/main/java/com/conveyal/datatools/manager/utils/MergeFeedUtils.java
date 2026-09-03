@@ -21,11 +21,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -113,9 +114,10 @@ public class MergeFeedUtils {
             ).collect(Collectors.toList());
     }
 
-    /** Get all fields found in the feeds being merged for a specific table. */
+    /** Get all fields found, without duplication, in the feeds being merged for a specific table. */
     public static Set<Field> getAllFields(List<FeedToMerge> feedsToMerge, Table table) throws IOException {
-        Set<Field> sharedFields = new HashSet<>();
+        Map<String, Field> fieldMap = new HashMap<>();
+
         // First, iterate over each feed to collect the shared fields that need to be output in the merged table.
         for (FeedToMerge feed : feedsToMerge) {
             CsvReader csvReader = CsvReaderUtil.getCsvReaderAccordingToFileName(table, feed.zipFile, null);
@@ -126,12 +128,14 @@ public class MergeFeedUtils {
             try {
                 // Get fields found from headers and add them to the shared fields set.
                 Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
-                sharedFields.addAll(Arrays.asList(fieldsFoundInZip));
+                for (final Field field : fieldsFoundInZip) {
+                    fieldMap.putIfAbsent(field.name, field);
+                }
             } finally {
                 csvReader.close();
             }
         }
-        return sharedFields;
+        return Set.copyOf(fieldMap.values());
     }
 
     /**
