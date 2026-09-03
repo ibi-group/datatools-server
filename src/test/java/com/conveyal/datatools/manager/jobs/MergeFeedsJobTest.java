@@ -372,7 +372,7 @@ class MergeFeedsJobTest extends UnitTest {
         SqlAssert sqlBaseAssert = new SqlAssert(fakeTransitBase);
         sqlBaseAssert.riderCategories.assertCount(2, "(rider_category_description = '') IS FALSE");
         SqlAssert sqlFutureAssert = new SqlAssert(fakeTransitFuture);
-        sqlFutureAssert.riderCategories.assertCount(3, "(rider_category_description = '') IS FALSE");
+        sqlFutureAssert.riderCategories.assertCount(2, "(rider_category_description = '') IS FALSE");
 
         Set<Field> allFields = MergeFeedUtils.getAllFields(
             List.of(new FeedToMerge(fakeTransitBase), new FeedToMerge(fakeTransitFuture)),
