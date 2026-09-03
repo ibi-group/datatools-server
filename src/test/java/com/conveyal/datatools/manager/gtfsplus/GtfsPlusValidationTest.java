@@ -4,7 +4,6 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
-import com.conveyal.datatools.manager.jobs.MergeFeedsJobTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -29,8 +28,8 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
 /** Runs test to verify that GTFS+ validation runs as expected. */
-public class GtfsPlusValidationTest extends UnitTest {
-    private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
+class GtfsPlusValidationTest extends UnitTest {
+    private static final Logger LOG = LoggerFactory.getLogger(GtfsPlusValidationTest.class);
     private static FeedVersion bartVersion1;
     private static FeedVersion bartVersion1WithQuotedValues;
     private static FeedVersion lavtaVersion1;
@@ -43,7 +42,7 @@ public class GtfsPlusValidationTest extends UnitTest {
      * Create feed version for GTFS+ validation test.
      */
     @BeforeAll
-    public static void setUp() throws IOException {
+    static void setUp() throws IOException {
         // Start server if it isn't already running.
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);

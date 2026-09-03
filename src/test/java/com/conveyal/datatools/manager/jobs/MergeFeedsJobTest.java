@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 /**
  * Tests for the various {@link MergeFeedsJob} merge types.
  */
-public class MergeFeedsJobTest extends UnitTest {
+class MergeFeedsJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
     private static final Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
     private static FeedVersion bartVersion1;
@@ -90,7 +90,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeAll
-    public static void setUp() throws IOException {
+    static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = false;
@@ -168,7 +168,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * Delete project on tear down (feed sources/versions will also be deleted).
      */
     @AfterAll
-    public static void tearDown() {
+    static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
