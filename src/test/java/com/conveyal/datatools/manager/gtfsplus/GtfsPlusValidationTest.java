@@ -23,9 +23,13 @@ import java.util.Date;
 import java.util.Objects;
 import java.util.stream.Stream;
 
+import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
+import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Runs test to verify that GTFS+ validation runs as expected. */
 class GtfsPlusValidationTest extends UnitTest {
@@ -213,9 +217,19 @@ class GtfsPlusValidationTest extends UnitTest {
 
         LOG.info("Validating GTFS+ directions.txt in Golden Gate Ferry using incomplete realtime_routes.txt should produce no errors");
         GtfsPlusValidation validation = GtfsPlusValidation.validate(ggfIncompleteDirections.id);
-        assertThat(
-            "Should have no GTFS+ validation issue on the directions.txt table",
-            validation.issues.size(), equalTo(0)
+        assertTrue(
+            validation.issues.isEmpty(),
+            "Should have no GTFS+ validation issue on the directions.txt table"
+        );
+    }
+
+    @Test
+    void shouldDetectExtraGtfsPlusFields() throws Exception {
+        FeedVersion version = createFeedVersion(goldenGateFerry, zipFolderFiles("rider-categories-extra-fields"));
+        GtfsPlusValidation validation = GtfsPlusValidation.validate(version.id);
+        assertFalse(
+            validation.issues.isEmpty(),
+            "Should have caught those extra non-GTFS+ fields in rider_category.txt."
         );
     }
 }

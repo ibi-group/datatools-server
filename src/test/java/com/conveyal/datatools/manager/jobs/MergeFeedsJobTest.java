@@ -338,7 +338,7 @@ class MergeFeedsJobTest extends UnitTest {
      * ignoring the GTFS Fares V2 spec fields.
      */
     @Test
-    void mergeMTCShouldMergeRiderCategoriesUsingGTFSPlusFields() throws SQLException {
+    void mergeMTCShouldMergeRiderCategoriesUsingGTFSPlusFields() throws Exception {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
         versions.add(fakeTransitFuture);
@@ -361,6 +361,13 @@ class MergeFeedsJobTest extends UnitTest {
         sqlAssert.riderCategories.assertCount(1, "rider_category_description = 'Youth'");
         sqlAssert.riderCategories.assertCount(1, "rider_category_description = 'Adult'");
         sqlAssert.riderCategories.assertCount(1, "rider_category_description = 'Eligible Discount (Senior / Disabled / Medicare cardholder)'");
+
+        // There should not be other fields in that table (they would be caught by GTFS+ validation).
+        GtfsPlusValidation validation = GtfsPlusValidation.validate(mergeFeedsJob.mergedVersion.id);
+        assertEquals(
+            0,
+            validation.issues.stream().filter(i -> i.tableId.equals(Table.RIDER_CATEGORIES.name)).count()
+        );
     }
 
     /**
