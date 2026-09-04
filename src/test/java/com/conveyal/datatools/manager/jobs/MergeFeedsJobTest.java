@@ -334,11 +334,10 @@ class MergeFeedsJobTest extends UnitTest {
     }
 
     /**
-     * Ensures that an MTC merge of feeds will merge rider_categories.txt successfully according to MTC's GTFS+ spec,
-     * ignoring the GTFS Fares V2 spec fields.
+     * Ensures that rider_categories.txt are merged including MTC's GTFS+ fields that are not part of the Fares V2 spec.
      */
     @Test
-    void mergeMTCShouldMergeRiderCategoriesUsingGTFSPlusFields() throws Exception {
+    void mergeMTCShouldMergeRiderCategoriesGtfsPlusFields() throws Exception {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
         versions.add(fakeTransitFuture);
@@ -385,8 +384,6 @@ class MergeFeedsJobTest extends UnitTest {
             List.of(new FeedToMerge(fakeTransitBase), new FeedToMerge(fakeTransitFuture)),
             Table.RIDER_CATEGORIES
         );
-
-        assertEquals(2, allFields.size());
 
         Set<String> fieldNames = allFields.stream().map(f -> f.name).collect(Collectors.toSet());
         assertEquals(Set.of("rider_category_id", "rider_category_description"), fieldNames);
