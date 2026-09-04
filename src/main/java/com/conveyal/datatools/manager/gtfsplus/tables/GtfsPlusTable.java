@@ -97,7 +97,7 @@ public class GtfsPlusTable {
         DIRECTIONS,
         STOP_ATTRIBUTES,
         TIMEPOINTS,
-        RIDER_CATEGORIES,
+        // RIDER_CATEGORIES is already listed in standard tables (Fares V2), so we don't include it twice.
         FARE_RIDER_CATEGORIES,
         CALENDAR_ATTRIBUTES,
         FAREZONE_ATTRIBUTES,
