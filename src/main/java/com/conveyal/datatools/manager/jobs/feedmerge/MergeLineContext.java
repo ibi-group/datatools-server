@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.manager.DataManager.isModuleEnabled;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.containsField;
@@ -231,7 +232,12 @@ public class MergeLineContext {
 
     public void startNewRow() throws IOException {
         keyValue = csvReader.get(keyFieldIndex);
-        if (table == Table.RIDER_CATEGORIES) {
+        // Allow merging custom fields on select tables/criteria.
+        // This can be expanded to more tables as needed.
+        if (table == Table.RIDER_CATEGORIES && isModuleEnabled("gtfsplus")) {
+            // Table rider_categories.txt appears in both GTFS Fares V2 and MTC's GTFS+ specs
+            // and have disjoint headers.
+            // For this table, use all fields found in the feeds to merge.
             sharedSpecFields = List.copyOf(allFields);
         } else {
             // Get the spec fields and custom/proprietary fields to export
