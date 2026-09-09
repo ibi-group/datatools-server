@@ -1,10 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -20,6 +16,11 @@ import com.mongodb.client.model.Accumulators;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsResponse;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -114,15 +115,15 @@ public class FeedUpdater {
         return new FeedUpdater(completedFeedRetriever);
     }
 
-    private static String getFeedId(S3ObjectSummary objSummary) {
-        String[] parts = objSummary.getKey().split("/");
+    private static String getFeedId(S3Object objSummary) {
+        String[] parts = objSummary.key().split("/");
         return parts.length > 1 ? parts[1].replace(".zip", "") : "";
     }
 
-    public static List<String> getFeedIds(List<S3ObjectSummary> s3objects) {
+    public static List<String> getFeedIds(List<S3Object> s3objects) {
         return s3objects.stream()
             .map(FeedUpdater::getFeedId)
-            .filter(id -> id.length() != 0)
+            .filter(id -> !id.isEmpty())
             .collect(Collectors.toList());
     }
 
@@ -189,10 +190,10 @@ public class FeedUpdater {
         Map<String, String> newTags = new HashMap<>();
         // iterate over feeds in download_prefix folder and register to (MTC project)
         // Note: objectSummaries is at least an empty list (not null).
-        List<S3ObjectSummary> filteredObjectSummaries = completedFeedRetriever
+        List<S3Object> filteredObjectSummaries = completedFeedRetriever
             .retrieveCompletedFeeds()
             // Skip directory objects and empty/null/invalid feed ids
-            .stream().filter(s -> !bucketFolder.equals(s.getKey()) && !"null".equals(getFeedId(s)))
+            .stream().filter(s -> !bucketFolder.equals(s.key()) && !"null".equals(getFeedId(s)))
             .collect(Collectors.toList());
 
         Map<String, FeedSource> allFeedSourcesById = getFeedSourcesByFeedId(filteredObjectSummaries);
@@ -200,9 +201,9 @@ public class FeedUpdater {
         Map<String, FeedVersionSummary> latestSentVersionsByFeedSourceId = getLatestVersionsSentForPublishing(allFeedSourcesById.values());
 
         LOG.debug(eTagForFeed.toString());
-        for (S3ObjectSummary objSummary : filteredObjectSummaries) {
-            String eTag = objSummary.getETag();
-            String keyName = objSummary.getKey();
+        for (S3Object objSummary : filteredObjectSummaries) {
+            String eTag = S3Utils.cleanETag(objSummary.eTag());
+            String keyName = objSummary.key();
             LOG.debug("{} etag = {}", keyName, eTag);
 
             String feedId = getFeedId(objSummary);
@@ -216,7 +217,7 @@ public class FeedUpdater {
             if (shouldMarkFeedAsProcessed(eTag, latestVersionSentForPublishing)) {
                 try {
                     // Don't mark a feed version as published if previous published version is before sentToExternalPublisher.
-                    if (!objSummary.getLastModified().before(latestVersionSentForPublishing.sentToExternalPublisher)) {
+                    if (!objSummary.lastModified().isBefore(latestVersionSentForPublishing.sentToExternalPublisher.toInstant())) {
                         LOG.info("New version found for {} at s3://{}/{}. ETag = {}.", feedId, feedBucket, keyName, eTag);
                         updatePublishedFeedVersion(feedId, feedSource.name, latestVersionSentForPublishing);
                         // TODO: Explore if MD5 checksum can be used to find matching feed version.
@@ -238,7 +239,7 @@ public class FeedUpdater {
         return newTags;
     }
 
-    private static Map<String, FeedSource> getFeedSourcesByFeedId(List<S3ObjectSummary> objectSummaries) {
+    private static Map<String, FeedSource> getFeedSourcesByFeedId(List<S3Object> objectSummaries) {
         // Single Mongo query to get external properties for all feeds reported in S3.
         List<ExternalFeedSourceProperty> allProperties = Persistence.externalFeedSourceProperties.getFiltered(
             and(eq("name", AGENCY_ID_FIELDNAME), in("value", getFeedIds(objectSummaries)))
@@ -379,13 +380,15 @@ public class FeedUpdater {
     private FeedVersion findMatchingFeedVersion(
         String keyName,
         FeedSource feedSource
-    ) throws AmazonServiceException, IOException, CheckedAWSException {
+    ) throws AwsServiceException, IOException {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
-        S3Object object = MtcFeedResource.getS3Client().getObject(feedBucket, keyName);
+        ResponseInputStream<GetObjectResponse> object = MtcFeedResource.getS3Client().getObject(
+            req -> req.bucket(feedBucket).key(keyName)
+        );
         File file = new File(FeedStore.basePath, filename);
         try (
-            InputStream in = object.getObjectContent();
+            InputStream in = object;
             OutputStream out = new FileOutputStream(file);
         ) {
             ByteStreams.copy(in, out);
@@ -418,7 +421,7 @@ public class FeedUpdater {
      * Helper interface for fetching a list of feeds deemed production-complete.
      */
     public interface CompletedFeedRetriever {
-        List<S3ObjectSummary> retrieveCompletedFeeds();
+        List<S3Object> retrieveCompletedFeeds();
     }
 
     /**
@@ -428,9 +431,11 @@ public class FeedUpdater {
      */
     public class DefaultCompletedFeedRetriever implements CompletedFeedRetriever {
         @Override
-        public List<S3ObjectSummary> retrieveCompletedFeeds() {
-            ObjectListing gtfsList = MtcFeedResource.getS3Client().listObjects(feedBucket, bucketFolder);
-            return gtfsList.getObjectSummaries();
+        public List<S3Object> retrieveCompletedFeeds() {
+            ListObjectsResponse gtfsList = MtcFeedResource.getS3Client().listObjects(
+                list -> list.bucket(feedBucket).prefix(bucketFolder)
+            );
+            return gtfsList.contents();
         }
     }
 }

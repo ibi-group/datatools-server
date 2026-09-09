@@ -4,12 +4,18 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.services.s3.S3Uri;
 
 import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class S3UtilsTest extends UnitTest {
+
+    public static final String BUCKET = "bucket-name";
+    public static final String KEY = "public/index.html";
+    public static final String URL = String.format("https://%s.s3.amazonaws.com/%s", BUCKET, KEY);
+
     /**
      * Create feed version for GTFS+ validation test.
      */
@@ -21,11 +27,13 @@ class S3UtilsTest extends UnitTest {
 
     @Test
     void canGetDefaultBucketUrlForKey() {
-        final String FILENAME = "public/index.html";
+        assertEquals(URL, S3Utils.getDefaultBucketUrlForKey(KEY));
+    }
 
-        assertEquals(
-            "https://bucket-name.s3.amazonaws.com/public/index.html",
-            S3Utils.getDefaultBucketUrlForKey(FILENAME)
-        );
+    @Test
+    void canMakeUri() {
+        S3Uri uri = S3Utils.makeUri(URL);
+        assertEquals(BUCKET, uri.bucket().orElse(null));
+        assertEquals(KEY, uri.key().orElse(null));
     }
 }

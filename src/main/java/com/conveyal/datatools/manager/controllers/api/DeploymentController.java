@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.services.s3.AmazonS3URI;
-import com.amazonaws.services.s3.model.DeleteObjectRequest;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
@@ -28,6 +26,7 @@ import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.s3.S3Uri;
 import spark.Request;
 import spark.Response;
 
@@ -117,7 +116,7 @@ public class DeploymentController {
             // See if there is an ongoing job for the provided jobId.
             MonitorableJob job = JobUtils.getJobByJobId(jobId);
             if (job instanceof DeployJob) {
-                uriString = ((DeployJob) job).getS3FolderURI().toString();
+                uriString = ((DeployJob) job).getRawS3URI();
             } else {
                 // Try to construct the URI string
                 OtpServer server = Persistence.servers.getById(deployment.deployedTo);
@@ -136,12 +135,14 @@ public class DeploymentController {
             role = summaryToDownload.role;
             region = summaryToDownload.ec2Info == null ? null : summaryToDownload.ec2Info.region;
         }
-        AmazonS3URI uri = new AmazonS3URI(uriString);
+
+        S3Uri uri = S3Utils.makeUri(uriString);
         // Assume the alternative role if needed to download the deploy artifact.
         return S3Utils.downloadObject(
             S3Utils.getS3Client(role, region),
-            uri.getBucket(),
-            String.join("/", uri.getKey(), filename),
+            region,
+            uri.bucket().orElse(null),
+            String.join("/", uri.key().orElse(null), filename),
             false,
             req,
             res
@@ -401,8 +402,12 @@ public class DeploymentController {
                 // Only delete if the file does not exist in the deployment
                 if (!csvUrls.contains(existingCsvUrl)) {
                     try {
-                        AmazonS3URI s3URIToDelete = new AmazonS3URI(existingCsvUrl);
-                        S3Utils.getDefaultS3Client().deleteObject(new DeleteObjectRequest(s3URIToDelete.getBucket(), s3URIToDelete.getKey()));
+                        S3Uri s3URIToDelete = S3Utils.makeUri(existingCsvUrl);
+                        S3Utils.getDefaultS3Client().deleteObject(
+                            delete -> delete
+                                .bucket(s3URIToDelete.bucket().orElse(null))
+                                .key(s3URIToDelete.key().orElse(null))
+                        );
                     } catch(Exception e) {
                         logMessageAndHalt(req, 500, "Failed to delete file from S3.", e);
                     }
