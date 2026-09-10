@@ -1,4 +1,0 @@
-from_stop_id,to_stop_id,from_route_id,to_route_id,from_trip_id,to_trip_id,transfer_type,min_transfer_time
-52551,52552,,,,,0,
-51846,56825,,,,,0,
-50196,50196,,,,,0,
