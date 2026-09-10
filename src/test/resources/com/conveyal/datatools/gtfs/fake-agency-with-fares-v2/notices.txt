@@ -1,0 +1,8 @@
+﻿notice_id,display_text
+18785,"Trip does not operate during U of M breaks, May Session or Summer Session."
+24328,Operates school days only.
+25042,Bus arrives 5 minutes before time shown.
+26800,Board buses on 69th Ave between Humboldt Ave and Fremont Place
+26952,Bus continues northbound as a route 4 via Lyndale Ave to Lyndale Ave and Lake St.
+27662,Operates on weekdays during school year
+27703,This stop only served on Wednesday when school is in session.
