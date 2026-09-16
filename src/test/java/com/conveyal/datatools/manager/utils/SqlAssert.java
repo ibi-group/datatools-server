@@ -22,6 +22,7 @@ public class SqlAssert {
     public final SqlTableAssert trips = new SqlTableAssert(Table.TRIPS);
     public final SqlTableAssert stops = new SqlTableAssert(Table.STOPS);
     public final SqlTableAssert patterns = new SqlTableAssert(Table.PATTERNS);
+    public final SqlTableAssert riderCategories = new SqlTableAssert(Table.RIDER_CATEGORIES);
 
     public SqlAssert(FeedVersion version) {
         this.version = version;
