@@ -296,7 +296,7 @@
             <groupId>com.github.ibi-group</groupId>
             <artifactId>gtfs-lib</artifactId>
             <!-- Latest dev build on jitpack.io -->
-            <version>d39534084f9df5a798ae8d2b6f61cd8a6ab4947d</version>
+            <version>89dba089dcc10d41a34b4d5868b055dad4309904</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -424,9 +424,9 @@
         </dependency>
         <!-- Snapshotting library for testing -->
         <dependency>
-            <groupId>com.github.conveyal</groupId>
+            <groupId>com.github.ibi-group</groupId>
             <artifactId>java-snapshot-matcher</artifactId>
-            <version>3495b32f7b4d3f82590e0a2284029214070b6984</version>
+            <version>master</version>
             <scope>test</scope>
         </dependency>
         <!-- wiremock is used to mock http requests -->
@@ -504,6 +504,11 @@
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>2.8.9</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.17.0</version>
         </dependency>
         <dependency>
             <groupId>commons-cli</groupId>
