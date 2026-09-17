@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.manager.DataManager.isModuleEnabled;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.containsField;
@@ -231,13 +232,22 @@ public class MergeLineContext {
 
     public void startNewRow() throws IOException {
         keyValue = csvReader.get(keyFieldIndex);
-        setForeignReferenceKeyValues();
-        // Get the spec fields to export
-        List<Field> specFields = table.specFields();
-        // Filter the spec fields on the set of fields found in all feeds to be merged.
-        sharedSpecFields = specFields.stream()
-            .filter(f -> containsField(allFields, f.name))
-            .collect(Collectors.toList());
+        // Allow merging custom fields on select tables/criteria.
+        // This can be expanded to more tables as needed.
+        if (table == Table.RIDER_CATEGORIES && isModuleEnabled("gtfsplus")) {
+            // Table rider_categories.txt appears in both GTFS Fares V2 and MTC's GTFS+ specs
+            // and have disjoint headers.
+            // For this table, use all fields found in the feeds to merge.
+            sharedSpecFields = List.copyOf(allFields);
+        } else {
+            setForeignReferenceKeyValues();
+            // Get the spec fields and custom/proprietary fields to export
+            List<Field> specFields = table.specFields();
+            // Filter the spec fields on the set of fields found in all feeds to be merged.
+            sharedSpecFields = specFields.stream()
+                .filter(f -> containsField(allFields, f.name))
+                .collect(Collectors.toList());
+        }
     }
 
     /**
@@ -629,13 +639,11 @@ public class MergeLineContext {
         // row except for the identifiers receiving a prefix to avoid ID conflicts.
         for (int specFieldIndex = 0; specFieldIndex < sharedSpecFields.size(); specFieldIndex++) {
             Field field = sharedSpecFields.get(specFieldIndex);
+            int fieldIndex = fieldsFoundList.stream().map(f -> f.name).collect(Collectors.toList()).indexOf(field.name);
             // Default value to write is unchanged from value found in csv (i.e. val). Note: if looking to
             // modify the value that is written in the merged file, you must update valueToWrite (e.g.,
             // updating this feed's end_date or accounting for cases where IDs conflict).
-            FieldContext fieldContext = new FieldContext(
-                field,
-                csvReader.get(fieldsFoundList.indexOf(field))
-            );
+            FieldContext fieldContext = new FieldContext(field, csvReader.get(fieldIndex));
             originalRowValues[specFieldIndex] = fieldContext.getValueToWrite();
             if (!skipRecord) {
                 // Handle filling in agency_id if missing when merging regional feeds. If false is returned,

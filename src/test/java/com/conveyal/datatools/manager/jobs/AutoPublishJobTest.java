@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
@@ -18,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -294,7 +294,7 @@ public class AutoPublishJobTest extends UnitTest {
     }
 
     /**
-     * Mocks the results of an {@link S3ObjectSummary} retrieval before/after the
+     * Mocks the results of an {@link S3Object} retrieval before/after the
      * external MTC publishing process is complete.
      */
     private static class TestCompletedFeedRetriever implements FeedUpdater.CompletedFeedRetriever {
@@ -307,14 +307,15 @@ public class AutoPublishJobTest extends UnitTest {
         }
 
         @Override
-        public List<S3ObjectSummary> retrieveCompletedFeeds() {
+        public List<S3Object> retrieveCompletedFeeds() {
             if (!isPublishingComplete) {
                 return new ArrayList<>();
             } else {
-                S3ObjectSummary objSummary = new S3ObjectSummary();
-                objSummary.setETag("test-etag");
-                objSummary.setKey(String.format("%s/%s", TEST_COMPLETED_FOLDER, agencyId));
-                objSummary.setLastModified(publishDate);
+                S3Object objSummary = S3Object.builder()
+                    .eTag("test-etag")
+                    .key(String.format("%s/%s", TEST_COMPLETED_FOLDER, agencyId))
+                    .lastModified(publishDate.toInstant())
+                    .build();
                 return Lists.newArrayList(objSummary);
             }
         }

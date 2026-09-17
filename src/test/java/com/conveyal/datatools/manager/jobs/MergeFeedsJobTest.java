@@ -5,14 +5,18 @@ import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
+import com.conveyal.datatools.manager.jobs.feedmerge.FeedToMerge;
 import com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType;
 import com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.MergeFeedUtils;
 import com.conveyal.datatools.manager.utils.SqlAssert;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
+import com.conveyal.gtfs.loader.Field;
+import com.conveyal.gtfs.loader.Table;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -23,7 +27,9 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.TestUtils.assertThatFeedHasNoErrorsOfType;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
@@ -38,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 /**
  * Tests for the various {@link MergeFeedsJob} merge types.
  */
-public class MergeFeedsJobTest extends UnitTest {
+class MergeFeedsJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
     private static final Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
     private static FeedVersion bartVersion1;
@@ -84,7 +90,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeAll
-    public static void setUp() throws IOException {
+    static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = false;
@@ -162,7 +168,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * Delete project on tear down (feed sources/versions will also be deleted).
      */
     @AfterAll
-    public static void tearDown() {
+    static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
@@ -307,7 +313,7 @@ public class MergeFeedsJobTest extends UnitTest {
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
-        // Result should fail.
+        // Result should succeed.
         assertFalse(
             mergeFeedsJob.mergeFeedsResult.failed,
             "Merge feeds job should succeed with CHECK_STOP_TIMES strategy."
@@ -325,6 +331,62 @@ public class MergeFeedsJobTest extends UnitTest {
 
         // expect that the record in calendar table has the correct start_date.
         sqlAssert.calendar.assertCount(1, "start_date='20170918' and monday=1");
+    }
+
+    /**
+     * Ensures that rider_categories.txt are merged including MTC's GTFS+ fields that are not part of the Fares V2 spec.
+     */
+    @Test
+    void mergeMTCShouldMergeRiderCategoriesGtfsPlusFields() throws Exception {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(fakeTransitBase);
+        versions.add(fakeTransitFuture);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+
+        assertFeedMergeSucceeded(mergeFeedsJob);
+
+        // 3 records should be loaded into Postgres.
+        assertEquals(3, mergeFeedsJob.mergedVersion.feedLoadResult.riderCategories.rowCount);
+
+        // GTFS+ rider_category_description field should be imported in Postgres from the merged feed.
+        // From the Fares V2 spec, only the rider_category_id field is present because the other fields are
+        // missing from the original feeds before merging.
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.riderCategories.assertCount(1, "rider_category_id = '1'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_id = '2'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_id = '5'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_description = 'Youth'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_description = 'Adult'");
+        sqlAssert.riderCategories.assertCount(1, "rider_category_description = 'Eligible Discount (Senior / Disabled / Medicare cardholder)'");
+
+        // There should not be other fields in that table (they would be caught by GTFS+ validation).
+        GtfsPlusValidation validation = GtfsPlusValidation.validate(mergeFeedsJob.mergedVersion.id);
+        assertEquals(
+            0,
+            validation.issues.stream().filter(i -> i.tableId.equals(Table.RIDER_CATEGORIES.name)).count()
+        );
+    }
+
+    /**
+     * Ensures that custom/proprietary fields in a feed CSV file are detected without duplication.
+     */
+    @Test
+    void canGetAllFields() throws SQLException, IOException {
+        // A proprietary (GTFS+) field rider_category_description should be loaded in both feeds.
+        SqlAssert sqlBaseAssert = new SqlAssert(fakeTransitBase);
+        sqlBaseAssert.riderCategories.assertCount(2, "(rider_category_description = '') IS FALSE");
+        SqlAssert sqlFutureAssert = new SqlAssert(fakeTransitFuture);
+        sqlFutureAssert.riderCategories.assertCount(2, "(rider_category_description = '') IS FALSE");
+
+        Set<Field> allFields = MergeFeedUtils.getAllFields(
+            List.of(new FeedToMerge(fakeTransitBase), new FeedToMerge(fakeTransitFuture)),
+            Table.RIDER_CATEGORIES
+        );
+
+        Set<String> fieldNames = allFields.stream().map(f -> f.name).collect(Collectors.toSet());
+        assertEquals(Set.of("rider_category_id", "rider_category_description"), fieldNames);
     }
 
     /**

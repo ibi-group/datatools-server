@@ -1,15 +1,5 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
-import com.amazonaws.services.ec2.model.DescribeInstancesResult;
-import com.amazonaws.services.ec2.model.Instance;
-import com.amazonaws.services.ec2.model.Reservation;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
-import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetHealthRequest;
-import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetHealthResult;
-import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
-import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
-import com.amazonaws.services.elasticloadbalancingv2.model.TargetHealthDescription;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -28,11 +18,17 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesResponse;
+import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.Reservation;
+import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
+import software.amazon.awssdk.services.elasticloadbalancingv2.model.DescribeTargetHealthResponse;
+import software.amazon.awssdk.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
+import software.amazon.awssdk.services.elasticloadbalancingv2.model.TargetDescription;
+import software.amazon.awssdk.services.elasticloadbalancingv2.model.TargetHealthDescription;
 
 import java.io.IOException;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.manager.jobs.DeployJob.OTP_RUNNER_STATUS_FILE;
@@ -58,7 +54,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
     public MonitorServerStatusJob(Auth0UserProfile owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
         super(
             owner,
-            String.format("Monitor server setup %s", instance.getPublicIpAddress()),
+            String.format("Monitor server setup %s", instance.publicIpAddress()),
             JobType.MONITOR_SERVER_STATUS
         );
         this.deployJob = deployJob;
@@ -71,7 +67,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
 
     @JsonProperty
     public String getInstanceId () {
-        return instance != null ? instance.getInstanceId() : null;
+        return instance != null ? instance.instanceId() : null;
     }
 
     @JsonProperty
@@ -82,7 +78,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
     @Override
     public void jobLogic() {
         // Get OTP URL for instance to check for availability.
-        String ipUrl = "http://" + instance.getPublicIpAddress();
+        String ipUrl = "http://" + instance.publicIpAddress();
         if (otpServer.ec2Info == null || otpServer.ec2Info.targetGroupArn == null) {
             // Fail the job from the outset if there is no target group defined.
             failJob("There is no load balancer under which to register ec2 instance.");
@@ -151,27 +147,28 @@ public class MonitorServerStatusJob extends MonitorableJob {
             status.update("Graph loaded!", 90);
             // After the router is available, the EC2 instance can be registered with the load balancer.
             // REGISTER INSTANCE WITH LOAD BALANCER
-            RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
-                .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
-                .withTargets(new TargetDescription().withId(instance.getInstanceId()));
+            RegisterTargetsRequest registerTargetsRequest = RegisterTargetsRequest.builder()
+                .targetGroupArn(otpServer.ec2Info.targetGroupArn)
+                .targets(TargetDescription.builder().id(instance.instanceId()).build())
+                .build();
             boolean targetAddedSuccessfully = false;
             // Wait for two minutes for targets to register.
             TimeTracker registerTargetTracker = new TimeTracker(2, TimeUnit.MINUTES);
             // obtain an ELB client suitable for this deploy job. It is important to obtain a client this way to ensure
             // that the proper AWS credentials are used and that the client has a valid session if it is obtained from a
             // role.
-            AmazonElasticLoadBalancing elbClient = deployJob.getELBClientForDeployJob();
+            ElasticLoadBalancingV2Client elbClient = deployJob.getELBClientForDeployJob();
             while (!targetAddedSuccessfully) {
                 // Register target with target group.
                 elbClient.registerTargets(registerTargetsRequest);
                 waitAndCheckInstanceHealth("instance to register with ELB target group");
                 // Check that the instance ID shows up in the health check.
-                DescribeTargetHealthRequest healthRequest = new DescribeTargetHealthRequest()
-                    .withTargetGroupArn(otpServer.ec2Info.targetGroupArn);
-                DescribeTargetHealthResult healthResult = elbClient.describeTargetHealth(healthRequest);
-                for (TargetHealthDescription health : healthResult.getTargetHealthDescriptions()) {
-                    if (instance.getInstanceId().equals(health.getTarget().getId())) {
-                        LOG.info("Instance {} successfully added to target group!", instance.getInstanceId());
+                DescribeTargetHealthResponse healthResult = elbClient.describeTargetHealth(
+                    req -> req.targetGroupArn(otpServer.ec2Info.targetGroupArn)
+                );
+                for (TargetHealthDescription health : healthResult.targetHealthDescriptions()) {
+                    if (instance.instanceId().equals(health.target().id())) {
+                        LOG.info("Instance {} successfully added to target group!", instance.instanceId());
                         targetAddedSuccessfully = true;
                     }
                 }
@@ -212,7 +209,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * Gets the expected path to the otp-runner logs that get uploaded to s3
      */
     private String getOtpRunnerLogS3Path() {
-        return String.format("%s/%s-otp-runner.log", deployJob.getS3FolderURI(), instance.getInstanceId());
+        return String.format("%s/%s-otp-runner.log", deployJob.getRawS3URI(), instance.instanceId());
     }
 
     /**
@@ -254,11 +251,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * ${@link MonitorServerStatusJob#MAX_INSTANCE_HEALTH_RETRIES} value.
      */
     private void checkInstanceHealth(int attemptNumber) throws InstanceHealthException, InterruptedException {
-        DescribeInstancesRequest request = new DescribeInstancesRequest()
-            .withInstanceIds(Collections.singletonList(instance.getInstanceId()));
-        DescribeInstancesResult result;
+        DescribeInstancesResponse result;
         try {
-            result = deployJob.getEC2ClientForDeployJob().describeInstances(request);
+            result = deployJob.getEC2ClientForDeployJob().describeInstances(req -> req.instanceIds(instance.instanceId()));
         } catch (Exception e) {
             LOG.warn(
                 "Failed on attempt {}/{} to execute request to obtain instance health!",
@@ -274,13 +269,13 @@ public class MonitorServerStatusJob extends MonitorableJob {
             checkInstanceHealth(attemptNumber + 1);
             return;
         }
-        for (Reservation reservation : result.getReservations()) {
-            for (Instance reservationInstance : reservation.getInstances()) {
-                if (reservationInstance.getInstanceId().equals(instance.getInstanceId())) {
+        for (Reservation reservation : result.reservations()) {
+            for (Instance reservationInstance : reservation.instances()) {
+                if (reservationInstance.instanceId().equals(instance.instanceId())) {
                     // Code 16 is running. Anything above that is either stopped, terminated or about to be stopped or
                     // terminated
-                    if (reservationInstance.getState().getCode() > 16) {
-                        throw new InstanceHealthException(reservationInstance.getState().getName());
+                    if (reservationInstance.state().code() > 16) {
+                        throw new InstanceHealthException(reservationInstance.state().nameAsString());
                     }
                 }
             }

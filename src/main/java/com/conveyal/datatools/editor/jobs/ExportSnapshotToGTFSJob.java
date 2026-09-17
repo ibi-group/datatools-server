@@ -1,6 +1,5 @@
 package com.conveyal.datatools.editor.jobs;
 
-import com.amazonaws.AmazonServiceException;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
@@ -13,6 +12,8 @@ import com.conveyal.gtfs.loader.JdbcGtfsExporter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.sync.RequestBody;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -75,8 +76,11 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
         if (DataManager.useS3) {
             String s3Key = String.format("%s/%s", bucketPrefix, filename);
             try {
-                S3Utils.getDefaultS3Client().putObject(S3Utils.DEFAULT_BUCKET, s3Key, tempFile);
-            } catch (AmazonServiceException | CheckedAWSException e) {
+                S3Utils.getDefaultS3Client().putObject(
+                    req -> req.bucket(S3Utils.DEFAULT_BUCKET).key(s3Key),
+                    RequestBody.fromFile(tempFile)
+                );
+            } catch (AwsServiceException | CheckedAWSException e) {
                 status.fail("Failed to upload file to S3", e);
                 return;
             }

@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
@@ -19,6 +17,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.services.ec2.model.Instance;
 
 import java.io.File;
 import java.io.IOException;
@@ -234,7 +234,7 @@ public class DeployJobTest extends UnitTest {
      * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true"
      */
     @AfterAll
-    public static void cleanUp() throws AmazonServiceException, CheckedAWSException {
+    public static void cleanUp() throws AwsServiceException, CheckedAWSException {
         assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = EC2Utils.getIds(instances);
