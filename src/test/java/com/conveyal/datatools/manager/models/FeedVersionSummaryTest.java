@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.DatatoolsTest;
-import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.gtfs.validator.ValidationResult;
 import org.junit.jupiter.api.AfterEach;
@@ -22,7 +21,6 @@ class FeedVersionSummaryTest extends DatatoolsTest {
     @BeforeAll
     static void settingUp() throws IOException {
         DatatoolsTest.setUp();
-        Auth0Connection.setAuthDisabled(true);
     }
 
     @AfterEach
@@ -80,18 +78,10 @@ class FeedVersionSummaryTest extends DatatoolsTest {
 
     private static Stream<Arguments> createPublishStates() {
         return Stream.of(
-            Arguments.of(
-                true, false, false, false, PublishState.PUBLISHED
-            ),
-            Arguments.of(
-                false, true, false, false, PublishState.PUBLISHING
-            ),
-            Arguments.of(
-                false, false, true, false, PublishState.PUBLISH_BLOCKED
-            ),
-            Arguments.of(
-                false, false, false, false, PublishState.READY_TO_PUBLISH
-            )
+            Arguments.of(true, false, false, false, PublishState.PUBLISHED),
+            Arguments.of(false, true, false, false, PublishState.PUBLISHING),
+            Arguments.of(false, false, true, false, PublishState.PUBLISH_BLOCKED),
+            Arguments.of(false, false, false, false, PublishState.READY_TO_PUBLISH)
         );
     }
 
@@ -114,21 +104,9 @@ class FeedVersionSummaryTest extends DatatoolsTest {
 
     private static Stream<Arguments> publishStateTimeCases() {
         return Stream.of(
-            Arguments.of(
-                1,
-                PublishState.PUBLISH_BLOCKED,
-                "future feed"
-            ),
-            Arguments.of(
-                0,
-                PublishState.READY_TO_PUBLISH,
-                "present feed"
-            ),
-            Arguments.of(
-                -5,
-                PublishState.PUBLISH_BLOCKED,
-                "expired feed"
-            )
+            Arguments.of(1, PublishState.PUBLISH_BLOCKED, "future feed"),
+            Arguments.of(0, PublishState.READY_TO_PUBLISH, "present feed"),
+            Arguments.of(-5, PublishState.PUBLISH_BLOCKED, "expired feed")
         );
     }
 }
