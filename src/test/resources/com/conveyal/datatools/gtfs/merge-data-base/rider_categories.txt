@@ -1,0 +1,3 @@
+rider_category_id,rider_category_description
+1,Adult
+5,Youth

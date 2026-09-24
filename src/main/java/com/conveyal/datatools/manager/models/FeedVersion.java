@@ -13,7 +13,6 @@ import com.conveyal.datatools.manager.jobs.validation.SharedStopsValidator;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
-import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.graphql.fetchers.JDBCFetcher;
@@ -127,9 +126,16 @@ public class FeedVersion extends Model implements Serializable {
         DateFormat df = new SimpleDateFormat(VERSION_ID_DATE_FORMAT);
 
         // since we store directly on the file system, this lets users look at the DB directly
-        // TODO: no need to BaseGTFSCache.cleanId once we rely on GTFSCache to store the feed.
         String uuid = UUID.randomUUID().toString();
-        return BaseGTFSCache.cleanId(String.join("-", getCleanName(source.name), df.format(this.updated), source.id, uuid)) + ".zip";
+        return cleanId(String.join("-", getCleanName(source.name), df.format(this.updated), source.id, uuid)) + ".zip";
+    }
+
+    /**
+     * Copied from the former gtfs-lib BaseGtfsCache.cleanId method.
+     */
+    private static String cleanId(String id) {
+        // replace all special characters with `-`, except for underscore `_`
+        return id.replaceAll("\\W", "-");
     }
 
     /**

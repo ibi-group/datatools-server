@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -240,6 +241,7 @@ public class GtfsPlusValidation implements Serializable {
         int rowIndex = 0;
         int rowsWithWrongNumberOfColumns = 0;
         int emptyRows = 0;
+        long nonNullFieldsCount = Arrays.stream(fieldsFound).filter(Objects::nonNull).count();
         while (csvReader.readRecord()) {
             // First, check that row has the correct number of fields.
             int recordColumnCount = csvReader.getColumnCount();
@@ -249,7 +251,7 @@ public class GtfsPlusValidation implements Serializable {
                 // report that as such (and skip validating column values).
                 emptyRows++;
             } else {
-                if (recordColumnCount != fieldsFound.length) {
+                if (recordColumnCount != nonNullFieldsCount) {
                     rowsWithWrongNumberOfColumns++;
                 }
                 // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing

@@ -16,6 +16,8 @@ application:
     s3_region: us-east-1
     gtfs_s3_bucket: bucket-name
 modules:
+  metrics:
+    enabled: true
   enterprise:
     enabled: false
     # Setting this to true will upload all feeds to S3 instead of linking to their URL

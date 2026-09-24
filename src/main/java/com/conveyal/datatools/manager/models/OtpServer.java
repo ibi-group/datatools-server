@@ -1,8 +1,5 @@
 package com.conveyal.datatools.manager.models;
 
-import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.model.Filter;
-import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.EC2ValidationResult;
@@ -15,6 +12,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.Filter;
+import software.amazon.awssdk.services.ec2.model.Instance;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -70,7 +70,11 @@ public class OtpServer extends Model {
     public List<EC2InstanceSummary> retrieveEC2InstanceSummaries() throws CheckedAWSException {
         // Prevent calling EC2 method on servers that do not have EC2 info defined because this is a JSON property.
         if (ec2Info == null) return Collections.emptyList();
-        Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
+        Filter serverFilter = Filter
+            .builder()
+            .name("tag:serverId")
+            .values(id)
+            .build();
         return EC2Utils.fetchEC2InstanceSummaries(getEC2Client(), serverFilter);
     }
 
@@ -79,7 +83,11 @@ public class OtpServer extends Model {
             !"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled")) ||
                 ec2Info == null
         ) return Collections.emptyList();
-        Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
+        Filter serverFilter = Filter
+            .builder()
+            .name("tag:serverId")
+            .values(id)
+            .build();
         return EC2Utils.fetchEC2Instances(getEC2Client(), serverFilter);
     }
 
@@ -104,7 +112,7 @@ public class OtpServer extends Model {
 
     @JsonIgnore
     @BsonIgnore
-    public AmazonEC2 getEC2Client() throws CheckedAWSException {
+    public Ec2Client getEC2Client() throws CheckedAWSException {
         return EC2Utils.getEC2Client(role, getRegion());
     }
 

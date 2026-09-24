@@ -1,6 +1,5 @@
 package com.conveyal.datatools.common.utils;
 
-import com.amazonaws.AmazonServiceException;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -15,6 +14,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
@@ -311,7 +311,7 @@ public class SparkUtils {
         }
         try {
             return S3Utils.uploadObject(uploadType + "/" + key + "_" + uploadedFileName, tempFile);
-        } catch (AmazonServiceException | CheckedAWSException e) {
+        } catch (AwsServiceException | CheckedAWSException e) {
             logMessageAndHalt(req, 500, "Error uploading file to S3", e);
             return null;
         } finally {
