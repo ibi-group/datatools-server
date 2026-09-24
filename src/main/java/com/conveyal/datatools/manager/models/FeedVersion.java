@@ -551,6 +551,21 @@ public class FeedVersion extends Model implements Serializable {
             getNowAsLocalDate().isAfter(validationResult.lastCalendarDate);
     }
 
+    /**
+     * Whether the Has this feed expired?
+     * @return If the validation result last calendar date is null or has expired return true, else return false.
+     */
+    @JsonIgnore
+    @BsonIgnore
+    public boolean isFuture() {
+        return isFuture(validationResult);
+    }
+
+    public static boolean isFuture(ValidationResult validationResult) {
+        return validationResult.firstCalendarDate != null &&
+            getNowAsLocalDate().isBefore(validationResult.firstCalendarDate);
+    }
+
     private static LocalDate getNowAsLocalDate() {
         return dateOverrideForTesting == null ? LocalDate.now() : dateOverrideForTesting;
     }
