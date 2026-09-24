@@ -232,6 +232,7 @@ public class FeedVersionSummary extends Model implements Serializable {
             !gtfsPlusValidation.issues.isEmpty() ||
             !gtfsPlusValidation.published ||
             FeedVersion.hasExpired(validationResult) ||
+            FeedVersion.isFuture(validationResult) ||
             hasBlockingIssuesForPublishing();
     }
 
