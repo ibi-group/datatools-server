@@ -25,6 +25,7 @@ import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.validator.ValidationResult;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -51,7 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-public class FeedSourceControllerTest extends DatatoolsTest {
+class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
     private static Project projectToBeDeleted = null;
     private static FeedSource feedSourceWithUrl = null;
@@ -70,7 +71,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static FeedVersion feedVersionFromPinnedDeployment = null;
 
     @BeforeAll
-    public static void setUp() throws IOException {
+    static void settingUp() throws IOException {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
         ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = false;
@@ -89,6 +90,11 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         setUpFeedVersionFromLatestDeployment();
         setUpFeedVersionFromPinnedDeployment();
+    }
+
+    @AfterEach
+    void afterEach() {
+        FeedVersionSummary.setHasBlockingIssueForPublishingOverrideForTesting(null);
     }
 
     /**
@@ -206,7 +212,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     }
 
     @AfterAll
-    public static void tearDown() {
+    static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
@@ -243,7 +249,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      *  3. Update the same feed source turning auth fetch back on and confirm it is scheduled once more.
      */
     @Test
-    public void createFeedSourceWithUrlTest() {
+    void createFeedSourceWithUrlTest() {
         // create a feed source.
         SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
             JsonUtil.toJson(feedSourceWithUrl),
@@ -278,7 +284,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Create a feed source without defining the feed source url. Confirm that the feed source is not scheduled.
      */
     @Test
-    public void createFeedSourceWithNoUrlTest() {
+    void createFeedSourceWithNoUrlTest() {
         SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
             JsonUtil.toJson(feedSourceWithNoUrl),
             HttpUtils.REQUEST_METHOD.POST
@@ -292,7 +298,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Create some labels, add them to the feed source make them admin only, and check that they don't appear if not an admin
      */
     @Test
-    public void createFeedSourceWithLabels() {
+    void createFeedSourceWithLabels() {
         // Create labels
         SimpleHttpResponse createFirstLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
                 JsonUtil.toJson(publicLabel),
@@ -473,7 +479,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         }
         PublishState publishState = feedVersionSummary.getPublishState();
         assertEquals(expectedPublishState, publishState);
-        FeedVersionSummary.setHasBlockingIssueForPublishingOverrideForTesting(null);
     }
 
     /**
@@ -501,6 +506,43 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             ),
             Arguments.of(
                 false, false, false, false, PublishState.READY_TO_PUBLISH
+            )
+        );
+    }
+
+    /**
+     * Additional cases besides canDeterminePublishState
+     */
+    @ParameterizedTest
+    @MethodSource("publishStateTimeCases")
+    void canGetPublishState(int daysOffsetFromToday, PublishState expectedState, String caseName) {
+        FeedVersionSummary feedVersionSummary = new FeedVersionSummary();
+        passPublishBlockedCheck(feedVersionSummary);
+        LocalDate date = LocalDate.now().plusDays(daysOffsetFromToday);
+        feedVersionSummary.validationResult.firstCalendarDate = date;
+        feedVersionSummary.validationResult.lastCalendarDate = date.plusDays(3);
+
+        // Ready to publish case.
+        FeedVersionSummary.setHasBlockingIssueForPublishingOverrideForTesting(false);
+        assertEquals(expectedState, feedVersionSummary.getPublishState(), caseName);
+    }
+
+    private static Stream<Arguments> publishStateTimeCases() {
+        return Stream.of(
+            Arguments.of(
+                1,
+                PublishState.PUBLISH_BLOCKED,
+                "future feed"
+            ),
+            Arguments.of(
+                0,
+                PublishState.READY_TO_PUBLISH,
+                "present feed"
+            ),
+            Arguments.of(
+                -5,
+                PublishState.PUBLISH_BLOCKED,
+                "expired feed"
             )
         );
     }
