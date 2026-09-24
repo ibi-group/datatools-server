@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Tests for the various {@link AutoPublishJob} cases.
  */
-public class AutoPublishJobTest extends UnitTest {
+class AutoPublishJobTest extends UnitTest {
     private static final String TEST_COMPLETED_FOLDER = "test-completed";
     private static final Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
     private static Project project;
@@ -52,7 +52,7 @@ public class AutoPublishJobTest extends UnitTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeAll
-    public static void setUp() throws IOException {
+    static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
 
@@ -92,7 +92,7 @@ public class AutoPublishJobTest extends UnitTest {
     }
 
     @AfterAll
-    public static void tearDown() {
+    static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
@@ -140,6 +140,7 @@ public class AutoPublishJobTest extends UnitTest {
 
     private static Stream<Arguments> createPublishFeedCases() {
         LocalDate feedValidDate = LocalDate.of(2019, 3, 1);
+        LocalDate feedBeforeValidDate = LocalDate.of(2010, 3, 1);
         return Stream.of(
             Arguments.of(
                 "fake-agency-with-only-calendar-expire-in-2099-with-failed-referential-integrity",
@@ -164,6 +165,12 @@ public class AutoPublishJobTest extends UnitTest {
                 null,
                 true,
                 "Could not publish this feed version because it has expired."
+            ),
+            Arguments.of(
+                "bart_new_lite.zip",
+                feedBeforeValidDate,
+                true,
+                "Could not publish this feed version because it is in the future."
             )
         );
     }

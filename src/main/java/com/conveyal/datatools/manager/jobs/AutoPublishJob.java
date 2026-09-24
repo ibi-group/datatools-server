@@ -43,6 +43,8 @@ public class AutoPublishJob extends MonitorableJobWithResourceLock<FeedSource> {
         // Validate and check for blocking issues in the feed version to deploy.
         if (latestFeedVersion.hasExpired()) {
             status.fail("Could not publish this feed version because it has expired.");
+        } else if (latestFeedVersion.isFuture()) {
+                status.fail("Could not publish this feed version because it is in the future.");
         } else if (latestFeedVersion.hasBlockingIssuesForPublishing()) {
             status.fail("Could not publish this feed version because it contains blocking errors.");
         } else {
