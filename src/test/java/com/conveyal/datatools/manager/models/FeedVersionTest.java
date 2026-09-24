@@ -13,11 +13,15 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.Date;
+import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
@@ -26,14 +30,17 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class FeedVersionTest extends UnitTest {
+class FeedVersionTest extends UnitTest {
     private static Project project;
     private static FeedSource feedSource;
 
     /** Initialize application for tests to run. */
     @BeforeAll
-    public static void setUp() throws Exception {
+    static void setUp() throws Exception {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
@@ -49,11 +56,50 @@ public class FeedVersionTest extends UnitTest {
     }
 
     @AfterAll
-    public static void tearDown() {
+    static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
         }
+    }
+
+    /**
+     * Future feed detection.
+     */
+    @ParameterizedTest
+    @MethodSource("futureFeedCases")
+    void canDetermineFutureFeed(int daysOffsetFromToday, boolean isFuture, String caseName) {
+        FeedVersion feedVersion1 = new FeedVersion(feedSource);
+        feedVersion1.validationResult = new ValidationResult();
+        LocalDate date = LocalDate.now().plusDays(daysOffsetFromToday);
+        feedVersion1.validationResult.firstCalendarDate = date;
+        feedVersion1.validationResult.lastCalendarDate = date.plusDays(3);
+
+        assertEquals(
+            isFuture,
+            feedVersion1.isFuture(),
+            String.format("Feed starting '%s' is %s in the future.", caseName, isFuture ? "indeed" : "not")
+        );
+    }
+
+    private static Stream<Arguments> futureFeedCases() {
+        return Stream.of(
+            Arguments.of(0, false, "today"),
+            Arguments.of(-1, false, "yesterday"),
+            Arguments.of(-2, false, "the day before yesterday"),
+            Arguments.of(1, true, "tomorrow"),
+            Arguments.of(2, true, "the day after tomorrow")
+        );
+    }
+
+    /**
+     * Future feed detection.
+     */
+    @Test
+    void canDetermineFutureFeedNullFirstCalendarDate() {
+        FeedVersion feedVersion1 = new FeedVersion(feedSource);
+        feedVersion1.validationResult = new ValidationResult();
+        assertFalse(feedVersion1.isFuture(), "null firstCalendarDate is not future.");
     }
 
     /**
