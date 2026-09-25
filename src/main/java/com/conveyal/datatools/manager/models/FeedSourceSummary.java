@@ -129,9 +129,27 @@ public class FeedSourceSummary {
     }
 
     /**
+     * Assign deployed feed version. Prioritise pinned deployment feed version over latest deployment deployed feed version.
+     */
+    private static void assignDeployedVersion(String projectId, List<FeedSourceSummary> feedSourceSummaries) {
+        Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = getLatestFeedVersionForFeedSources(projectId);
+        Map<String, FeedVersionSummary> pinnedDeploymentFeedVersions = getFeedVersionsFromPinnedDeployment(projectId);
+        Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = getFeedVersionsFromLatestDeployment(projectId);
+
+        feedSourceSummaries.forEach(feedSourceSummary -> {
+            feedSourceSummary.updatePublishAndValidationState(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
+            FeedVersionSummary deployedVersion = pinnedDeploymentFeedVersions.getOrDefault(
+                feedSourceSummary.id,
+                latestDeploymentDeployedFeedVersions.get(feedSourceSummary.id)
+            );
+            feedSourceSummary.setDeployedFeedVersionValues(deployedVersion);
+        });
+    }
+
+    /**
      * Update the publish and validation state based on the provided feed version summary.
      */
-    public void updatePublishAndValidationState(FeedVersionSummary feedVersionSummary) {
+    private void updatePublishAndValidationState(FeedVersionSummary feedVersionSummary) {
         if (feedVersionSummary == null) {
             return;
         }
@@ -148,7 +166,7 @@ public class FeedSourceSummary {
      * Set the deployed feed version values. For consistency, if no error count is available set the related number of
      * issues to zero.
      */
-    public void setDeployedFeedVersionValues(FeedVersionSummary feedVersionSummary) {
+    private void setDeployedFeedVersionValues(FeedVersionSummary feedVersionSummary) {
         if (feedVersionSummary == null) {
             return;
         }
@@ -190,7 +208,9 @@ public class FeedSourceSummary {
             sort(Sorts.ascending("name"))
         );
 
-        return extractFeedSourceSummaries(projectId, organizationId, stages);
+        List<FeedSourceSummary> feedSourceSummaries = extractFeedSourceSummaries(projectId, organizationId, stages);
+        FeedSourceSummary.assignDeployedVersion(projectId, feedSourceSummaries);
+        return feedSourceSummaries;
     }
 
     /**
@@ -198,7 +218,7 @@ public class FeedSourceSummary {
      * <a href="src/main/resources/mongo/getLatestFeedVersionForFeedSources.js">getLatestFeedVersionForFeedSources.js</a>.
      * If this is updated, be sure to also update the matching Mongo query.
      */
-    public static Map<String, FeedVersionSummary> getLatestFeedVersionForFeedSources(String projectId) {
+    private static Map<String, FeedVersionSummary> getLatestFeedVersionForFeedSources(String projectId) {
         List<Bson> feedVersionPipeline = Arrays.asList(
             // Match FeedVersion documents where feedSourceId equals the feedSourceId passed from the outer document.
             match(
@@ -321,7 +341,7 @@ public class FeedSourceSummary {
      * <a href="src/main/resources/mongo/getFeedVersionsFromLatestDeployment.js">getFeedVersionsFromLatestDeployment.js</a>.
      * If this is updated, be sure to also update the matching Mongo query.
      */
-    public static Map<String, FeedVersionSummary> getFeedVersionsFromLatestDeployment(String projectId) {
+    private static Map<String, FeedVersionSummary> getFeedVersionsFromLatestDeployment(String projectId) {
         List<Bson> stages = new ArrayList<>();
         stages.add(match(in("_id", projectId)));
 
@@ -392,7 +412,7 @@ public class FeedSourceSummary {
      * Get the deployed feed version from the pinned deployment for this feed source. For equivalent Mongo query, see
      * <a href="src/main/resources/mongo/getFeedVersionsFromPinnedDeployment.js">getFeedVersionsFromPinnedDeployment.js</a>.
      */
-    public static Map<String, FeedVersionSummary> getFeedVersionsFromPinnedDeployment(String projectId) {
+    private static Map<String, FeedVersionSummary> getFeedVersionsFromPinnedDeployment(String projectId) {
         List<Bson> stages = new ArrayList<>();
 
         // Match projects by projectId.
