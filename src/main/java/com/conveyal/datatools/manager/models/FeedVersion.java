@@ -552,8 +552,8 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * Whether the Has this feed expired?
-     * @return If the validation result last calendar date is null or has expired return true, else return false.
+     * Whether this feed starts in the future
+     * @return true if the validation result first calendar date is not null and in the future true, false otherwise.
      */
     @JsonIgnore
     @BsonIgnore
