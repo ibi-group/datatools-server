@@ -60,14 +60,14 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
 
     @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) throws Exception{
-        String tableName = table + ".txt";
+        String tableName = getTableName();
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
         Optional<Table> streamResult = Arrays.stream(Table.tablesInOrder)
                 .filter(t -> t.name.equals(table))
                 .findFirst();
 
-        if (!streamResult.isPresent()) {
-            throw new Exception(String.format("could not find specTable for table %s", table));
+        if (streamResult.isEmpty()) {
+            throw new IOException(String.format("could not find specTable for table %s", table));
         }
         Table specTable = streamResult.get();
 
@@ -77,8 +77,8 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
 
             Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
 
-            final File tempFile = File.createTempFile(tableName + "-temp", ".txt");
-            File output = File.createTempFile(tableName + "-output-temp", ".txt");
+            final File tempFile = File.createTempFile(tableName + "-temp", getTableSuffix());
+            File output = File.createTempFile(tableName + "-output-temp", getTableSuffix());
             int rowsModified = 0;
             List<String> customFields;
 
