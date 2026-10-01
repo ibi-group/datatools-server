@@ -89,14 +89,14 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
      */
     @Test
     void canObtainLatestActiveVersion() {
-        createFeedVersion("1-active-older", feedSource1, -30, 10);
-        createFeedVersion("1-active-current", feedSource1, -5, 0);
-        createFeedVersion("1-future", feedSource1, 1, 60);
+        createFeedVersion("1-active-older", 1, feedSource1, -30, 10);
+        createFeedVersion("1-active-current", 2, feedSource1, -5, 0);
+        createFeedVersion("1-future", 3, feedSource1, 1, 60);
 
-        createFeedVersion("2-active-current", feedSource2, 0, 20);
-        createFeedVersion("2-future", feedSource2, 1, 60);
+        createFeedVersion("2-active-current", 1, feedSource2, 0, 20);
+        createFeedVersion("2-future", 2, feedSource2, 1, 60);
 
-        createFeedVersion("3-expired", feedSource3, -30, -10);
+        createFeedVersion("3-expired", 1, feedSource3, -30, -10);
 
         Map<String, FeedVersionSummary> activeSummaries = getLatestActiveFeedVersionForFeedSources(project.id);
 
@@ -112,12 +112,14 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
      */
     private static void createFeedVersion(
         String id,
+        int version,
         FeedSource feedSource,
         int startOffsetDaysFromToday,
         int endOffsetDaysFromToday
     ) {
         FeedVersion feedVersion = new FeedVersion(feedSource);
         feedVersion.id = id;
+        feedVersion.version = version;
         ValidationResult validationResult = new ValidationResult();
         validationResult.firstCalendarDate = TODAY.plusDays(startOffsetDaysFromToday);
         validationResult.lastCalendarDate = TODAY.plusDays(endOffsetDaysFromToday);
