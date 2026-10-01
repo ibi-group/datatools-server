@@ -75,18 +75,9 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
      */
     @Test
     void canObtainLatestVersion() {
-        createFeedVersion("1-active-older", 1, feedSource1, -30, 10);
-        createFeedVersion("1-active-current", 2, feedSource1, -5, 0);
-        createFeedVersion("1-future", 3, feedSource1, 1, 60);
-
-        createFeedVersion("2-active-current", 1, feedSource2, 0, 20);
-        createFeedVersion("2-future", 2, feedSource2, 1, 60);
-
-        createFeedVersion("3-expired", 1, feedSource3, -30, -10);
+        createFeedVersions();
 
         Map<String, FeedVersionSummary> activeSummaries = getLatestFeedVersionForFeedSources(project.id);
-
-        // feedSource3 should not appear in the results because it has no active feeds.
         assertEquals(Set.of(feedSource1.id, feedSource2.id, feedSource3.id), activeSummaries.keySet());
         assertEquals("1-future", activeSummaries.get(feedSource1.id).id);
         assertEquals("2-future", activeSummaries.get(feedSource2.id).id);
@@ -98,6 +89,17 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
      */
     @Test
     void canObtainLatestActiveVersion() {
+        createFeedVersions();
+
+        Map<String, FeedVersionSummary> activeSummaries = getLatestActiveFeedVersionForFeedSources(project.id);
+
+        // feedSource3 should not appear in the results because it has no active feeds.
+        assertEquals(Set.of(feedSource1.id, feedSource2.id), activeSummaries.keySet());
+        assertEquals("1-active-current", activeSummaries.get(feedSource1.id).id);
+        assertEquals("2-active-current", activeSummaries.get(feedSource2.id).id);
+    }
+
+    private static void createFeedVersions() {
         createFeedVersion("1-active-older", 1, feedSource1, -30, 10);
         createFeedVersion("1-active-current", 2, feedSource1, -5, 0);
         createFeedVersion("1-future", 3, feedSource1, 1, 60);
