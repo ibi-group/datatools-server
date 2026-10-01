@@ -282,165 +282,65 @@ public class FeedVersionSummary extends Model implements Serializable {
      * If this is updated, be sure to also update the matching Mongo query.
      */
     static Map<String, FeedVersionSummary> getLatestFeedVersionForFeedSources(String projectId) {
-        List<Bson> feedVersionPipeline = Arrays.asList(
-            // Match FeedVersion documents where feedSourceId equals the feedSourceId passed from the outer document.
-            match(
-                expr(
-                    new Document("$eq", Arrays.asList("$feedSourceId", "$$feedSourceId"))
-                )
-            ),
-            sort(descending("version")),
-            limit(1),
-            // Project only the fields needed from the FeedVersion to reduce payload size.
-            project(
-                include(
-                    "version",
-                    "_id",
-                    "validationResult",
-                    "processedByExternalPublisher",
-                    "sentToExternalPublisher",
-                    "gtfsPlusValidation",
-                    "namespace"
-                )
-            )
-        );
-
-        // Define the variable passed into the lookup pipeline.
-        Variable<String> feedSourceIdVariable = new Variable<>("feedSourceId", "$_id");
-        List<Variable<String>> feedSourceId = List.of(feedSourceIdVariable);
-
-        // $lookup that uses the above pipeline to produce "latestFeedVersion" (an array with at most one element).
-        Bson lookupLatestFeedVersion = lookup(
-            "FeedVersion",
-            feedSourceId,
-            feedVersionPipeline,
-            "latestFeedVersion"
-        );
-
-        // Pipeline to find the published FeedVersion by namespace (or identifier stored in publishedVersionId)
-        List<Bson> publishedFeedVersionPipeline = Arrays.asList(
-            // Match FeedVersion documents where namespace equals the outer document's
-            // feedSourceId (important when dealing with many FeedVersions)
-            // and publishedVersionId.
-            match(
-                expr(
-                    new Document("$eq", Arrays.asList("$feedSourceId", "$$feedSourceId"))
-                )
-            ),
-            match(
-                expr(
-                    new Document("$eq", Arrays.asList("$namespace", "$$publishedVersionId"))
-                )
-            ),
-            limit(1),
-            // Project only the validationResult because that's all that is needed later.
-            project(include("validationResult"))
-        );
-
-        // Pass feedSourceId and publishedVersionId from the local document into the lookup pipeline.
-        List<Variable<String>> feedSourceIdAndPublishedVersionId = List.of(
-            feedSourceIdVariable,
-            new Variable<>("publishedVersionId", "$publishedVersionId")
-        );
-
-        // $lookup that uses the above pipeline to produce "publishedFeedVersion" (an array with at most one element).
-        Bson lookupPublishedFeedVersion = lookup(
-            "FeedVersion",
-            feedSourceIdAndPublishedVersionId,
-            publishedFeedVersionPipeline,
-            "publishedFeedVersion"
-        );
-
-        // Top-level aggregation stages that combine the lookups and map required fields into a slimmed down result.
-        List<Bson> stages = Arrays.asList(
-            // Start by filtering documents by projectId (reduces the number of input documents early).
-            match(in("projectId", projectId)),
-
-            // Attach the latest FeedVersion (as an array "latestFeedVersion").
-            lookupLatestFeedVersion,
-
-            // Attach the published FeedVersion (as an array "publishedFeedVersion").
-            lookupPublishedFeedVersion,
-
-            // Unwind the latestFeedVersion array into a single document.
-            unwind("$latestFeedVersion", new UnwindOptions().preserveNullAndEmptyArrays(true)),
-
-            // Unwind the publishedFeedVersion array into a single document.
-            unwind("$publishedFeedVersion", new UnwindOptions().preserveNullAndEmptyArrays(true)),
-
-            // Final projection: select and compute only the fields needed for the output to minimize size.
-            project(fields(
-                // keep the raw publishedVersionId field for reference.
-                include("publishedVersionId"),
-
-                // Published feed version fields (mapped from the nested publishedFeedVersion.validationResult).
-                computed("publishedFeedVersionErrorCount", "$publishedFeedVersion.validationResult.errorCount"),
-                computed("publishedFeedVersionStartDate", "$publishedFeedVersion.validationResult.firstCalendarDate"),
-                computed("publishedFeedVersionEndDate", "$publishedFeedVersion.validationResult.lastCalendarDate"),
-
-                // Latest feed version fields (mapped from the nested latestFeedVersion).
-                computed("feedVersionId", "$latestFeedVersion._id"),
-                computed("firstCalendarDate", "$latestFeedVersion.validationResult.firstCalendarDate"),
-                computed("lastCalendarDate", "$latestFeedVersion.validationResult.lastCalendarDate"),
-                computed("errorCount", "$latestFeedVersion.validationResult.errorCount"),
-                computed("processedByExternalPublisher", "$latestFeedVersion.processedByExternalPublisher"),
-                computed("sentToExternalPublisher", "$latestFeedVersion.sentToExternalPublisher"),
-                computed("gtfsPlusValidation", "$latestFeedVersion.gtfsPlusValidation"),
-                computed("namespace", "$latestFeedVersion.namespace")
-            ))
-        );
-
-        return extractFeedVersionSummaries(
-            "FeedSource",
-            "feedVersionId",
-            "_id",
-            false,
-            stages
-        );
+        return getLatestFeedVersionForFeedSources(projectId, null);
     }
 
     /**
-     * Get the latest feed version from all feed sources for this project. For equivalent Mongo query, see
+     * Get the latest active feed version (not expired, not future) from all feed sources for this project.
+     * For equivalent Mongo query, see
      * <a href="src/main/resources/mongo/getLatestActiveFeedVersionForFeedSources.js">getLatestActiveFeedVersionForFeedSources.js</a>.
      * If this is updated, be sure to also update the matching Mongo query.
      */
     static Map<String, FeedVersionSummary> getLatestActiveFeedVersionForFeedSources(String projectId) {
-        List<Bson> feedVersionPipeline = Arrays.asList(
-            // Match FeedVersion documents where feedSourceId equals the feedSourceId passed from the outer document.
-            match(
-                expr(
-                    new Document("$eq", Arrays.asList("$feedSourceId", "$$feedSourceId"))
-                )
-            ),
-            match(
-                expr(
-                    and(
-                        new Document("$ne", Arrays.asList("$validationResult", null)),
-                        new Document("$lte", Arrays.asList("$validationResult.firstCalendarDate", "$$referenceDate")),
-                        new Document("$gte", Arrays.asList("$validationResult.lastCalendarDate", "$$referenceDate"))
-                    )
-                )
-            ),
-            sort(descending("version")),
-            limit(1),
-            // Project only the fields needed from the FeedVersion to reduce payload size.
-            project(
-                include(
-                    "version",
-                    "_id",
-                    "validationResult",
-                    "processedByExternalPublisher",
-                    "sentToExternalPublisher",
-                    "gtfsPlusValidation",
-                    "namespace"
+        Bson matchActiveVersions = match(
+            expr(
+                and(
+                    new Document("$ne", Arrays.asList("$validationResult", null)),
+                    // This string-based date comparison works because the strings are fixed-length with numbers only!
+                    new Document("$lte", Arrays.asList("$validationResult.firstCalendarDate", "$$referenceDate")),
+                    new Document("$gte", Arrays.asList("$validationResult.lastCalendarDate", "$$referenceDate"))
                 )
             )
         );
 
+        return getLatestFeedVersionForFeedSources(projectId, List.of(matchActiveVersions));
+    }
+
+    /**
+     * Get the latest feed version from all feed sources for this project.
+     */
+    static Map<String, FeedVersionSummary> getLatestFeedVersionForFeedSources(
+        String projectId,
+        List<Bson> extraFeedVersionFilters
+    ) {
+        Bson matchFeedSourceId = match(
+            expr(
+                new Document("$eq", List.of("$feedSourceId", "$$feedSourceId"))
+            )
+        );
+
+        List<Bson> feedVersionPipeline = new ArrayList<>();
+        feedVersionPipeline.add(matchFeedSourceId);
+        if (extraFeedVersionFilters != null) {
+            feedVersionPipeline.addAll(extraFeedVersionFilters);
+        }
+        feedVersionPipeline.add(sort(descending("version")));
+        feedVersionPipeline.add(limit(1));
+        feedVersionPipeline.add(project(
+            include(
+                "version",
+                "_id",
+                "validationResult",
+                "processedByExternalPublisher",
+                "sentToExternalPublisher",
+                "gtfsPlusValidation",
+                "namespace"
+            )
+        ));
+
         // Define the variables passed into the lookup pipeline.
-        Variable<String> feedSourceIdVariable = new Variable<>("feedSourceId", "$_id");
         String todayFormatted = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        System.out.println(todayFormatted);
+        Variable<String> feedSourceIdVariable = new Variable<>("feedSourceId", "$_id");
         Variable<String> referenceDateVariable = new Variable<>("referenceDate", todayFormatted);
         List<Variable<String>> feedSourceIdAndToday = List.of(feedSourceIdVariable, referenceDateVariable);
 
@@ -457,11 +357,7 @@ public class FeedVersionSummary extends Model implements Serializable {
             // Match FeedVersion documents where namespace equals the outer document's
             // feedSourceId (important when dealing with many FeedVersions)
             // and publishedVersionId.
-            match(
-                expr(
-                    new Document("$eq", Arrays.asList("$feedSourceId", "$$feedSourceId"))
-                )
-            ),
+            matchFeedSourceId,
             match(
                 expr(
                     new Document("$eq", Arrays.asList("$namespace", "$$publishedVersionId"))
