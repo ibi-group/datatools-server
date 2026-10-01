@@ -5,19 +5,21 @@ import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.validator.ValidationResult;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.mongodb.client.model.Filters.eq;
+import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestActiveFeedVersionForFeedSources;
+import static com.mongodb.client.model.Filters.in;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FeedVersionSummaryQueryTest extends DatatoolsTest {
@@ -25,6 +27,7 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     private static FeedSource feedSource1;
     private static FeedSource feedSource2;
     private static FeedSource feedSource3;
+    private static final LocalDate TODAY = LocalDate.now();
 
     /** Initialize application for tests to run. */
     @BeforeAll
@@ -61,6 +64,14 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         }
     }
 
+    @AfterEach
+    void afterEach() {
+        // Delete feed versions created for each source.
+        Persistence.feedVersions.removeFiltered(
+            in("feedSourceId", List.of(feedSource1.id, feedSource2.id, feedSource3.id))
+        );
+    }
+
     /**
      * TODO: Make sure the correct version is obtained for the latest feed version.
      */
@@ -74,73 +85,43 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     }
 
     /**
-     * TODO: Make sure the correct version is obtained for the latest active feed version.
+     * Make sure the latest active feed versions are correct for each feed source.
      */
     @Test
     void canObtainLatestActiveVersion() {
-        LocalDate nowDate = LocalDate.now();
-        FeedVersion feedVersionActiveOlder1 = createFeedVersion(
-            1,
-            feedSource1,
-            nowDate.minusDays(30),
-            nowDate.plusDays(10)
-        );
-        FeedVersion feedVersionActive1 = createFeedVersion(
-            2,
-            feedSource1,
-            nowDate.minusDays(5),
-            nowDate.plusDays(0)
-        );
-        FeedVersion feedVersionFuture1 = createFeedVersion(
-            3,
-            feedSource1,
-            nowDate.plusDays(1),
-            nowDate.plusDays(60)
-        );
-        FeedVersion feedVersionActive2 = createFeedVersion(
-            1,
-            feedSource2,
-            nowDate.minusDays(0),
-            nowDate.plusDays(20)
-        );
-        FeedVersion feedVersionFuture2 = createFeedVersion(
-            2,
-            feedSource2,
-            nowDate.plusDays(1),
-            nowDate.plusDays(60)
-        );
+        createFeedVersion("1-active-older", feedSource1, -30, 10);
+        createFeedVersion("1-active-current", feedSource1, -5, 0);
+        createFeedVersion("1-future", feedSource1, 1, 60);
 
-        FeedVersion feedVersionActiveOlder3 = createFeedVersion(
-            1,
-            feedSource3,
-            nowDate.minusDays(30),
-            nowDate.minusDays(10)
-        );
+        createFeedVersion("2-active-current", feedSource2, 0, 20);
+        createFeedVersion("2-future", feedSource2, 1, 60);
 
-        Map<String, FeedVersionSummary> activeSummaries = FeedVersionSummary.getLatestActiveFeedVersionForFeedSources(project.id);
+        createFeedVersion("3-expired", feedSource3, -30, -10);
+
+        Map<String, FeedVersionSummary> activeSummaries = getLatestActiveFeedVersionForFeedSources(project.id);
 
         // feedSource3 should not appear in the results because it has no active feeds.
         assertEquals(Set.of(feedSource1.id, feedSource2.id), activeSummaries.keySet());
-        assertEquals(feedVersionActive1.id, activeSummaries.get(feedSource1.id).id);
-        assertEquals(feedVersionActive2.id, activeSummaries.get(feedSource2.id).id);
+        assertEquals("1-active-current", activeSummaries.get(feedSource1.id).id);
+        assertEquals("2-active-current", activeSummaries.get(feedSource2.id).id);
     }
 
     /**
      * Helper method to create a feed version.
+     * id serves as description for each version.
      */
-    private static FeedVersion createFeedVersion(
-        int version,
+    private static void createFeedVersion(
+        String id,
         FeedSource feedSource,
-        LocalDate startDate,
-        LocalDate endDate
+        int startOffsetDaysFromToday,
+        int endOffsetDaysFromToday
     ) {
         FeedVersion feedVersion = new FeedVersion(feedSource);
+        feedVersion.id = id;
         ValidationResult validationResult = new ValidationResult();
-        validationResult.firstCalendarDate = startDate;
-        validationResult.lastCalendarDate = endDate;
+        validationResult.firstCalendarDate = TODAY.plusDays(startOffsetDaysFromToday);
+        validationResult.lastCalendarDate = TODAY.plusDays(endOffsetDaysFromToday);
         feedVersion.validationResult = validationResult;
-        feedVersion.version = version;
         Persistence.feedVersions.create(feedVersion);
-        return feedVersion;
     }
 }
