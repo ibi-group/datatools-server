@@ -295,10 +295,11 @@ public class FeedVersionSummary extends Model implements Serializable {
         Bson matchActiveVersions = match(
             expr(
                 and(
+                    // Using Arrays.asList to pass a null value.
                     new Document("$ne", Arrays.asList("$validationResult", null)),
                     // This string-based date comparison works because the strings are fixed-length with numbers only!
-                    new Document("$lte", Arrays.asList("$validationResult.firstCalendarDate", "$$referenceDate")),
-                    new Document("$gte", Arrays.asList("$validationResult.lastCalendarDate", "$$referenceDate"))
+                    new Document("$lte", List.of("$validationResult.firstCalendarDate", "$$referenceDate")),
+                    new Document("$gte", List.of("$validationResult.lastCalendarDate", "$$referenceDate"))
                 )
             )
         );
@@ -353,14 +354,14 @@ public class FeedVersionSummary extends Model implements Serializable {
         );
 
         // Pipeline to find the published FeedVersion by namespace (or identifier stored in publishedVersionId)
-        List<Bson> publishedFeedVersionPipeline = Arrays.asList(
+        List<Bson> publishedFeedVersionPipeline = List.of(
             // Match FeedVersion documents where namespace equals the outer document's
             // feedSourceId (important when dealing with many FeedVersions)
             // and publishedVersionId.
             matchFeedSourceId,
             match(
                 expr(
-                    new Document("$eq", Arrays.asList("$namespace", "$$publishedVersionId"))
+                    new Document("$eq", List.of("$namespace", "$$publishedVersionId"))
                 )
             ),
             limit(1),
@@ -383,7 +384,7 @@ public class FeedVersionSummary extends Model implements Serializable {
         );
 
         // Top-level aggregation stages that combine the lookups and map required fields into a slimmed down result.
-        List<Bson> stages = Arrays.asList(
+        List<Bson> stages = List.of(
             // Start by filtering documents by projectId (reduces the number of input documents early).
             match(in("projectId", projectId)),
 
@@ -463,8 +464,8 @@ public class FeedVersionSummary extends Model implements Serializable {
         stages.add(sort(descending("lastUpdated")));
         stages.add(limit(1));
 
-        List<Bson> feedVersionPipeline = Arrays.asList(
-            match(expr(new Document("$in", Arrays.asList("$_id", "$$feedVersionIds")))),
+        List<Bson> feedVersionPipeline = List.of(
+            match(expr(new Document("$in", List.of("$_id", "$$feedVersionIds")))),
             project(
                 include(
                     "feedSourceId",
@@ -524,10 +525,10 @@ public class FeedVersionSummary extends Model implements Serializable {
         stages.add(unwind("$deployment"));
 
         // Define pipeline in $lookup to filter and project FeedVersion docs.
-        List<Bson> feedVersionPipeline = Arrays.asList(
+        List<Bson> feedVersionPipeline = List.of(
             match(
                 expr(
-                    new Document("$in", Arrays.asList("$_id", "$$feedVersionIds"))
+                    new Document("$in", List.of("$_id", "$$feedVersionIds"))
                 )
             ),
             project(
