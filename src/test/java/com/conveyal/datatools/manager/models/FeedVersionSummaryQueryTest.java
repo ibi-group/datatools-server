@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -24,9 +23,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FeedVersionSummaryQueryTest extends DatatoolsTest {
     private static Project project;
-    private static FeedSource feedSource1;
-    private static FeedSource feedSource2;
-    private static FeedSource feedSource3;
+    private static FeedSource sourceWithFutureAnd2ActiveFeeds;
+    private static FeedSource sourceWithFutureAndActiveFeed;
+    private static FeedSource sourceWithFutureFeed;
+    private static Set<String> allNonEmptyFeedSourceIds;
+
     private static final LocalDate TODAY = LocalDate.now();
 
     /** Initialize application for tests to run. */
@@ -37,9 +38,16 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         Auth0Connection.setAuthDisabled(true);
 
         project = createProject(String.format("Test project %s", new Date()));
-        feedSource1 = createFeedSource("Test feed source 1", project);
-        feedSource2 = createFeedSource("Test feed source 2", project);
-        feedSource3 = createFeedSource("Test feed source 3", project);
+        sourceWithFutureAnd2ActiveFeeds = createFeedSource("Test feed source 1", project);
+        sourceWithFutureAndActiveFeed = createFeedSource("Test feed source 2", project);
+        sourceWithFutureFeed = createFeedSource("Test feed source 3", project);
+        createFeedSource("Feed source without feed versions", project);
+
+        allNonEmptyFeedSourceIds = Set.of(
+            sourceWithFutureAnd2ActiveFeeds.id,
+            sourceWithFutureAndActiveFeed.id,
+            sourceWithFutureFeed.id
+        );
     }
 
     @AfterAll
@@ -53,9 +61,7 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     @AfterEach
     void afterEach() {
         // Delete feed versions created for each source.
-        Persistence.feedVersions.removeFiltered(
-            in("feedSourceId", List.of(feedSource1.id, feedSource2.id, feedSource3.id))
-        );
+        Persistence.feedVersions.removeFiltered(in("feedSourceId", allNonEmptyFeedSourceIds));
     }
 
     /**
@@ -64,12 +70,11 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     @Test
     void canObtainLatestVersion() {
         createFeedVersions();
-
         Map<String, FeedVersionSummary> activeSummaries = getLatestFeedVersionForFeedSources(project.id);
-        assertEquals(Set.of(feedSource1.id, feedSource2.id, feedSource3.id), activeSummaries.keySet());
-        assertEquals("1-future", activeSummaries.get(feedSource1.id).id);
-        assertEquals("2-future", activeSummaries.get(feedSource2.id).id);
-        assertEquals("3-expired", activeSummaries.get(feedSource3.id).id);
+        assertEquals(allNonEmptyFeedSourceIds, activeSummaries.keySet());
+        assertEquals("1-future", activeSummaries.get(sourceWithFutureAnd2ActiveFeeds.id).id);
+        assertEquals("2-future", activeSummaries.get(sourceWithFutureAndActiveFeed.id).id);
+        assertEquals("3-expired", activeSummaries.get(sourceWithFutureFeed.id).id);
     }
 
     /**
@@ -82,20 +87,20 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         Map<String, FeedVersionSummary> activeSummaries = getLatestActiveFeedVersionForFeedSources(project.id);
 
         // feedSource3 should not appear in the results because it has no active feeds.
-        assertEquals(Set.of(feedSource1.id, feedSource2.id), activeSummaries.keySet());
-        assertEquals("1-active-current", activeSummaries.get(feedSource1.id).id);
-        assertEquals("2-active-current", activeSummaries.get(feedSource2.id).id);
+        assertEquals(Set.of(sourceWithFutureAnd2ActiveFeeds.id, sourceWithFutureAndActiveFeed.id), activeSummaries.keySet());
+        assertEquals("1-active-current", activeSummaries.get(sourceWithFutureAnd2ActiveFeeds.id).id);
+        assertEquals("2-active-current", activeSummaries.get(sourceWithFutureAndActiveFeed.id).id);
     }
 
     private static void createFeedVersions() {
-        createFeedVersion("1-active-older", 1, feedSource1, -30, 10);
-        createFeedVersion("1-active-current", 2, feedSource1, -5, 0);
-        createFeedVersion("1-future", 3, feedSource1, 1, 60);
+        createFeedVersion("1-active-older", 1, sourceWithFutureAnd2ActiveFeeds, -30, 10);
+        createFeedVersion("1-active-current", 2, sourceWithFutureAnd2ActiveFeeds, -5, 0);
+        createFeedVersion("1-future", 3, sourceWithFutureAnd2ActiveFeeds, 1, 60);
 
-        createFeedVersion("2-active-current", 1, feedSource2, 0, 20);
-        createFeedVersion("2-future", 2, feedSource2, 1, 60);
+        createFeedVersion("2-active-current", 1, sourceWithFutureAndActiveFeed, 0, 20);
+        createFeedVersion("2-future", 2, sourceWithFutureAndActiveFeed, 1, 60);
 
-        createFeedVersion("3-expired", 1, feedSource3, -30, -10);
+        createFeedVersion("3-expired", 1, sourceWithFutureFeed, -30, -10);
     }
 
     /**
