@@ -16,10 +16,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestActiveFeedVersionForFeedSources;
+import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestFeedVersionForFeedSources;
 import static com.mongodb.client.model.Filters.in;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FeedVersionSummaryQueryTest extends DatatoolsTest {
@@ -73,15 +71,26 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     }
 
     /**
-     * TODO: Make sure the correct version is obtained for the latest feed version.
+     * Make sure the latest feed versions, whether expired, future, or current, are correct for each feed source.
      */
     @Test
     void canObtainLatestVersion() {
-        // Create a project, feed sources, and feed versions to merge.
-        // create two feedVersions immediately after each other which should end up having unique IDs
-        FeedVersion feedVersion1 = new FeedVersion(feedSource1);
-        FeedVersion feedVersion2 = new FeedVersion(feedSource1);
-        assertThat(feedVersion1.id, not(equalTo(feedVersion2.id)));
+        createFeedVersion("1-active-older", 1, feedSource1, -30, 10);
+        createFeedVersion("1-active-current", 2, feedSource1, -5, 0);
+        createFeedVersion("1-future", 3, feedSource1, 1, 60);
+
+        createFeedVersion("2-active-current", 1, feedSource2, 0, 20);
+        createFeedVersion("2-future", 2, feedSource2, 1, 60);
+
+        createFeedVersion("3-expired", 1, feedSource3, -30, -10);
+
+        Map<String, FeedVersionSummary> activeSummaries = getLatestFeedVersionForFeedSources(project.id);
+
+        // feedSource3 should not appear in the results because it has no active feeds.
+        assertEquals(Set.of(feedSource1.id, feedSource2.id, feedSource3.id), activeSummaries.keySet());
+        assertEquals("1-future", activeSummaries.get(feedSource1.id).id);
+        assertEquals("2-future", activeSummaries.get(feedSource2.id).id);
+        assertEquals("3-expired", activeSummaries.get(feedSource3.id).id);
     }
 
     /**
