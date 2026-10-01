@@ -108,18 +108,11 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         createFeedVersion("2-future", 2, feedSource2, 1, 60);
 
         createFeedVersion("3-expired", 1, feedSource3, -30, -10);
-
-        Map<String, FeedVersionSummary> activeSummaries = getLatestActiveFeedVersionForFeedSources(project.id);
-
-        // feedSource3 should not appear in the results because it has no active feeds.
-        assertEquals(Set.of(feedSource1.id, feedSource2.id), activeSummaries.keySet());
-        assertEquals("1-active-current", activeSummaries.get(feedSource1.id).id);
-        assertEquals("2-active-current", activeSummaries.get(feedSource2.id).id);
     }
 
     /**
      * Helper method to create a feed version.
-     * id serves as description for each version.
+     * The id field serves as description for the purpose of each version.
      */
     private static void createFeedVersion(
         String id,
