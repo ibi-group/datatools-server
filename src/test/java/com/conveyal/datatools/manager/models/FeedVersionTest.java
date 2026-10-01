@@ -23,7 +23,9 @@ import java.time.LocalDate;
 import java.util.Date;
 import java.util.stream.Stream;
 
+import static com.conveyal.datatools.TestUtils.createFeedSource;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
+import static com.conveyal.datatools.TestUtils.createProject;
 import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
 import static com.mongodb.client.model.Filters.eq;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -44,14 +46,8 @@ class FeedVersionTest extends UnitTest {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
 
-        // set up project
-        project = new Project();
-        project.name = String.format("Test project %s", new Date());
-        Persistence.projects.create(project);
-
-        feedSource = new FeedSource("Test feed source");
-        feedSource.projectId = project.id;
-        Persistence.feedSources.create(feedSource);
+        project = createProject(String.format("Test project %s", new Date()));
+        feedSource = createFeedSource("Test feed source", project);
     }
 
     @AfterAll

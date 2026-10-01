@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.conveyal.datatools.TestUtils.createFeedSource;
+import static com.conveyal.datatools.TestUtils.createProject;
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestActiveFeedVersionForFeedSources;
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestFeedVersionForFeedSources;
 import static com.mongodb.client.model.Filters.in;
@@ -34,24 +36,10 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
 
-        // set up project and feed source
-        project = new Project();
-        project.name = String.format("Test project %s", new Date());
-        Persistence.projects.create(project);
-
-        feedSource1 = new FeedSource("Test feed source 1");
-        feedSource1.projectId = project.id;
-        Persistence.feedSources.create(feedSource1);
-
-        feedSource2 = new FeedSource("Test feed source 2");
-        feedSource2.projectId = project.id;
-        Persistence.feedSources.create(feedSource2);
-
-        feedSource3 = new FeedSource("Test feed source 3");
-        feedSource3.projectId = project.id;
-        Persistence.feedSources.create(feedSource3);
-
-        // Add some feed versions
+        project = createProject(String.format("Test project %s", new Date()));
+        feedSource1 = createFeedSource("Test feed source 1", project);
+        feedSource2 = createFeedSource("Test feed source 2", project);
+        feedSource3 = createFeedSource("Test feed source 3", project);
     }
 
     @AfterAll
