@@ -65,6 +65,11 @@ public class FeedSourceSummary {
 
     public LatestValidationResult latestValidation;
 
+    public LatestValidationResult latestActiveFeedValidation;
+
+    public FeedVersionSummary latestVersion;
+
+    public FeedVersionSummary latestActiveVersion;
     public String url;
 
     public List<String> noteIds = new ArrayList<>();
@@ -121,11 +126,13 @@ public class FeedSourceSummary {
      */
     private static void assignDeployedVersion(String projectId, List<FeedSourceSummary> feedSourceSummaries) {
         Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedVersionSummary.getLatestFeedVersionForFeedSources(projectId);
+        Map<String, FeedVersionSummary> latestActiveFeedVersionForFeedSources = FeedVersionSummary.getLatestActiveFeedVersionForFeedSources(projectId);
         Map<String, FeedVersionSummary> pinnedDeploymentFeedVersions = FeedVersionSummary.getFeedVersionsFromPinnedDeployment(projectId);
         Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedVersionSummary.getFeedVersionsFromLatestDeployment(projectId);
 
         feedSourceSummaries.forEach(feedSourceSummary -> {
-            feedSourceSummary.updatePublishAndValidationState(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
+            feedSourceSummary.setLatestFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
+            feedSourceSummary.setLatestActiveFeedVersion(latestActiveFeedVersionForFeedSources.get(feedSourceSummary.id));
             FeedVersionSummary deployedVersion = pinnedDeploymentFeedVersions.getOrDefault(
                 feedSourceSummary.id,
                 latestDeploymentDeployedFeedVersions.get(feedSourceSummary.id)
@@ -135,19 +142,32 @@ public class FeedSourceSummary {
     }
 
     /**
-     * Update the publish and validation state based on the provided feed version summary.
+     * Sets the latest active feed version and related variables.
      */
-    private void updatePublishAndValidationState(FeedVersionSummary feedVersionSummary) {
-        if (feedVersionSummary == null) {
+    private void setLatestActiveFeedVersion(FeedVersionSummary active) {
+        if (active == null) {
             return;
         }
-        latestSentToExternalPublisher = feedVersionSummary.sentToExternalPublisher;
+        latestActiveFeedValidation = new LatestValidationResult(active);
+        latestActiveVersion = active;
+    }
+
+    /**
+     * Sets the latest feed version (whether active, expired, or future) and related variables.
+     */
+    private void setLatestFeedVersion(FeedVersionSummary latest) {
+        if (latest == null) {
+            return;
+        }
+
+        latestSentToExternalPublisher = latest.sentToExternalPublisher;
         publishedValidationSummary = new FeedValidationResultSummary();
-        publishedValidationSummary.errorCount = requireNonNullElse(feedVersionSummary.publishedFeedVersionErrorCount, -1);
-        publishedValidationSummary.startDate = feedVersionSummary.publishedFeedVersionStartDate;
-        publishedValidationSummary.endDate = feedVersionSummary.publishedFeedVersionEndDate;
-        publishState = feedVersionSummary.getPublishState();
-        latestValidation = new LatestValidationResult(feedVersionSummary);
+        publishedValidationSummary.errorCount = requireNonNullElse(latest.publishedFeedVersionErrorCount, -1);
+        publishedValidationSummary.startDate = latest.publishedFeedVersionStartDate;
+        publishedValidationSummary.endDate = latest.publishedFeedVersionEndDate;
+        publishState = latest.getPublishState();
+        latestValidation = new LatestValidationResult(latest);
+        latestVersion = latest;
     }
 
     /**
