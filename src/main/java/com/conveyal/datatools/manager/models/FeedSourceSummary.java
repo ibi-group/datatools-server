@@ -70,13 +70,12 @@ public class FeedSourceSummary {
     public FeedVersionSummary latestVersion;
 
     public FeedVersionSummary latestActiveVersion;
+
     public String url;
 
     public List<String> noteIds = new ArrayList<>();
 
     public String organizationId;
-
-    public Date latestSentToExternalPublisher;
 
     public FeedValidationResultSummary publishedValidationSummary;
 
@@ -160,7 +159,6 @@ public class FeedSourceSummary {
             return;
         }
 
-        latestSentToExternalPublisher = latest.sentToExternalPublisher;
         publishedValidationSummary = new FeedValidationResultSummary();
         publishedValidationSummary.errorCount = requireNonNullElse(latest.publishedFeedVersionErrorCount, -1);
         publishedValidationSummary.startDate = latest.publishedFeedVersionStartDate;

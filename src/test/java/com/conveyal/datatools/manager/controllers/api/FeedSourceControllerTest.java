@@ -385,7 +385,6 @@ class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(expectedValidationSummary.startDate, firstSummary.latestValidation.startDate);
         assertEquals(expectedValidationSummary.endDate, firstSummary.latestValidation.endDate);
         assertEquals(expectedValidationSummary.errorCount, firstSummary.latestValidation.errorCount);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.sentToExternalPublisher, firstSummary.latestSentToExternalPublisher);
         assertEquals(PublishState.PUBLISH_BLOCKED, firstSummary.publishState);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.publishedVersionId, firstSummary.publishedVersionId);
         assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.errorCount, firstSummary.publishedValidationSummary.errorCount);
@@ -428,7 +427,6 @@ class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(expectedValidationSummary.startDate, firstSummary.latestValidation.startDate);
         assertEquals(expectedValidationSummary.endDate, firstSummary.latestValidation.endDate);
         assertEquals(expectedValidationSummary.errorCount, firstSummary.latestValidation.errorCount);
-        assertEquals(feedVersionFromPinnedDeployment.sentToExternalPublisher, firstSummary.latestSentToExternalPublisher);
         assertEquals(PublishState.PUBLISH_BLOCKED, firstSummary.publishState);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.publishedVersionId, firstSummary.publishedVersionId);
     }
