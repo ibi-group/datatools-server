@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.extensions.ExternalPropertiesRetriever;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
@@ -67,8 +68,10 @@ public class FeedSourceSummary {
 
     public LatestValidationResult latestActiveFeedValidation;
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public FeedVersionSummary latestVersion;
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public FeedVersionSummary latestActiveVersion;
 
     public String url;

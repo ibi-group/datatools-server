@@ -69,12 +69,16 @@ public class FeedVersionSummary extends Model implements Serializable {
     public String feedSourcePublishedVersionId;
 
     public Integer publishedFeedVersionErrorCount;
+    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
     public LocalDate publishedFeedVersionStartDate;
+    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
     public LocalDate publishedFeedVersionEndDate;
 
     public PartialValidationSummary getValidationSummary() {
         if (validationSummary == null) {
-            validationSummary = new PartialValidationSummary();
+            validationSummary = new PartialValidationSummary(validationResult);
         }
         return validationSummary;
     }
@@ -108,7 +112,7 @@ public class FeedVersionSummary extends Model implements Serializable {
     /**
      * Holds a subset of fields from {@link:FeedValidationResultSummary} for UI use only.
      */
-    public class PartialValidationSummary {
+    public static class PartialValidationSummary {
         /** Copied from FeedVersion */
         @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
         @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
@@ -119,7 +123,11 @@ public class FeedVersionSummary extends Model implements Serializable {
         @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
         public LocalDate endDate;
 
-        PartialValidationSummary() {
+        public PartialValidationSummary() {
+
+        }
+
+        public PartialValidationSummary(ValidationResult validationResult) {
             // Older feeds created in datatools may not have validationResult
             if (validationResult != null) {
                 this.startDate = validationResult.firstCalendarDate;
