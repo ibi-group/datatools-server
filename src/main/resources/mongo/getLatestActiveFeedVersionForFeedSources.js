@@ -29,7 +29,8 @@ db.FeedSource.aggregate([
                         processedByExternalPublisher: 1,
                         sentToExternalPublisher: 1,
                         gtfsPlusValidation: 1,
-                        namespace: 1
+                        namespace: 1,
+                        lastUpdated: 1
                     }
                 }
             ],
@@ -66,7 +67,8 @@ db.FeedSource.aggregate([
             processedByExternalPublisher: "$latestFeedVersion.processedByExternalPublisher",
             sentToExternalPublisher: "$latestFeedVersion.sentToExternalPublisher",
             gtfsPlusValidation: "$latestFeedVersion.gtfsPlusValidation",
-            namespace: "$latestFeedVersion.namespace"
+            namespace: "$latestFeedVersion.namespace",
+            lastUpdated: "$latestFeedVersion.lastUpdated"
         }
     },
     {

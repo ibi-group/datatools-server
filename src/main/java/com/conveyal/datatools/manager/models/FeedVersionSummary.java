@@ -94,6 +94,7 @@ public class FeedVersionSummary extends Model implements Serializable {
         sentToExternalPublisher = feedVersionDocument.getDate("sentToExternalPublisher");
         gtfsPlusValidation = getGtfsPlusValidation(id, feedVersionDocument);
         namespace = feedVersionDocument.getString("namespace");
+        lastUpdated = feedVersionDocument.getDate("lastUpdated");
         validationResult = getValidationResult(hasChildValidationResultDocument, feedVersionDocument);
 
         // The feed source's published feed version. Feed source's publishedVersionId mapped to feed version's namespace.
@@ -335,7 +336,8 @@ public class FeedVersionSummary extends Model implements Serializable {
                 "processedByExternalPublisher",
                 "sentToExternalPublisher",
                 "gtfsPlusValidation",
-                "namespace"
+                "namespace",
+                "lastUpdated"
             )
         ));
 
@@ -418,7 +420,8 @@ public class FeedVersionSummary extends Model implements Serializable {
                 computed("processedByExternalPublisher", "$latestFeedVersion.processedByExternalPublisher"),
                 computed("sentToExternalPublisher", "$latestFeedVersion.sentToExternalPublisher"),
                 computed("gtfsPlusValidation", "$latestFeedVersion.gtfsPlusValidation"),
-                computed("namespace", "$latestFeedVersion.namespace")
+                computed("namespace", "$latestFeedVersion.namespace"),
+                computed("lastUpdated", "$latestFeedVersion.lastUpdated")
             )),
 
             match(ne("feedVersionId", null))
