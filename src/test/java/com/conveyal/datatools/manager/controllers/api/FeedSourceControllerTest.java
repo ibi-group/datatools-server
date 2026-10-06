@@ -17,7 +17,6 @@ import com.conveyal.datatools.manager.models.FetchFrequency;
 import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.models.PublishState;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
@@ -385,7 +384,6 @@ class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(expectedValidationSummary.startDate, firstSummary.latestValidation.startDate);
         assertEquals(expectedValidationSummary.endDate, firstSummary.latestValidation.endDate);
         assertEquals(expectedValidationSummary.errorCount, firstSummary.latestValidation.errorCount);
-        assertEquals(PublishState.PUBLISH_BLOCKED, firstSummary.publishState);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.publishedVersionId, firstSummary.publishedVersionId);
         assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.errorCount, firstSummary.publishedValidationSummary.errorCount);
         assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.firstCalendarDate, firstSummary.publishedValidationSummary.startDate);
@@ -427,7 +425,6 @@ class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(expectedValidationSummary.startDate, firstSummary.latestValidation.startDate);
         assertEquals(expectedValidationSummary.endDate, firstSummary.latestValidation.endDate);
         assertEquals(expectedValidationSummary.errorCount, firstSummary.latestValidation.errorCount);
-        assertEquals(PublishState.PUBLISH_BLOCKED, firstSummary.publishState);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.publishedVersionId, firstSummary.publishedVersionId);
     }
 

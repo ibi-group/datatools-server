@@ -81,8 +81,6 @@ public class FeedSourceSummary {
 
     public String publishedVersionId;
 
-    public PublishState publishState;
-
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public Map<String, Map<String, String>> externalProperties;
 
@@ -130,8 +128,8 @@ public class FeedSourceSummary {
         Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedVersionSummary.getFeedVersionsFromLatestDeployment(projectId);
 
         feedSourceSummaries.forEach(feedSourceSummary -> {
-            feedSourceSummary.setLatestFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
-            feedSourceSummary.setLatestActiveFeedVersion(latestActiveFeedVersionForFeedSources.get(feedSourceSummary.id));
+            feedSourceSummary.assignLatestFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
+            feedSourceSummary.assignLatestActiveFeedVersion(latestActiveFeedVersionForFeedSources.get(feedSourceSummary.id));
             FeedVersionSummary deployedVersion = pinnedDeploymentFeedVersions.getOrDefault(
                 feedSourceSummary.id,
                 latestDeploymentDeployedFeedVersions.get(feedSourceSummary.id)
@@ -143,7 +141,7 @@ public class FeedSourceSummary {
     /**
      * Sets the latest active feed version and related variables.
      */
-    private void setLatestActiveFeedVersion(FeedVersionSummary active) {
+    private void assignLatestActiveFeedVersion(FeedVersionSummary active) {
         if (active == null) {
             return;
         }
@@ -154,7 +152,7 @@ public class FeedSourceSummary {
     /**
      * Sets the latest feed version (whether active, expired, or future) and related variables.
      */
-    private void setLatestFeedVersion(FeedVersionSummary latest) {
+    private void assignLatestFeedVersion(FeedVersionSummary latest) {
         if (latest == null) {
             return;
         }
@@ -163,7 +161,6 @@ public class FeedSourceSummary {
         publishedValidationSummary.errorCount = requireNonNullElse(latest.publishedFeedVersionErrorCount, -1);
         publishedValidationSummary.startDate = latest.publishedFeedVersionStartDate;
         publishedValidationSummary.endDate = latest.publishedFeedVersionEndDate;
-        publishState = latest.getPublishState();
         latestValidation = new LatestValidationResult(latest);
         latestVersion = latest;
     }
