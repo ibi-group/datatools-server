@@ -256,7 +256,8 @@ public class FeedVersionSummary extends Model implements Serializable {
     }
 
     /**
-     * Determine if publishing is blocked due to validation, expiration, blocking issues or loading.
+     * Determine if publishing is blocked due to validation, expiration, blocking issues, loading,
+     * or the feed being in the future.
      */
     private boolean isPublishBlocked() {
         return
