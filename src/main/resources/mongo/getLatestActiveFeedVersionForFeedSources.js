@@ -1,11 +1,25 @@
 db.FeedSource.aggregate([
-    { $match: { projectId: "<projectId>" } },
+    { $match: { projectId: "<project-id>" } },
     {
         $lookup: {
             from: "FeedVersion",
-            let: { feedSourceId: "$_id" },
+            let: {
+                feedSourceId: "$_id",
+                referenceDate: "<yyyyMMdd>"
+            },
             pipeline: [
                 { $match: { $expr: { $eq: ["$feedSourceId", "$$feedSourceId"] } } },
+                {
+                    $match: {
+                        $expr: {
+                            $and: [
+                                { $ne: ["$validationResult", null ] },
+                                { $gte: ["$validationResult.firstCalendarDate", "$$referenceDate"] },
+                                { $lte: ["$validationResult.lastCalendarDate", "$$referenceDate"] }
+                            ]
+                        }
+                    }
+                },
                 { $sort: { version: -1 } },
                 { $limit: 1 },
                 {
@@ -56,5 +70,8 @@ db.FeedSource.aggregate([
             namespace: "$latestFeedVersion.namespace",
             lastUpdated: "$latestFeedVersion.lastUpdated"
         }
-    }
+    },
+    {
+        $match: { feedVersionId: {$ne: null} }
+    },
 ])

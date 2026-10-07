@@ -15,7 +15,6 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -164,27 +163,7 @@ public class Project extends Model {
      * Get all feed source summaries for this project.
      */
     public Collection<FeedSourceSummary> retrieveFeedSourceSummaries() {
-        List<FeedSourceSummary> feedSourceSummaries = FeedSourceSummary.getFeedSourceSummaries(id, organizationId);
-        assignDeployedVersion(feedSourceSummaries);
-        return feedSourceSummaries;
-    }
-
-    /**
-     * Assign deployed feed version. Prioritise pinned deployment feed version over latest deployment deployed feed version.
-     */
-    private void assignDeployedVersion(List<FeedSourceSummary> feedSourceSummaries) {
-        Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedSourceSummary.getLatestFeedVersionForFeedSources(id);
-        Map<String, FeedVersionSummary> pinnedDeploymentFeedVersions = FeedSourceSummary.getFeedVersionsFromPinnedDeployment(id);
-        Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
-
-        feedSourceSummaries.forEach(feedSourceSummary -> {
-            feedSourceSummary.updatePublishAndValidationState(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
-            FeedVersionSummary deployedVersion = pinnedDeploymentFeedVersions.getOrDefault(
-                feedSourceSummary.id,
-                latestDeploymentDeployedFeedVersions.get(feedSourceSummary.id)
-            );
-            feedSourceSummary.setDeployedFeedVersionValues(deployedVersion);
-        });
+        return FeedSourceSummary.getFeedSourceSummaries(id, organizationId);
     }
 
     // TODO: Does this need to be returned with JSON API response

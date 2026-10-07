@@ -13,12 +13,10 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedSourceSummary;
 import com.conveyal.datatools.manager.models.FeedValidationResultSummary;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.models.FeedVersionSummary;
 import com.conveyal.datatools.manager.models.FetchFrequency;
 import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.models.PublishState;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
@@ -27,9 +25,6 @@ import com.conveyal.gtfs.validator.ValidationResult;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -37,11 +32,9 @@ import java.net.URL;
 import java.time.LocalDate;
 import java.time.Month;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.mongodb.client.model.Filters.eq;
@@ -51,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-public class FeedSourceControllerTest extends DatatoolsTest {
+class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
     private static Project projectToBeDeleted = null;
     private static FeedSource feedSourceWithUrl = null;
@@ -70,7 +63,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static FeedVersion feedVersionFromPinnedDeployment = null;
 
     @BeforeAll
-    public static void setUp() throws IOException {
+    static void settingUp() throws IOException {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
         ProcessSingleFeedJob.ENABLE_ADDITIONAL_VALIDATION = false;
@@ -206,7 +199,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     }
 
     @AfterAll
-    public static void tearDown() {
+    static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
@@ -243,7 +236,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      *  3. Update the same feed source turning auth fetch back on and confirm it is scheduled once more.
      */
     @Test
-    public void createFeedSourceWithUrlTest() {
+    void createFeedSourceWithUrlTest() {
         // create a feed source.
         SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
             JsonUtil.toJson(feedSourceWithUrl),
@@ -278,7 +271,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Create a feed source without defining the feed source url. Confirm that the feed source is not scheduled.
      */
     @Test
-    public void createFeedSourceWithNoUrlTest() {
+    void createFeedSourceWithNoUrlTest() {
         SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
             JsonUtil.toJson(feedSourceWithNoUrl),
             HttpUtils.REQUEST_METHOD.POST
@@ -292,7 +285,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Create some labels, add them to the feed source make them admin only, and check that they don't appear if not an admin
      */
     @Test
-    public void createFeedSourceWithLabels() {
+    void createFeedSourceWithLabels() {
         // Create labels
         SimpleHttpResponse createFirstLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
                 JsonUtil.toJson(publicLabel),
@@ -391,8 +384,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(expectedValidationSummary.startDate, firstSummary.latestValidation.startDate);
         assertEquals(expectedValidationSummary.endDate, firstSummary.latestValidation.endDate);
         assertEquals(expectedValidationSummary.errorCount, firstSummary.latestValidation.errorCount);
-        assertEquals(feedVersionFromLatestDeploymentVersion2.sentToExternalPublisher, firstSummary.latestSentToExternalPublisher);
-        assertEquals(PublishState.PUBLISH_BLOCKED, firstSummary.publishState);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.publishedVersionId, firstSummary.publishedVersionId);
         assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.errorCount, firstSummary.publishedValidationSummary.errorCount);
         assertEquals(feedVersionPublishedFromLatestDeployment.validationResult.firstCalendarDate, firstSummary.publishedValidationSummary.startDate);
@@ -434,75 +425,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(expectedValidationSummary.startDate, firstSummary.latestValidation.startDate);
         assertEquals(expectedValidationSummary.endDate, firstSummary.latestValidation.endDate);
         assertEquals(expectedValidationSummary.errorCount, firstSummary.latestValidation.errorCount);
-        assertEquals(feedVersionFromPinnedDeployment.sentToExternalPublisher, firstSummary.latestSentToExternalPublisher);
-        assertEquals(PublishState.PUBLISH_BLOCKED, firstSummary.publishState);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.publishedVersionId, firstSummary.publishedVersionId);
-    }
-
-    @ParameterizedTest
-    @MethodSource("createPublishStates")
-    void canDeterminePublishState(
-        boolean isPublished,
-        boolean isPublishing,
-        boolean isPublishBlocked,
-        boolean isFeedLoading,
-        PublishState expectedPublishState
-    ) {
-        FeedSourceSummary feedSourceSummary = new FeedSourceSummary();
-        FeedVersionSummary feedVersionSummary = new FeedVersionSummary();
-        FeedVersion.setDateOverrideForTesting(LocalDate.now());
-
-        if (isPublished) {
-            feedVersionSummary.namespace = feedVersionSummary.feedSourcePublishedVersionId = "namespace";
-        }
-        if (isPublishing) {
-            feedVersionSummary.sentToExternalPublisher = new Date();
-            feedVersionSummary.processedByExternalPublisher = null;
-        }
-        if (isPublishBlocked) {
-            feedVersionSummary.gtfsPlusValidation = null;
-        }
-        if (!isPublished && !isPublishing && !isPublishBlocked && !isFeedLoading) {
-            // Ready to publish case.
-            FeedVersionSummary.setHasBlockingIssueForPublishingOverrideForTesting(false);
-            passPublishBlockedCheck(feedVersionSummary);
-
-            feedVersionSummary.validationResult.errorCount = 1;
-            feedVersionSummary.id = "feed-version-id";
-            feedSourceSummary.id = "feed-source-id";
-        }
-        PublishState publishState = feedVersionSummary.getPublishState();
-        assertEquals(expectedPublishState, publishState);
-        FeedVersionSummary.setHasBlockingIssueForPublishingOverrideForTesting(null);
-    }
-
-    /**
-     * Set up a feed version summary to pass the publish blocked check.
-     */
-    private static void passPublishBlockedCheck(FeedVersionSummary feedVersionSummary) {
-        feedVersionSummary.gtfsPlusValidation = new GtfsPlusValidation();
-        feedVersionSummary.gtfsPlusValidation.issues = new ArrayList<>();
-        feedVersionSummary.gtfsPlusValidation.published = true;
-        feedVersionSummary.validationResult = new ValidationResult();
-        feedVersionSummary.validationResult.lastCalendarDate = LocalDate.now().plusDays(1);
-        FeedVersion.setDateOverrideForTesting(LocalDate.now());
-    }
-
-    private static Stream<Arguments> createPublishStates() {
-        return Stream.of(
-            Arguments.of(
-                true, false, false, false, PublishState.PUBLISHED
-            ),
-            Arguments.of(
-                false, true, false, false, PublishState.PUBLISHING
-            ),
-            Arguments.of(
-                false, false, true, false, PublishState.PUBLISH_BLOCKED
-            ),
-            Arguments.of(
-                false, false, false, false, PublishState.READY_TO_PUBLISH
-            )
-        );
     }
 
     private static Project createProject(String name, boolean autoFetchFeeds) {
