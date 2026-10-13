@@ -1,0 +1,3 @@
+rider_category_id,rider_category_description,rider_category_name,is_default_fare_category,eligibility_url
+1,Adult,Adult,1,
+2,Eligible Discount (Senior / Disabled / Medicare cardholder),Discounted,0,https://eligibility.example.com
