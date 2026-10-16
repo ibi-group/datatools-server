@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.jobs.validation.SharedStopsValidator;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.conveyal.datatools.manager.utils.ZipFileUtils;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.graphql.fetchers.JDBCFetcher;
@@ -759,12 +760,20 @@ public class FeedVersion extends Model implements Serializable {
 
     /**
      * Determines whether this feed version matches another one specified, i.e.,
-     * whether the otherVersion doesn't have a different hash, thus has not changed, compared to this one.
-     * @param otherVersion The version to compare the hash to.
-     * @return true if the otherVersion hash is the same, false if the hashes differ or the otherVersion is null.
+     * whether the other version has the same hash or ZIP contents as this one.
+     * @param otherVersion the version to compare with
+     * @return true if the versions match; false if the other version is null or the versions differ
      */
     public boolean isSameAs(FeedVersion otherVersion) {
-        return otherVersion != null && this.hash.equals(otherVersion.hash);
+        if (otherVersion == null) {
+            return false;
+        }
+
+        if (hash != null && !hash.isEmpty() && hash.equals(otherVersion.hash)) {
+            return true;
+        }
+
+        return !ZipFileUtils.hasContentChanged(otherVersion.retrieveGtfsFile(), retrieveGtfsFile());
     }
 
     /**
