@@ -243,31 +243,6 @@
       maxLength: 256
       columnWidth: 6
       helpContent: Rider category as it should appear on 511.org, such as Child (ages 5-11), Seniors (Ages 62 & Up)
-    # Below are Fares V2 fields from the GTFS spec that are not part of GTFS+.
-    # These fields are marked optional for GTFS+ validation purposes.
-    # (This file does not cover the GTFS+ editor UI, which uses a separate settings file.)
-    - name: rider_category_name
-      required: false
-      inputType: TEXT
-      maxLength: 256
-      columnWidth: 6
-      helpContent: Rider category name for Fares V2 purposes
-    - name: is_default_fare_category
-      required: false
-      inputType: DROPDOWN
-      options:
-        - value: '0'
-          text: Not default
-        - value: '1'
-          text: Default
-      columnWidth: 2
-      helpContent: Whether category is default for Fares V2 purposes
-    - name: eligibility_url
-      required: false
-      inputType: TEXT
-      maxLength: 256
-      columnWidth: 6
-      helpContent: URL for fare eligibility information
 
 - id: route_attributes
   name: route_attributes.txt

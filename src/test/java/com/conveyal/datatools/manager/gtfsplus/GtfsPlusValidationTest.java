@@ -224,22 +224,12 @@ class GtfsPlusValidationTest extends UnitTest {
     }
 
     @Test
-    void shouldDetectRiderCategoriesNonFaresV2Fields() throws Exception {
+    void shouldDetectExtraGtfsPlusFields() throws Exception {
         FeedVersion version = createFeedVersion(goldenGateFerry, zipFolderFiles("rider-categories-extra-fields"));
         GtfsPlusValidation validation = GtfsPlusValidation.validate(version.id);
         assertFalse(
             validation.issues.isEmpty(),
-            "Should have caught those extra non-GTFS+/non-FaresV2 fields in rider_category.txt."
-        );
-    }
-
-    @Test
-    void shouldPassRiderCategoriesFaresV2Fields() throws Exception {
-        FeedVersion version = createFeedVersion(goldenGateFerry, zipFolderFiles("rider-categories-faresv2"));
-        GtfsPlusValidation validation = GtfsPlusValidation.validate(version.id);
-        assertTrue(
-            validation.issues.isEmpty(),
-            "Should pass the FaresV2 fields in rider_category.txt."
+            "Should have caught those extra non-GTFS+ fields in rider_category.txt."
         );
     }
 }
