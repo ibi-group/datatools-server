@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.FeedVersionSummary;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.PublishState;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
@@ -62,6 +63,7 @@ class FeedVersionControllerTest extends DatatoolsTest {
         FeedVersion feedVersion1 = new FeedVersion(feedSource);
         feedVersion1.namespace = NAMESPACE;
         feedVersion1.feedSourceId = feedSource.id;
+        feedVersion1.processedByExternalPublisher = new Date();
         Persistence.feedVersions.create(feedVersion1);
 
         SimpleHttpResponse feedVersionSummaryResponse = TestUtils.makeRequest("/api/manager/secure/feedversionsummaries?feedSourceId=" + feedSource.id,
@@ -77,5 +79,6 @@ class FeedVersionControllerTest extends DatatoolsTest {
 
         assertEquals(1, summaries.size());
         assertEquals(NAMESPACE, summaries.get(0).feedSourcePublishedVersionId);
+        assertEquals(PublishState.PUBLISHED, summaries.get(0).getPublishState());
     }
 }
