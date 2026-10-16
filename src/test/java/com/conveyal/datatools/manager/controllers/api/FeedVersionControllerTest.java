@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 
+import static com.conveyal.datatools.TestUtils.createProject;
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -35,11 +36,8 @@ class FeedVersionControllerTest extends DatatoolsTest {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
 
-        // set up project
-        project = new Project();
-        project.name = String.format("Test project %s", new Date());
-        Persistence.projects.create(project);
-
+        // set up project and feed source
+        project = createProject(String.format("Test project %s", new Date()));
         feedSource = new FeedSource("Test feed source");
         feedSource.projectId = project.id;
         feedSource.publishedVersionId = NAMESPACE;
