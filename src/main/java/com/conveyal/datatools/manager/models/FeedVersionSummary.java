@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.gtfsplus.ValidationIssue;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
@@ -45,6 +46,7 @@ import static com.mongodb.client.model.Sorts.descending;
 /**
  * Includes summary data (a subset of fields) for a feed version.
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class FeedVersionSummary extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
     private static final ObjectMapper mapper = new ObjectMapper();
@@ -239,6 +241,10 @@ public class FeedVersionSummary extends Model implements Serializable {
             return PublishState.PUBLISH_BLOCKED;
         }
         return PublishState.READY_TO_PUBLISH;
+    }
+
+    public void setPublishState(PublishState publishState) {
+        // Empty for serialization during tests.
     }
 
     /**
