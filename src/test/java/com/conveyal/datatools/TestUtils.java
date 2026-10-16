@@ -5,6 +5,8 @@ import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -303,4 +305,17 @@ public class TestUtils {
         return count;
     }
 
+    public static Project createProject(String name) {
+        Project project = new Project();
+        project.name = name;
+        Persistence.projects.create(project);
+        return project;
+    }
+
+    public static FeedSource createFeedSource(String name, Project project) {
+        FeedSource feedSource = new FeedSource(name);
+        feedSource.projectId = project.id;
+        Persistence.feedSources.create(feedSource);
+        return feedSource;
+    }
 }
