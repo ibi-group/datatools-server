@@ -2,6 +2,8 @@ package com.conveyal.datatools.manager.utils;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +17,8 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ZipFileUtilsTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ZipFileUtilsTest.class);
 
     @TempDir
     Path tempDir;

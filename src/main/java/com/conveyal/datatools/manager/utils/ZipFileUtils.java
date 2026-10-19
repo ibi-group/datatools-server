@@ -49,8 +49,8 @@ public class ZipFileUtils {
                     return true;
                 }
 
-                // Same filename and size, compare actual content.
                 if (!contentEquals(oldZipFile, newEntry, newZipFile, latestEntry)) {
+                    // Same filename and size, compare actual content.
                     LOG.debug("File {} content has changed", newEntry.getName());
                     return true;
                 }
@@ -100,28 +100,29 @@ public class ZipFileUtils {
             InputStream first = firstZip.getInputStream(firstEntry);
             InputStream second = secondZip.getInputStream(secondEntry)
         ) {
-
             byte[] firstBuffer = new byte[BUFFER_SIZE];
             byte[] secondBuffer = new byte[BUFFER_SIZE];
 
-            while (true) {
-                int firstRead = first.readNBytes(firstBuffer, 0, BUFFER_SIZE);
-                int secondRead = second.readNBytes(secondBuffer, 0, BUFFER_SIZE);
+            int firstRead;
+            int secondRead;
+            do {
+                firstRead = first.readNBytes(firstBuffer, 0, BUFFER_SIZE);
+                secondRead = second.readNBytes(secondBuffer, 0, BUFFER_SIZE);
 
-                if (firstRead != secondRead) {
+                if (
+                    firstRead != secondRead ||
+                    !Arrays.equals(firstBuffer, 0, firstRead, secondBuffer, 0, secondRead)
+                ) {
+                    LOG.debug(
+                        "File {} is different. One stream reached EOF before the other or the contents differ.",
+                        firstEntry.getName()
+                    );
                     return false;
                 }
+            } while (firstRead > 0);
 
-                if (firstRead == 0) {
-                    return true;
-                }
-
-                if (!Arrays.equals(
-                    firstBuffer, 0, firstRead,
-                    secondBuffer, 0, secondRead)) {
-                    return false;
-                }
-            }
+            LOG.debug("File {} is the same. Both streams reached EOF after all bytes matched.", firstEntry.getName());
+            return true;
         }
     }
 }
