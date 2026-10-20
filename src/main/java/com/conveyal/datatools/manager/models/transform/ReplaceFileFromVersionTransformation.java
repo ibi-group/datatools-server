@@ -42,7 +42,7 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
     @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
         FeedVersion sourceVersion = getSourceVersion();
-        String tableName = table + ".txt";
+        String tableName = getTableName();
         // Run the replace transformation
         Path sourceZipPath = Paths.get(sourceVersion.retrieveGtfsFile().getAbsolutePath());
         try (FileSystem sourceZipFs = FileSystems.newFileSystem(sourceZipPath, (ClassLoader) null)) {

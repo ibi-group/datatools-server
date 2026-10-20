@@ -32,7 +32,7 @@ public class StringTransformation extends ZipTransformation {
 
     @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
-        String tableName = table + ".txt";
+        String tableName = getTableName();
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
         try (
             FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null);
