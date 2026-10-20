@@ -66,7 +66,8 @@ class FeedVersionControllerTest extends DatatoolsTest {
         feedVersion1.processedByExternalPublisher = new Date();
         Persistence.feedVersions.create(feedVersion1);
 
-        SimpleHttpResponse feedVersionSummaryResponse = TestUtils.makeRequest("/api/manager/secure/feedversionsummaries?feedSourceId=" + feedSource.id,
+        SimpleHttpResponse feedVersionSummaryResponse = TestUtils.makeRequest(
+            "/api/manager/secure/feedversionsummaries?feedSourceId=" + feedSource.id,
             null,
             HttpUtils.REQUEST_METHOD.GET
         );
