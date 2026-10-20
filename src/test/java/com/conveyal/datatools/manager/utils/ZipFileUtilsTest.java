@@ -26,15 +26,11 @@ class ZipFileUtilsTest {
 
     @Test
     void testEntryOrder() throws IOException {
-        Map<String, byte[]> firstEntries = new LinkedHashMap<>();
-        firstEntries.put("agency.txt", bytes("agency"));
-        firstEntries.put("stops.txt", bytes("stops"));
-
-        Map<String, byte[]> secondEntries = new LinkedHashMap<>();
-        secondEntries.put("stops.txt", bytes("stops"));
-        secondEntries.put("agency.txt", bytes("agency"));
-
-        assertContentChanged(firstEntries, secondEntries, false);
+        assertContentChanged(
+            entries("agency.txt", "agency", "stops.txt", "stops"),
+            entries("stops.txt", "stops", "agency.txt", "agency"),
+            false
+        );
     }
 
     @Test
