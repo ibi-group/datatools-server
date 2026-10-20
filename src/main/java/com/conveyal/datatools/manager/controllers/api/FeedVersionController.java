@@ -76,6 +76,12 @@ public class FeedVersionController  {
         return feedVersionSummaries;
     }
 
+    /**
+     * Without calling this function, {@link FeedVersionSummary::feedSourcePublishedVersionId} is null
+     * (unless obtained using {@link FeedVersionSummary::extractFeedVersionsummaries},
+     * that field is not persisted per {@link FeedVersion}),
+     * and a published feed may be shown as publishable instead of published.
+     */
     private static void populateFeedSourcePublishedVersionId(Collection<FeedVersionSummary> feedVersionSummaries, FeedSource feedSource) {
         feedVersionSummaries.forEach(summary -> summary.feedSourcePublishedVersionId = feedSource.publishedVersionId);
     }
