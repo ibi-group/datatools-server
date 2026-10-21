@@ -92,73 +92,86 @@ public class GtfsPlusValidation implements Serializable {
         // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
         File gtfsFeedDbFile = gtfsPlusStore.getFeedFile(feedVersion.id + ".db");
         String gtfsFeedDbFilePath = gtfsFeedDbFile.getAbsolutePath();
-        GTFSFeed gtfsFeed;
+        GTFSFeed gtfsFeed = null;
         try {
-            // This check for existence must occur before GTFSFeed is instantiated (and the file must be discarded
-            // immediately).
-            boolean dbExists = gtfsFeedDbFile.isFile();
-            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
-            if (!dbExists) {
-                LOG.info("Loading GTFS file into new MapDB file (.db).");
-                gtfsFeed.loadFromFile(new ZipFile(feedVersion.retrieveGtfsFile().getAbsolutePath()));
+            try {
+                // This check for existence must occur before GTFSFeed is instantiated (and the file must be discarded
+                // immediately).
+                boolean dbExists = gtfsFeedDbFile.isFile();
+                gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
+                if (!dbExists) {
+                    LOG.info("Loading GTFS file into new MapDB file (.db).");
+                    try (ZipFile zipFile = new ZipFile(feedVersion.retrieveGtfsFile())) {
+                        gtfsFeed.loadFromFile(zipFile);
+                    }
+                }
+            } catch (Exception e) {
+                LOG.error("MapDB file for GTFSFeed appears to be corrupted. Deleting and trying to load from zip file.", e);
+                if (gtfsFeed != null) {
+                    gtfsFeed.close();
+                    gtfsFeed = null;
+                }
+                // Error loading MapDB file. Delete and try to reload.
+                gtfsFeedDbFile.delete();
+                new File(gtfsFeedDbFilePath + ".p").delete();
+                LOG.info("Attempt #2 to load GTFS file into new MapDB file (.db).");
+                gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
+                try (ZipFile zipFile = new ZipFile(feedVersion.retrieveGtfsFile())) {
+                    gtfsFeed.loadFromFile(zipFile);
+                }
             }
-        } catch (Exception e) {
-            LOG.error("MapDB file for GTFSFeed appears to be corrupted. Deleting and trying to load from zip file.", e);
-            // Error loading MapDB file. Delete and try to reload.
-            gtfsFeedDbFile.delete();
-            new File(gtfsFeedDbFilePath + ".p").delete();
-            LOG.info("Attempt #2 to load GTFS file into new MapDB file (.db).");
-            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
-            gtfsFeed.loadFromFile(new ZipFile(feedVersion.retrieveGtfsFile().getAbsolutePath()));
-        }
 
-        // check for saved GTFS+ data
-        File file = gtfsPlusStore.getFeed(feedVersion.id);
-        if (file == null) {
-            validation.published = true;
-            LOG.warn("GTFS+ Validation -- Modified GTFS+ file not found, loading from main version GTFS.");
-            file = feedVersion.retrieveGtfsFile();
-        } else {
-            validation.published = false;
-            LOG.info("GTFS+ Validation -- Validating user-saved GTFS+ data (unpublished)");
-        }
-        int gtfsPlusTableCount = 0;
+            // check for saved GTFS+ data
+            File file = gtfsPlusStore.getFeed(feedVersion.id);
+            if (file == null) {
+                validation.published = true;
+                LOG.warn("GTFS+ Validation -- Modified GTFS+ file not found, loading from main version GTFS.");
+                file = feedVersion.retrieveGtfsFile();
+            } else {
+                validation.published = false;
+                LOG.info("GTFS+ Validation -- Validating user-saved GTFS+ data (unpublished)");
+            }
+            int gtfsPlusTableCount = 0;
 
-        RealtimeRoutesScanner realtimeRoutesScanner = null;
-        DirectionsScanner directionsScanner = null;
+            RealtimeRoutesScanner realtimeRoutesScanner = null;
+            DirectionsScanner directionsScanner = null;
 
-        try (ZipFile zipFile = new ZipFile(file)) {
-            final Enumeration<? extends ZipEntry> entries = zipFile.entries();
-            while (entries.hasMoreElements()) {
-                final ZipEntry entry = entries.nextElement();
-                String entryName = entry.getName();
-                JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entryName);
-                if (tableNode != null) {
-                    LOG.info("Validating GTFS+ table: {}", entryName);
-                    gtfsPlusTableCount++;
+            try (ZipFile zipFile = new ZipFile(file)) {
+                final Enumeration<? extends ZipEntry> entries = zipFile.entries();
+                while (entries.hasMoreElements()) {
+                    final ZipEntry entry = entries.nextElement();
+                    String entryName = entry.getName();
+                    JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entryName);
+                    if (tableNode != null) {
+                        LOG.info("Validating GTFS+ table: {}", entryName);
+                        gtfsPlusTableCount++;
 
-                    TableScanner tableScanner = null;
-                    if (REALTIME_ROUTES_TXT.equalsIgnoreCase(entryName)) {
-                        tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
-                    }
-                    if (DIRECTIONS_TXT.equalsIgnoreCase(entryName)) {
-                        tableScanner = directionsScanner = new DirectionsScanner();
-                    }
+                        TableScanner tableScanner = null;
+                        if (REALTIME_ROUTES_TXT.equalsIgnoreCase(entryName)) {
+                            tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
+                        }
+                        if (DIRECTIONS_TXT.equalsIgnoreCase(entryName)) {
+                            tableScanner = directionsScanner = new DirectionsScanner();
+                        }
 
-                    // Skip any byte order mark that may be present. Files must be UTF-8,
-                    // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
-                    try (InputStream bis = new BOMInputStream(zipFile.getInputStream(entry))) {
-                        validateTable(validation.issues, tableNode, bis, gtfsFeed, tableScanner);
+                        // Skip any byte order mark that may be present. Files must be UTF-8,
+                        // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
+                        try (InputStream bis = new BOMInputStream(zipFile.getInputStream(entry))) {
+                            validateTable(validation.issues, tableNode, bis, gtfsFeed, tableScanner);
+                        }
                     }
                 }
             }
+
+            validateDirectionsRoutes(directionsScanner, realtimeRoutesScanner, gtfsFeed, validation);
+
+            LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
+            return validation;
+        } finally {
+            if (gtfsFeed != null) {
+                gtfsFeed.close();
+            }
         }
-
-        validateDirectionsRoutes(directionsScanner, realtimeRoutesScanner, gtfsFeed, validation);
-
-        gtfsFeed.close();
-        LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
-        return validation;
     }
 
     /**
