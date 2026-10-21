@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
@@ -128,8 +129,8 @@ public class GtfsPlusValidation implements Serializable {
                     }
                     for (File cacheFile : new File[] {gtfsFeedDbFile, new File(gtfsFeedDbFilePath + ".p")}) {
                         try {
-                            java.nio.file.Files.deleteIfExists(cacheFile.toPath());
-                        } catch (java.io.IOException cleanupFailure) {
+                            Files.deleteIfExists(cacheFile.toPath());
+                        } catch (IOException cleanupFailure) {
                             loadFailure.addSuppressed(cleanupFailure);
                             LOG.error("Failed to delete incomplete GTFS+ cache file {}", cacheFile, cleanupFailure);
                         }
