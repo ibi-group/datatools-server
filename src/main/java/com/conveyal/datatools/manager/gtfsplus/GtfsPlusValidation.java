@@ -118,6 +118,23 @@ public class GtfsPlusValidation implements Serializable {
                 gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
                 try (ZipFile zipFile = new ZipFile(feedVersion.retrieveGtfsFile())) {
                     gtfsFeed.loadFromFile(zipFile);
+                } catch (Exception loadFailure) {
+                    try {
+                        gtfsFeed.close();
+                    } catch (Exception closeFailure) {
+                        loadFailure.addSuppressed(closeFailure);
+                    } finally {
+                        gtfsFeed = null;
+                    }
+                    for (File cacheFile : new File[] {gtfsFeedDbFile, new File(gtfsFeedDbFilePath + ".p")}) {
+                        try {
+                            java.nio.file.Files.deleteIfExists(cacheFile.toPath());
+                        } catch (java.io.IOException cleanupFailure) {
+                            loadFailure.addSuppressed(cleanupFailure);
+                            LOG.error("Failed to delete incomplete GTFS+ cache file {}", cacheFile, cleanupFailure);
+                        }
+                    }
+                    throw loadFailure;
                 }
             }
 
