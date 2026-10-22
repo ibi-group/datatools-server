@@ -14,19 +14,23 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.Date;
 import java.util.stream.Stream;
 
+import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
 import static com.conveyal.datatools.TestUtils.createFeedSource;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.createProject;
 import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
+import static com.conveyal.gtfs.util.Util.ensureValidNamespace;
 import static com.mongodb.client.model.Filters.eq;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -34,6 +38,8 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class FeedVersionTest extends UnitTest {
     private static Project project;
@@ -190,6 +196,65 @@ class FeedVersionTest extends UnitTest {
         // Delete the feed versions manually as a result.
         Persistence.feedVersions.removeById(feedVersion1.id);
         Persistence.feedVersions.removeById(feedVersion2.id);
+    }
+
+    @ParameterizedTest(name = "delete feed version: missing registry entry={0}, missing schema={1}")
+    @CsvSource({"false, false", "true, false", "false, true", "true, true"})
+    void shouldDeleteFeedVersionWithMissingPostgresData(
+        boolean removeRegistryEntry,
+        boolean dropSchema
+    ) throws SQLException, InvalidNamespaceException {
+
+        FeedVersion feedVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old_lite.zip");
+        String namespace = feedVersion.namespace;
+        ensureValidNamespace(namespace);
+        String registryCountSql = String.format("SELECT count(*) FROM feeds WHERE namespace = '%s'", namespace);
+        String schemaCountSql = String.format(
+            "SELECT count(*) FROM information_schema.schemata WHERE schema_name = '%s'", namespace
+        );
+
+        try {
+            assertNotNull(
+                Persistence.feedVersions.getById(feedVersion.id),
+                "The feed version must exist before deletion."
+            );
+            assertThatSqlCountQueryYieldsExpectedCount(registryCountSql, 1);
+            assertThatSqlCountQueryYieldsExpectedCount(schemaCountSql, 1);
+
+            try (
+                Connection connection = GTFS_DATA_SOURCE.getConnection();
+                Statement statement = connection.createStatement()
+            ) {
+                if (removeRegistryEntry) {
+                    assertEquals(1, statement.executeUpdate(
+                        String.format("DELETE FROM feeds WHERE namespace = '%s'", namespace)
+                    ));
+                }
+                if (dropSchema) {
+                    statement.executeUpdate(String.format("DROP SCHEMA %s CASCADE", namespace));
+                }
+                connection.commit();
+            }
+
+            assertThatSqlCountQueryYieldsExpectedCount(registryCountSql, removeRegistryEntry ? 0 : 1);
+            assertThatSqlCountQueryYieldsExpectedCount(schemaCountSql, dropSchema ? 0 : 1);
+            assertNotNull(
+                Persistence.feedVersions.getById(feedVersion.id),
+                "Removing SQL data must leave the feed version."
+            );
+
+            feedVersion.delete();
+
+            assertNull(
+                Persistence.feedVersions.getById(feedVersion.id),
+                "Deleting a feed version must remove its MongoDB record even when PostgreSQL data is missing."
+            );
+            assertThatSqlCountQueryYieldsExpectedCount(schemaCountSql, 0);
+        } finally {
+            if (Persistence.feedVersions.getById(feedVersion.id) != null) {
+                feedVersion.delete();
+            }
+        }
     }
 
     String getPubVersionId(String feedSourceId) {
