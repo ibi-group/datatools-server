@@ -71,7 +71,19 @@ public class FeedVersionController  {
      */
     private static Collection<FeedVersionSummary> getAllFeedVersionSummariesForFeedSource(Request req, Response res) {
         FeedSource feedSource = requestFeedSourceById(req, Actions.VIEW);
-        return feedSource.retrieveFeedVersionSummaries();
+        Collection<FeedVersionSummary> feedVersionSummaries = feedSource.retrieveFeedVersionSummaries();
+        populateFeedSourcePublishedVersionId(feedVersionSummaries, feedSource);
+        return feedVersionSummaries;
+    }
+
+    /**
+     * Without calling this function, {@link FeedVersionSummary::feedSourcePublishedVersionId} is null
+     * (unless obtained using {@link FeedVersionSummary::extractFeedVersionsummaries},
+     * that field is not persisted per {@link FeedVersion}),
+     * and a published feed may be shown as publishable instead of published.
+     */
+    private static void populateFeedSourcePublishedVersionId(Collection<FeedVersionSummary> feedVersionSummaries, FeedSource feedSource) {
+        feedVersionSummaries.forEach(summary -> summary.feedSourcePublishedVersionId = feedSource.publishedVersionId);
     }
 
     /**
