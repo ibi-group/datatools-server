@@ -24,6 +24,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -60,7 +63,7 @@ public class DataSanitizer {
      * Parse the arguments provided on the command line. The first two arguments must reference the env.yml and
      * server.yml files.
      */
-    public static void parseArguments(String[] arguments) {
+    public static void parseArguments(String[] arguments) throws IOException {
         Options options = new Options();
         Option orphaned = Option.builder("O")
             .longOpt("orphaned")
@@ -73,6 +76,13 @@ public class DataSanitizer {
             .desc("Command for feed version audit")
             .hasArg(false)
             .build();
+        Option orphanedCaches = Option.builder("C")
+            .longOpt("orphaned-caches")
+            .desc("List orphaned local GTFS+ MapDB files; pass delete or d to remove them (stop validation first)")
+            .hasArg()
+            .optionalArg(true)
+            .argName("deleteCommand")
+            .build();
         Option purge = Option.builder("P")
             .longOpt("purge-feed-versions")
             .desc("Command for purging all but the latest feed version for a feed source")
@@ -82,6 +92,7 @@ public class DataSanitizer {
         options.addOption(orphaned);
         options.addOption(feedVersionAudit);
         options.addOption(purge);
+        options.addOption(orphanedCaches);
 
         try {
             CommandLineParser parser = new DefaultParser();
@@ -95,6 +106,11 @@ public class DataSanitizer {
             if (cmd.hasOption("A")) {
                 feedVersionAudit();
             }
+            if (cmd.hasOption("C")) {
+                String deleteCommand = cmd.getOptionValue("C");
+                boolean delete = "delete".equalsIgnoreCase(deleteCommand) || "d".equalsIgnoreCase(deleteCommand);
+                sanitizeOrphanedCaches(delete);
+            }
             if (cmd.hasOption("P")) {
                 String feedSourceId = cmd.getOptionValue("P");
                 System.out.println("Purge command received for feed source id: " + feedSourceId);
@@ -106,6 +122,55 @@ public class DataSanitizer {
             formatter.printHelp("utility-name", options);
             System.exit(1);
         }
+    }
+
+    /**
+     * List or delete local MapDB files whose feed version no longer exists in MongoDB.
+     * Run with validation stopped to avoid racing an in-flight job.
+     */
+    public static void sanitizeOrphanedCaches(boolean delete) throws IOException {
+        sanitizeOrphanedCaches(FeedStore.basePath.toPath().resolve(DataManager.GTFS_PLUS_SUBDIR), delete);
+    }
+
+    static int sanitizeOrphanedCaches(Path directory, boolean delete) throws IOException {
+        if (Files.notExists(directory, LinkOption.NOFOLLOW_LINKS)) {
+            System.out.println("No GTFS+ cache directory found.");
+            return 0;
+        }
+        int count = 0;
+        try (Stream<Path> files = Files.list(directory)) {
+            for (Path file : files.collect(Collectors.toList())) {
+                if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+                    continue;
+                }
+                String filename = file.getFileName().toString();
+                String versionId;
+                if (filename.endsWith(".zip.db.p")) {
+                    versionId = filename.substring(0, filename.length() - ".db.p".length());
+                } else if (filename.endsWith(".zip.db")) {
+                    versionId = filename.substring(0, filename.length() - ".db".length());
+                } else {
+                    continue;
+                }
+                if (Persistence.feedVersions.getById(versionId) != null) {
+                    continue;
+                }
+                System.out.printf("Orphaned GTFS+ cache: %s%n", file);
+                if (delete) {
+                    try {
+                        if (Files.deleteIfExists(file)) {
+                            count++;
+                        }
+                    } catch (IOException e) {
+                        LOG.error("Failed to delete orphaned GTFS+ cache file {}", file, e);
+                    }
+                } else {
+                    count++;
+                }
+            }
+        }
+        System.out.printf("%s orphaned GTFS+ cache files: %d%n", delete ? "Deleted" : "Found", count);
+        return count;
     }
 
     /**

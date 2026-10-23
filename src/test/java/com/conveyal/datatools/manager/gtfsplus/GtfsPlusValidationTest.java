@@ -7,7 +7,9 @@ import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -15,12 +17,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
@@ -28,7 +36,10 @@ import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Runs test to verify that GTFS+ validation runs as expected. */
@@ -85,6 +96,53 @@ class GtfsPlusValidationTest extends UnitTest {
         GtfsPlusValidation validation = GtfsPlusValidation.validate(bartVersion1.id);
         // Expect issues to be only one with directions.txt file
         assertThat("Clean BART feed and incomplete directions.txt results in one issue", validation.issues.size(), equalTo(1));
+    }
+
+    @ParameterizedTest(name = "close MapDB after failure: cache already exists={0}")
+    @ValueSource(booleans = {false, true})
+    void shouldCloseGtfsFeedWhenValidationThrows(boolean cacheExists) throws Exception {
+        IllegalStateException failure = new IllegalStateException("GTFS retrieval failed");
+        AtomicInteger retrievalAttempts = new AtomicInteger();
+        Set<Thread> existingWriters = getMapDbWriters();
+        Set<Thread> validationWriters = new HashSet<>();
+        FeedVersion version = new FeedVersion(goldenGateFerry) {
+            @Override
+            public File retrieveGtfsFile() {
+                retrievalAttempts.incrementAndGet();
+                validationWriters.addAll(getMapDbWriters());
+                validationWriters.removeAll(existingWriters);
+                throw failure;
+            }
+        };
+        File cacheFile = new FeedStore(DataManager.GTFS_PLUS_SUBDIR).getFeedFile(version.id + ".db");
+        File companionFile = new File(cacheFile.getAbsolutePath() + ".p");
+        cacheFile.deleteOnExit();
+        companionFile.deleteOnExit();
+        if (cacheExists) {
+            try (GTFSFeed feed = new GTFSFeed(cacheFile.getAbsolutePath())) {
+                assertTrue(feed.routes.isEmpty());
+            }
+        }
+
+        assertSame(failure, assertThrows(
+            IllegalStateException.class,
+            () -> GtfsPlusValidation.validate(version)
+        ));
+        int expectedAttempts = cacheExists ? 1 : 2;
+        assertEquals(expectedAttempts, retrievalAttempts.get());
+        assertEquals(expectedAttempts, validationWriters.size());
+
+        // MapDB close waits for its asynchronous writer to shut down.
+        for (Thread writer : validationWriters) {
+            writer.join(1000);
+            assertFalse(writer.isAlive(), "Validation must close " + writer.getName());
+        }
+    }
+
+    private static Set<Thread> getMapDbWriters() {
+        return Thread.getAllStackTraces().keySet().stream()
+            .filter(thread -> thread.getName().startsWith("MapDB writer #"))
+            .collect(Collectors.toSet());
     }
 
     @Test
