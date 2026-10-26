@@ -93,52 +93,7 @@ public class GtfsPlusValidation implements Serializable {
         // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
         File gtfsFeedDbFile = gtfsPlusStore.getFeedFile(feedVersion.id + ".db");
         String gtfsFeedDbFilePath = gtfsFeedDbFile.getAbsolutePath();
-        GTFSFeed gtfsFeed = null;
-        try {
-            try {
-                // This check for existence must occur before GTFSFeed is instantiated (and the file must be discarded
-                // immediately).
-                boolean dbExists = gtfsFeedDbFile.isFile();
-                gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
-                if (!dbExists) {
-                    LOG.info("Loading GTFS file into new MapDB file (.db).");
-                    try (ZipFile zipFile = new ZipFile(feedVersion.retrieveGtfsFile())) {
-                        gtfsFeed.loadFromFile(zipFile);
-                    }
-                }
-            } catch (Exception e) {
-                LOG.error("MapDB file for GTFSFeed appears to be corrupted. Deleting and trying to load from zip file.", e);
-                if (gtfsFeed != null) {
-                    gtfsFeed.close();
-                    gtfsFeed = null;
-                }
-                // Error loading MapDB file. Delete and try to reload.
-                gtfsFeedDbFile.delete();
-                new File(gtfsFeedDbFilePath + ".p").delete();
-                LOG.info("Attempt #2 to load GTFS file into new MapDB file (.db).");
-                gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
-                try (ZipFile zipFile = new ZipFile(feedVersion.retrieveGtfsFile())) {
-                    gtfsFeed.loadFromFile(zipFile);
-                } catch (Exception loadFailure) {
-                    try {
-                        gtfsFeed.close();
-                    } catch (Exception closeFailure) {
-                        loadFailure.addSuppressed(closeFailure);
-                    } finally {
-                        gtfsFeed = null;
-                    }
-                    for (File cacheFile : new File[] {gtfsFeedDbFile, new File(gtfsFeedDbFilePath + ".p")}) {
-                        try {
-                            Files.deleteIfExists(cacheFile.toPath());
-                        } catch (IOException cleanupFailure) {
-                            loadFailure.addSuppressed(cleanupFailure);
-                            LOG.error("Failed to delete incomplete GTFS+ cache file {}", cacheFile, cleanupFailure);
-                        }
-                    }
-                    throw loadFailure;
-                }
-            }
-
+        try (GTFSFeed gtfsFeed = checkOrUpdateCache(gtfsFeedDbFile, gtfsFeedDbFilePath, feedVersion)) {
             // check for saved GTFS+ data
             File file = gtfsPlusStore.getFeed(feedVersion.id);
             if (file == null) {
@@ -185,10 +140,63 @@ public class GtfsPlusValidation implements Serializable {
 
             LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
             return validation;
-        } finally {
-            if (gtfsFeed != null) {
-                gtfsFeed.close();
+        }
+    }
+
+    /**
+     * Check if the MapDB file exists and is valid. If not, load the GTFS file into a new MapDB file.
+     */
+    private static GTFSFeed checkOrUpdateCache(
+        File gtfsFeedDbFile,
+        String gtfsFeedDbFilePath,
+        FeedVersion feedVersion
+    ) throws Exception {
+        GTFSFeed gtfsFeed;
+        try {
+            // This check for existence must occur before GTFSFeed is instantiated (and the file must be discarded
+            // immediately).
+            boolean dbExists = gtfsFeedDbFile.isFile();
+            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
+            if (!dbExists) {
+                LOG.info("Attempt #1 to load GTFS file into new MapDB file (.db).");
+                loadGTFSFileIntoMapDBFile(gtfsFeed, feedVersion, gtfsFeedDbFile, gtfsFeedDbFilePath);
             }
+        } catch (Exception e) {
+            LOG.error("MapDB file for GTFSFeed appears to be corrupted. Deleting and trying to load from zip file.", e);
+            // Error loading MapDB file. Delete and try to reload.
+            LOG.info("Attempt #2 to load GTFS file into new MapDB file (.db).");
+            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
+            loadGTFSFileIntoMapDBFile(gtfsFeed, feedVersion, gtfsFeedDbFile, gtfsFeedDbFilePath);
+        }
+        return gtfsFeed;
+    }
+
+    /**
+     * Load GTFS file into new MapDB file (.db).
+     */
+    private static void loadGTFSFileIntoMapDBFile(
+        GTFSFeed gtfsFeed,
+        FeedVersion feedVersion,
+        File gtfsFeedDbFile,
+        String gtfsFeedDbFilePath
+    ) throws Exception {
+        try (ZipFile zipFile = new ZipFile(feedVersion.retrieveGtfsFile())) {
+            gtfsFeed.loadFromFile(zipFile);
+        } catch (Exception loadFailure) {
+            try {
+                gtfsFeed.close();
+            } catch (Exception closeFailure) {
+                loadFailure.addSuppressed(closeFailure);
+            }
+            for (File cacheFile : new File[] {gtfsFeedDbFile, new File(gtfsFeedDbFilePath + ".p")}) {
+                try {
+                    Files.deleteIfExists(cacheFile.toPath());
+                } catch (IOException cleanupFailure) {
+                    loadFailure.addSuppressed(cleanupFailure);
+                    LOG.error("Failed to delete incomplete GTFS+ cache file {}", cacheFile, cleanupFailure);
+                }
+            }
+            throw loadFailure;
         }
     }
 

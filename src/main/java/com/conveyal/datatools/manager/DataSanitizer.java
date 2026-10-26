@@ -78,7 +78,7 @@ public class DataSanitizer {
             .build();
         Option orphanedCaches = Option.builder("C")
             .longOpt("orphaned-caches")
-            .desc("List orphaned local GTFS+ MapDB files; pass delete or d to remove them (stop validation first)")
+            .desc("List orphaned local GTFS+ MapDB files; pass delete or d to remove them (stop Data Tools first to avoid conflicts with validation jobs)")
             .hasArg()
             .optionalArg(true)
             .argName("deleteCommand")
@@ -126,13 +126,13 @@ public class DataSanitizer {
 
     /**
      * List or delete local MapDB files whose feed version no longer exists in MongoDB.
-     * Run with validation stopped to avoid racing an in-flight job.
+     * Run with Data Tools stopped to avoid conflicts with validation jobs.
      */
     public static void sanitizeOrphanedCaches(boolean delete) throws IOException {
         sanitizeOrphanedCaches(FeedStore.basePath.toPath().resolve(DataManager.GTFS_PLUS_SUBDIR), delete);
     }
 
-    static int sanitizeOrphanedCaches(Path directory, boolean delete) throws IOException {
+    public static int sanitizeOrphanedCaches(Path directory, boolean delete) throws IOException {
         if (Files.notExists(directory, LinkOption.NOFOLLOW_LINKS)) {
             System.out.println("No GTFS+ cache directory found.");
             return 0;

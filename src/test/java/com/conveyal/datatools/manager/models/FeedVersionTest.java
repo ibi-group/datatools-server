@@ -43,7 +43,6 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -205,15 +204,13 @@ class FeedVersionTest extends UnitTest {
         Persistence.feedVersions.removeById(feedVersion2.id);
     }
 
-    @ParameterizedTest(name = "{0}: GTFS+ enabled={1}, cache exists={2}, companion exists={3}")
+    @ParameterizedTest(name = "{0}: cache exists={1}, companion exists={2}")
     @MethodSource("cacheDeletionCases")
     void shouldDeleteVersionResources(
         String deletionMode,
-        boolean gtfsPlusEnabled,
         boolean cacheExists,
         boolean companionExists
     ) throws Exception {
-        String previousSetting = DataManager.getConfigPropertyAsText("modules.gtfsplus.enabled");
         FeedSource source = createFeedSource("Cache cleanup test", project);
         FeedVersion version = new FeedVersion(source);
         Persistence.feedVersions.create(version);
@@ -223,7 +220,6 @@ class FeedVersionTest extends UnitTest {
         Path companion = cacheDirectory.resolve(version.id + ".db.p");
         Path unrelated = cacheDirectory.resolve(version.id + ".unrelated");
         try {
-            DataManager.overrideConfigProperty("modules.gtfsplus.enabled", Boolean.toString(gtfsPlusEnabled));
             FeedVersion.feedStore.newFeed(version.id, new ByteArrayInputStream(new byte[] {1}), null);
             Files.createDirectories(cacheDirectory);
             if (cacheExists) {
@@ -247,18 +243,16 @@ class FeedVersionTest extends UnitTest {
                 version.delete();
             }
 
-            assertAll(
-                () -> assertNull(Persistence.feedVersions.getById(version.id)),
-                () -> assertFalse(Files.exists(zip), "Original GTFS ZIP must be deleted."),
-                () -> assertFalse(Files.exists(cache), "MapDB cache must be deleted."),
-                () -> assertFalse(Files.exists(companion), "MapDB companion must be deleted."),
-                () -> assertTrue(Files.exists(unrelated), "Unrelated files must be preserved.")
-            );
+            assertNull(Persistence.feedVersions.getById(version.id));
+            assertFalse(Files.exists(zip), "Original GTFS ZIP must be deleted.");
+            assertFalse(Files.exists(cache), "MapDB cache must be deleted.");
+            assertFalse(Files.exists(companion), "MapDB companion must be deleted.");
+            assertTrue(Files.exists(unrelated), "Unrelated files must be preserved.");
+
             if ("source".equals(deletionMode)) {
                 assertNull(Persistence.feedSources.getById(source.id));
             }
         } finally {
-            DataManager.overrideConfigProperty("modules.gtfsplus.enabled", previousSetting);
             Files.deleteIfExists(cache);
             Files.deleteIfExists(companion);
             Files.deleteIfExists(unrelated);
@@ -331,13 +325,11 @@ class FeedVersionTest extends UnitTest {
 
     private static Stream<Arguments> cacheDeletionCases() {
         return Stream.of("version", "orphan", "source").flatMap(mode ->
-            Stream.of(true, false).flatMap(enabled ->
-                Stream.of(
-                    Arguments.of(mode, enabled, false, false),
-                    Arguments.of(mode, enabled, true, false),
-                    Arguments.of(mode, enabled, false, true),
-                    Arguments.of(mode, enabled, true, true)
-                )
+            Stream.of(
+                Arguments.of(mode, false, false),
+                Arguments.of(mode, true, false),
+                Arguments.of(mode, false, true),
+                Arguments.of(mode, true, true)
             )
         );
     }
