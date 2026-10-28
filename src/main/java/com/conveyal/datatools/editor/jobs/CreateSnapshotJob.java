@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.jobs;
 
+import com.conveyal.datatools.common.status.CancellationContext;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -7,6 +8,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -16,6 +18,9 @@ import java.util.Collection;
 import java.util.Date;
 
 import static com.conveyal.gtfs.GTFS.makeSnapshot;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Updates.set;
 
 /**
  * Makes a snapshot of a feed in a SQL database. Effectively this is copying all of the tables for a given feed (which
@@ -71,6 +76,12 @@ public class CreateSnapshotJob extends MonitorableJob {
     private final boolean preserveBuffer;
     private Snapshot snapshot;
     private FeedSource feedSource;
+    private FeedVersion sourceFeedVersion;
+    private String createdNamespace;
+    private boolean snapshotStored;
+    private String previousBufferNamespace;
+    private boolean bufferUpdated;
+    private Snapshot preservedBuffer;
 
     public CreateSnapshotJob(Auth0UserProfile owner, Snapshot snapshot, boolean updateBufferNamespace, boolean storeSnapshot, boolean preserveBufferAsSnapshot) {
         super(owner, "Creating snapshot for " + snapshot.feedSourceId, JobType.CREATE_SNAPSHOT);
@@ -91,9 +102,19 @@ public class CreateSnapshotJob extends MonitorableJob {
         status.update( "Initializing...", 0);
     }
 
+    public CreateSnapshotJob(Auth0UserProfile owner, Snapshot snapshot, FeedVersion sourceFeedVersion) {
+        this(owner, snapshot);
+        this.sourceFeedVersion = sourceFeedVersion;
+    }
+
     @JsonProperty
     public String getFeedSourceId () {
         return snapshot.feedSourceId;
+    }
+
+    @Override
+    public boolean supportsCancellation() {
+        return true;
     }
 
     @Override
@@ -102,17 +123,25 @@ public class CreateSnapshotJob extends MonitorableJob {
         // snapshot contains the transformed feed). Because the jobs are queued up before the feed has been processed,
         // the namespace will not exist for the feed version until this jobLogic is actually run.
         if (namespace == null && snapshot.feedVersionId != null) {
-            FeedVersion feedVersion = Persistence.feedVersions.getById(snapshot.feedVersionId);
+            FeedVersion feedVersion = sourceFeedVersion != null
+                ? sourceFeedVersion
+                : Persistence.feedVersions.getById(snapshot.feedVersionId);
             this.namespace = feedVersion.namespace;
         }
         // Get count of snapshots to set new version number.
         feedSource = Persistence.feedSources.getById(snapshot.feedSourceId);
+        previousBufferNamespace = feedSource.editorNamespace;
         // Update job name to use feed source name (rather than ID).
         this.name = String.format("Creating snapshot for %s", feedSource.name);
         Collection<Snapshot> existingSnapshots = feedSource.retrieveSnapshots();
         int version = existingSnapshots.size();
         status.update("Creating snapshot...", 20);
-        FeedLoadResult loadResult = makeSnapshot(namespace, DataManager.GTFS_DATA_SOURCE, !feedSource.preserveStopTimesSequence);
+        FeedLoadResult loadResult = createDatabaseSnapshot(namespace, !feedSource.preserveStopTimesSequence);
+        createdNamespace = loadResult.uniqueIdentifier;
+        checkCancellation();
+        if (loadResult.fatalException != null) {
+            throw new IllegalStateException("Snapshot failed: " + loadResult.fatalException);
+        }
         snapshot.version = version;
         snapshot.namespace = loadResult.uniqueIdentifier;
         snapshot.feedLoadResult = loadResult;
@@ -123,11 +152,41 @@ public class CreateSnapshotJob extends MonitorableJob {
         status.update("Database snapshot finished.", 80);
     }
 
+    protected FeedLoadResult createDatabaseSnapshot(String sourceNamespace, boolean normalizeStopTimes) {
+        return makeSnapshot(sourceNamespace, DataManager.GTFS_DATA_SOURCE, normalizeStopTimes);
+    }
+
+    @Override
+    protected void rollbackCancellation() throws Exception {
+        CancellationContext.rollbackResources(
+            () -> {
+                if (bufferUpdated) {
+                    Persistence.feedSources.updateMany(
+                        and(eq("_id", feedSource.id), eq("editorNamespace", createdNamespace)),
+                        set("editorNamespace", previousBufferNamespace)
+                    );
+                }
+            },
+            () -> {
+                if (preservedBuffer != null && !Persistence.snapshots.removeById(preservedBuffer.id)) {
+                    throw new IllegalStateException("Could not remove preserved snapshot " + preservedBuffer.id);
+                }
+            },
+            () -> {
+                if (snapshotStored && !Persistence.snapshots.removeById(snapshot.id)) {
+                    throw new IllegalStateException("Could not remove snapshot " + snapshot.id);
+                }
+            },
+            () -> FeedVersion.deleteDBSchema(createdNamespace)
+        );
+    }
+
     @Override
     public void jobFinished () {
         if (!status.error) {
             if (storeSnapshot) {
                 LOG.info("Storing snapshot {} for feed source {}", snapshot.id, feedSource.id);
+                snapshotStored = true;
                 Persistence.snapshots.create(snapshot);
             }
             if (preserveBuffer) {
@@ -140,7 +199,7 @@ public class CreateSnapshotJob extends MonitorableJob {
                     LOG.error("Cannot preserve snapshot with null namespace for feed source {}", feedSource.id);
                 } else {
                     LOG.info("Autosaving feed source {} editor state {} as snapshot", feedSource.id, feedSource.editorNamespace);
-                    Snapshot preservedBuffer = new Snapshot("Autosave " + new Date().toString(), feedSource.id, null);
+                    preservedBuffer = new Snapshot("Autosave " + new Date(), feedSource.id, null);
                     preservedBuffer.namespace = feedSource.editorNamespace;
                     Persistence.snapshots.create(preservedBuffer);
                 }
@@ -152,6 +211,7 @@ public class CreateSnapshotJob extends MonitorableJob {
                 LOG.info("Updating feed source {} active snapshot to {}", feedSource.id, snapshot.namespace);
                 // If creating the initial snapshot for the editor buffer, set the editor namespace field to
                 // the new feed's namespace.
+                bufferUpdated = true;
                 Persistence.feedSources.updateField(
                         feedSource.id,
                         "editorNamespace",

@@ -331,34 +331,38 @@ public class FeedVersion extends Model implements Serializable {
 
         // STEP 2. Upload GTFS to S3 (storage on local machine is done when feed is fetched/uploaded)
         if (DataManager.useS3) {
-            try {
-                boolean fileUploaded = false;
-                if (isNewVersion) {
-                    // Only upload file to S3 if it is a new version (otherwise, it would have been downloaded from here.
-                    fileUploaded = FeedVersion.feedStore.uploadToS3(gtfsFile, this.id, this.parentFeedSource());
-                }
-                if (fileUploaded || !isNewVersion) {
-                    // Note: If feed is not a new version, it is presumed to already exist on S3, so uploading is not required.
-                    // Delete local copy of feed version after successful s3 upload
-                    boolean fileDeleted = gtfsFile.delete();
-                    if (fileDeleted) {
-                        LOG.info("Local GTFS file deleted after s3 upload");
-                    } else {
-                        LOG.error("Local GTFS file failed to delete. Server may encounter storage capacity issues!");
-                    }
-                } else {
-                    LOG.error("Local GTFS file not uploaded not successfully to s3!");
-                }
-                // FIXME: should this happen here?
-                FeedSource fs = parentFeedSource();
-                if (fs.isPublic) {
-                    // make feed version public... this shouldn't take very long
-                    fs.makePublic();
-                }
-            } catch (Exception e) {
-                LOG.error("Could not upload version {} to s3 bucket", this.id);
-                e.printStackTrace();
+            MonitorableJob.afterCurrentCancellationWindow(() -> uploadLoadedFeed(gtfsFile, isNewVersion));
+        }
+    }
+
+    private void uploadLoadedFeed(File gtfsFile, boolean isNewVersion) {
+        try {
+            boolean fileUploaded = false;
+            if (isNewVersion) {
+                // Only upload file to S3 if it is a new version (otherwise, it would have been downloaded from here.
+                fileUploaded = FeedVersion.feedStore.uploadToS3(gtfsFile, this.id, this.parentFeedSource());
             }
+            if (fileUploaded || !isNewVersion) {
+                // Note: If feed is not a new version, it is presumed to already exist on S3, so uploading is not required.
+                // Delete local copy of feed version after successful s3 upload
+                boolean fileDeleted = gtfsFile.delete();
+                if (fileDeleted) {
+                    LOG.info("Local GTFS file deleted after s3 upload");
+                } else {
+                    LOG.error("Local GTFS file failed to delete. Server may encounter storage capacity issues!");
+                }
+            } else {
+                LOG.error("Local GTFS file not uploaded not successfully to s3!");
+            }
+            // FIXME: should this happen here?
+            FeedSource fs = parentFeedSource();
+            if (fs.isPublic) {
+                // make feed version public... this shouldn't take very long
+                fs.makePublic();
+            }
+        } catch (Exception e) {
+            LOG.error("Could not upload version {} to s3 bucket", this.id);
+            e.printStackTrace();
         }
     }
 

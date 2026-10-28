@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 
 /**
  * Created by landon on 6/13/16.
@@ -25,6 +26,9 @@ import java.util.UUID;
 public abstract class MonitorableJob implements Runnable, Serializable {
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
+    private static final ThreadLocal<CancellationContext> CURRENT_CANCELLATION = new ThreadLocal<>();
+    private transient volatile CancellationContext cancellationContext;
+    private boolean postProcessing;
     protected final Auth0UserProfile owner;
 
     // Public fields will be serialized over HTTP API and visible to the web client
@@ -35,7 +39,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * Whether the job is currently running. This is needed since some jobs can be recurring jobs that won't run until
      * their scheduled time and when they finish they could run again.
      */
-    public boolean active = false;
+    public volatile boolean active = false;
 
     // The two fields below are public because they are used by the UI through the /jobs endpoint.
     public String parentJobId;
@@ -152,18 +156,103 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         // via the StatusController HTTP endpoint.
     }
 
+    @JsonIgnore @BsonIgnore
+    public boolean supportsCancellation() {
+        return false;
+    }
+
+    public synchronized void enableCancellation() {
+        if (!supportsCancellation() || cancellationContext != null) {
+            throw new IllegalStateException("Job cannot be submitted for cancellation.");
+        }
+        cancellationContext = new CancellationContext(this);
+    }
+
+    public boolean requestCancellation() {
+        CancellationContext context = cancellationContext;
+        if (context == null || !context.requestCancellation()) return false;
+        status.cancellationRequested = true;
+        return true;
+    }
+
+    public void failSubmission(Exception failure) {
+        if (cancellationContext != null) cancellationContext.stopAcceptingCancellations();
+        status.fail("Job could not be submitted.", failure);
+    }
+
+    protected void checkCancellation() {
+        if (cancellationContext != null) cancellationContext.checkForCancellation();
+    }
+
+    /**
+     * Release only resources created by this job. Called in reverse execution order, after work has stopped.
+     */
+    protected void rollbackCancellation() throws Exception {
+    }
+
+    /**
+     * Keep publication and notifications outside the reversible part of a job chain.
+     */
+    protected void afterCancellationWindow(Runnable task) {
+        afterCurrentCancellationWindow(task);
+    }
+
+    /**
+     * Run the given task after the current cancellation window has closed. If there is no current cancellation
+     * window, the task will be run immediately. Otherwise, it will be queued to run after the current cancellation
+     * window has closed.
+     */
+    public static void afterCurrentCancellationWindow(Runnable task) {
+        CancellationContext context = CURRENT_CANCELLATION.get();
+        if (context == null || !context.acceptingCancellations) {
+            task.run();
+        } else {
+            context.afterCurrentCancellationWindowTasks.add(task);
+        }
+    }
+
+    /**
+     * Add a sub-job that will be run after the main logic of this job has completed. This sub-job will be run outside
+     * the cancellation window, so it should not create any resources that need to be rolled back if the job is
+     * canceled.
+     */
+    protected void addPostProcessingJob(MonitorableJob job) {
+        job.postProcessing = cancellationContext != null;
+        addNextJob(job);
+    }
+
+    /**
+     * Update the current cancellation context for this job. If this job is the root of a cancellation context, it will
+     * be set as the current context. If this job is a sub-job of a cancellation context, it will inherit the context
+     * from its root job.
+     */
+    private boolean updateCancellationContext(CancellationContext previousContext) {
+        if (cancellationContext == null && previousContext != null && previousContext.acceptingCancellations) {
+            cancellationContext = previousContext;
+        }
+        if (cancellationContext != null) {
+            CURRENT_CANCELLATION.set(cancellationContext);
+            cancellationContext.startedJobs.add(this);
+        }
+        return cancellationContext != null && cancellationContext.rootJob == this;
+    }
+
     /**
      * This implements Runnable.  All monitorable jobs should use this exact sequence of steps. Don't override this method;
      * override jobLogic and jobFinished method(s).
      */
     public void run () {
+        CancellationContext previousContext = CURRENT_CANCELLATION.get();
+        boolean isRootJob = updateCancellationContext(previousContext);
         active = true;
         boolean parentJobErrored = false;
         boolean subTaskErrored = false;
         String cancelMessage = "";
         try {
+            checkCancellation();
             // First execute the core logic of the specific MonitorableJob subclass
             jobLogic();
+            checkCancellation();
             if (status.error) {
                 parentJobErrored = true;
                 cancelMessage = String.format("Task cancelled due to error in %s task", getClass().getSimpleName());
@@ -174,13 +263,19 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             int subJobsTotal = subJobs.size() + 1;
 
             for (MonitorableJob subJob : subJobs) {
+                checkCancellation();
                 String subJobName = subJob.getClass().getSimpleName();
                 if (!parentJobErrored && !subTaskErrored) {
                     // Calculate completion based on number of sub jobs remaining.
                     double percentComplete = subJobNumber * 100D / subJobsTotal;
                     // Run sub-task if no error has errored during parent job or previous sub-task execution.
                     status.update(String.format("Waiting on %s...", subJobName), percentComplete);
+                    if (subJob.postProcessing) {
+                        // If this is a post-processing job, we are outside the cancellation window and can commit the job.
+                        cancellationContext.commitJob();
+                    }
                     subJob.run();
+                    checkCancellation();
                     // Record if there has been an error in the execution of the sub-task. (Note: this will not
                     // incorrectly overwrite a 'true' value with 'false' because the sub-task is only run if
                     // jobHasErrored is false.
@@ -194,29 +289,90 @@ public abstract class MonitorableJob implements Runnable, Serializable {
                 }
                 subJobNumber += 1;
             }
-            // FIXME: should jobFinished be run if task or any sub-task fails?
-            if (subTaskErrored) {
-                // Cancel parent job completion if an error was encountered in task/sub-task. No need to cancel sub-task
-                // because the error presumably already occurred and has a better error message.
-                cancel(cancelMessage);
-            }
             // Complete the job (as success if no errors encountered, as failure otherwise).
-            if (!parentJobErrored && !subTaskErrored) status.completeSuccessfully("Job complete!");
-            else status.complete(true);
+            if (!isRootJob) {
+                if (!parentJobErrored && !subTaskErrored) {
+                    status.completeSuccessfully("Job complete!");
+                } else {
+                    status.complete(true);
+                }
+            } else {
+                cancellationContext.commitJob();
+                CURRENT_CANCELLATION.remove();
+                if (parentJobErrored || subTaskErrored) status.complete(true);
+            }
             // Run final steps of job pending completion or error. Note: any tasks that depend on job success should
-            // check job status in jobFinished to determine if final step should be executed (e.g., storing feed
+            // checkForCancellation job status in jobFinished to determine if final step should be executed (e.g., storing feed
             // version in MongoDB).
             // TODO: should we add separate hooks depending on state of job/sub-tasks (e.g., success, catch, finally)
             jobFinished();
+            if (isRootJob && !status.error) {
+                status.completeSuccessfully("Job complete!");
+            }
 
             // We retain finished or errored jobs on the server until they are fetched via the API, which implies they
             // could be displayed by the client.
+        } catch (CancellationException e) {
+            if (!isRootJob) {
+                // If this is a sub-job, we want to propagate the cancellation exception to the parent job so that it
+                // can handle it appropriately.
+                throw e;
+            } else {
+                handleCancellationRollback(e);
+            }
         } catch (Exception e) {
-            status.fail("Job failed due to unhandled exception!", e);
+            if (!hasCancellationBeenRequested(e, isRootJob)) {
+                status.fail("Job failed due to unhandled exception!", e);
+            }
         } finally {
+            finalizeJobCancellation(previousContext, isRootJob);
             LOG.info("{} (jobId={}) {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
             active = false;
             MetricsService.recordJobOutcome(type, status.error, status.duration);
+        }
+    }
+
+    /**
+     * Handle the rollback of a job when a cancellation has been requested.
+     */
+    private void handleCancellationRollback(Exception e) {
+        if (cancellationContext == null) {
+            status.fail("Job failed due to unhandled exception!", e);
+        } else {
+            cancellationContext.rollback();
+        }
+    }
+
+    /**
+     * Check if a cancellation has been requested for this job or any of its parent jobs.
+     */
+    private boolean hasCancellationBeenRequested(Exception e, boolean isRootJob) {
+        // Libraries may report an error while cancellation is pending. Still perform the requested cleanup.
+        boolean cancellationRequested = isRootJob
+            ? cancellationContext.stopAcceptingCancellations()
+            : cancellationContext != null && cancellationContext.requestCancellation;
+        if (cancellationRequested) {
+            LOG.warn("Job {} failed while cancellation was pending.", jobId, e);
+            if (!isRootJob) {
+                throw new CancellationException("Job cancellation requested.");
+            }
+            cancellationContext.rollback();
+        }
+        return cancellationRequested;
+    }
+
+    /**
+     * Finalize the job cancellation by stopping the acceptance of cancellations for the root job and restoring the
+     * previous cancellation context for sub-jobs.
+     */
+    private void finalizeJobCancellation(CancellationContext previousContext, boolean isRootJob) {
+        if (isRootJob) {
+            cancellationContext.stopAcceptingCancellations();
+        }
+        if (previousContext == null) {
+            CURRENT_CANCELLATION.remove();
+        } else {
+            CURRENT_CANCELLATION.set(previousContext);
         }
     }
 
@@ -260,10 +416,13 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         public String exceptionDetails;
 
         /** Is this deployment completed (successfully or unsuccessfully) */
-        public boolean completed = false;
+        public volatile boolean completed = false;
 
         /** What was the error (null if no error)? */
-        public boolean error = false;
+        public volatile boolean error = false;
+
+        public volatile boolean cancellationRequested;
+        public volatile boolean cancelled;
 
         /** Is the item currently being uploaded to the server? */
         public boolean uploading;

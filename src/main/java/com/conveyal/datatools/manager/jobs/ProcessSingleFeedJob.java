@@ -147,7 +147,7 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
         boolean shouldSnapshot = shouldTransform && rules.hasTransformationsOfType(feedVersion, DbTransformation.class);
         if (shouldSnapshot) {
             Snapshot snapshot = new Snapshot("Transform of " + feedVersion.name, feedVersion);
-            addNextJob(new CreateSnapshotJob(owner, snapshot));
+            addNextJob(new CreateSnapshotJob(owner, snapshot, feedVersion));
             // Apply post-load transformations to snapshotted feed version. Post-load transformations will modify only the
             // snapshot (not the original feed version's namespace), so the snapshot must be published (or loaded into the
             // editor) in order to see the results.
@@ -179,7 +179,7 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
                         )
                 )
         ) {
-            addNextJob(new AutoDeployJob(feedSource.retrieveProject(), owner));
+            addPostProcessingJob(new AutoDeployJob(feedSource.retrieveProject(), owner));
         }
 
         // If auto-publish is enabled for a feed source and not disabled (it should be disabled on developer machines),
@@ -190,7 +190,7 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
                 feedSource.autoPublish &&
                 feedVersion.retrievalMethod == FeedRetrievalMethod.FETCHED_AUTOMATICALLY
         ) {
-            addNextJob(new AutoPublishJob(feedSource, owner));
+            addPostProcessingJob(new AutoPublishJob(feedSource, owner));
         }
     }
 
@@ -199,6 +199,10 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
      */
     @Override
     public void jobFinished() {
+        afterCancellationWindow(this::finishProcessing);
+    }
+
+    private void finishProcessing() {
         if (!status.error) {
             status.completeSuccessfully("New version saved.");
         } else {
