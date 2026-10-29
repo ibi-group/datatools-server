@@ -177,7 +177,11 @@ public class CreateSnapshotJob extends MonitorableJob {
                     throw new IllegalStateException("Could not remove snapshot " + snapshot.id);
                 }
             },
-            () -> FeedVersion.deleteDBSchema(createdNamespace)
+            () -> {
+                if (createdNamespace != null) {
+                    com.conveyal.gtfs.GTFS.delete(createdNamespace, DataManager.GTFS_DATA_SOURCE);
+                }
+            }
         );
     }
 
