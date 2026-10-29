@@ -98,6 +98,21 @@ class GtfsPlusValidationTest extends UnitTest {
         assertThat("Clean BART feed and incomplete directions.txt results in one issue", validation.issues.size(), equalTo(1));
     }
 
+    @Test
+    void shouldLoadGtfsZipIntoCache() throws Exception {
+        FeedSource bart = new FeedSource("BART ZIP load");
+        bart.projectId = project.id;
+        Persistence.feedSources.create(bart);
+        FeedVersion version = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
+
+        GtfsPlusValidation.validate(version);
+
+        File cacheFile = new FeedStore(DataManager.GTFS_PLUS_SUBDIR).getFeedFile(version.id + ".db");
+        try (GTFSFeed feed = new GTFSFeed(cacheFile.getAbsolutePath())) {
+            assertTrue(feed.routes.containsKey("1"), "Route 1 from bart_new.zip should be loaded into the GTFS+ cache");
+        }
+    }
+
     @ParameterizedTest(name = "close MapDB after failure: cache already exists={0}")
     @ValueSource(booleans = {false, true})
     void shouldCloseGtfsFeedWhenValidationThrows(boolean cacheExists) throws Exception {
