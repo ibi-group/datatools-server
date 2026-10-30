@@ -11,6 +11,7 @@ import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
+import com.conveyal.gtfs.GTFS;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -57,6 +58,7 @@ public class CreateFeedVersionFromSnapshotJob extends FeedSourceJob {
 
     @Override
     protected void rollbackCancellation() throws Exception {
+        LOG.info("Rolling back creation of feed version {} from snapshot {}", feedVersion.id, snapshot.name);
         if (!started) return;
         String namespace = feedVersion.feedLoadResult == null
             ? feedVersion.namespace
@@ -65,7 +67,11 @@ public class CreateFeedVersionFromSnapshotJob extends FeedSourceJob {
             () -> FeedVersion.feedStore.deleteFeed(feedVersion.id),
             () -> Files.deleteIfExists(FeedVersion.feedStore.getFeedFile(feedVersion.id).toPath()),
             () -> Files.deleteIfExists(new File(System.getProperty("java.io.tmpdir"), feedVersion.id).toPath()),
-            () -> FeedVersion.deleteDBSchema(namespace),
+            () -> {
+                if (namespace != null) {
+                    GTFS.delete(namespace, DataManager.GTFS_DATA_SOURCE);
+                }
+            },
             () -> {
                 if (namespace != null) {
                     FileUtils.deleteDirectory(new File("/tmp/datatools_gtfs", namespace));

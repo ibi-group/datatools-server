@@ -111,6 +111,7 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
 
     @Override
     protected void rollbackCancellation() throws IOException {
+        LOG.info("Rolling back export of snapshot {} to GTFS", snapshot.name);
         if (tempFile != null) Files.deleteIfExists(tempFile.toPath());
     }
 }

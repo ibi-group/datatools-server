@@ -9,6 +9,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
+import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -158,6 +159,7 @@ public class CreateSnapshotJob extends MonitorableJob {
 
     @Override
     protected void rollbackCancellation() throws Exception {
+        LOG.info("Rolling back snapshot creation for feed snapshot {}",  snapshot.name);
         CancellationContext.rollbackResources(
             () -> {
                 if (bufferUpdated) {
@@ -179,7 +181,7 @@ public class CreateSnapshotJob extends MonitorableJob {
             },
             () -> {
                 if (createdNamespace != null) {
-                    com.conveyal.gtfs.GTFS.delete(createdNamespace, DataManager.GTFS_DATA_SOURCE);
+                    GTFS.delete(createdNamespace, DataManager.GTFS_DATA_SOURCE);
                 }
             }
         );
