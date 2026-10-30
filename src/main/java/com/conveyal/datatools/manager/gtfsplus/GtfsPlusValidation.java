@@ -151,23 +151,29 @@ public class GtfsPlusValidation implements Serializable {
         String gtfsFeedDbFilePath,
         FeedVersion feedVersion
     ) throws Exception {
-        GTFSFeed gtfsFeed;
+        // Check before GTFSFeed is instantiated because its constructor creates the file if it does not exist.
+        boolean dbExists = gtfsFeedDbFile.isFile();
         try {
-            // This check for existence must occur before GTFSFeed is instantiated (and the file must be discarded
-            // immediately).
-            boolean dbExists = gtfsFeedDbFile.isFile();
-            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
-            if (!dbExists) {
-                LOG.info("Attempt #1 to load GTFS file into new MapDB file (.db).");
-                loadGTFSFileIntoMapDBFile(gtfsFeed, feedVersion, gtfsFeedDbFile, gtfsFeedDbFilePath);
+            if (dbExists) {
+                return new GTFSFeed(gtfsFeedDbFilePath);
             }
+            return loadGTFSFeedFromZip(1, feedVersion, gtfsFeedDbFile, gtfsFeedDbFilePath);
         } catch (Exception e) {
             LOG.error("MapDB file for GTFSFeed appears to be corrupted. Deleting and trying to load from zip file.", e);
             // Error loading MapDB file. Delete and try to reload.
-            LOG.info("Attempt #2 to load GTFS file into new MapDB file (.db).");
-            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
-            loadGTFSFileIntoMapDBFile(gtfsFeed, feedVersion, gtfsFeedDbFile, gtfsFeedDbFilePath);
+            return loadGTFSFeedFromZip(2, feedVersion, gtfsFeedDbFile, gtfsFeedDbFilePath);
         }
+    }
+
+    private static GTFSFeed loadGTFSFeedFromZip(
+        int attempt,
+        FeedVersion feedVersion,
+        File gtfsFeedDbFile,
+        String gtfsFeedDbFilePath
+    ) throws Exception {
+        GTFSFeed gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
+        LOG.info("Attempt #{} to load GTFS file into new MapDB file (.db).", attempt);
+        loadGTFSFileIntoMapDBFile(gtfsFeed, feedVersion, gtfsFeedDbFile, gtfsFeedDbFilePath);
         return gtfsFeed;
     }
 
