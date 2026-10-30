@@ -18,6 +18,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 
 /**
  * This job will export a database snapshot (i.e., namespace) to a GTFS file. If a feed version is supplied in the
@@ -106,5 +107,11 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
                 LOG.warn("Temp file {} not deleted. This may contribute to storage space shortages.", tempFile.getAbsolutePath());
             }
         }
+    }
+
+    @Override
+    protected void rollbackCancellation() throws IOException {
+        LOG.info("Rolling back export of snapshot {} to GTFS", snapshot.name);
+        if (tempFile != null) Files.deleteIfExists(tempFile.toPath());
     }
 }
