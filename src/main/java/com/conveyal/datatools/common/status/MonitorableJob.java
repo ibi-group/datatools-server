@@ -290,6 +290,9 @@ public abstract class MonitorableJob implements Runnable, Serializable {
                 subJobNumber += 1;
             }
             // Complete the job (as success if no errors encountered, as failure otherwise).
+            if (subTaskErrored) {
+                cancel(cancelMessage);
+            }
             if (!isRootJob) {
                 if (!parentJobErrored && !subTaskErrored) {
                     status.completeSuccessfully("Job complete!");
