@@ -89,6 +89,7 @@ class StatusControllerCancellationTest {
 
     @AfterEach
     void tearDown() throws InterruptedException {
+        if (worker == null) return;
         worker.shutdownNow();
         try {
             assertTrue(worker.awaitTermination(10, TimeUnit.SECONDS), "Job worker did not stop.");
