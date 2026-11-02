@@ -7,8 +7,6 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
@@ -18,6 +16,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static spark.Spark.delete;
 import static spark.Spark.get;
 
 /**
@@ -65,16 +64,18 @@ public class StatusController {
     /**
      * API route that cancels a single job by ID.
      */
-    // TODO Add ability to cancel job. This requires some changes to how these jobs are executed. It appears that
-    //  only scheduled jobs can be canceled.
-//    private static MonitorableJob cancelJob(Request req, Response res) {
-//        String jobId = req.params("jobId");
-//        Auth0UserProfile userProfile = req.attribute("user");
-//        // FIXME: refactor underscore in user_id methods
-//        String userId = userProfile.getUser_id();
-//        MonitorableJob job = getJobById(userId, jobId, true);
-//        return job;
-//    }
+    static MonitorableJob cancelJob(Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        MonitorableJob job = JobUtils.getJobById(userProfile.getUser_id(), req.params("jobId"), false);
+        if (job == null) {
+            logMessageAndHalt(req, 404, "Job not found.");
+        }
+        if (job != null && !job.requestCancellation()) {
+            logMessageAndHalt(req, 409, "Job cannot be cancelled or has already finished.");
+        }
+        res.status(202);
+        return job;
+    }
 
     /**
      * API route that returns a set of active jobs for the currently authenticated user.
@@ -95,7 +96,6 @@ public class StatusController {
         // FIXME Change endpoint for all jobs (to avoid overlap with jobId param)?
         get(apiPrefix + "secure/status/jobs/all", StatusController::getAllJobsRoute, json::write);
         get(apiPrefix + "secure/status/jobs/:jobId", StatusController::getOneJobRoute, json::write);
-        // TODO Add ability to cancel job
-//        delete(apiPrefix + "secure/status/jobs/:jobId", StatusController::cancelJob, json::write);
+        delete(apiPrefix + "secure/status/jobs/:jobId", StatusController::cancelJob, json::write);
     }
 }

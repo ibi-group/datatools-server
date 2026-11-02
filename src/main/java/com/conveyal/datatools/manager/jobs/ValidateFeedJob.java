@@ -35,6 +35,10 @@ public class ValidateFeedJob extends FeedVersionJob {
 
     @Override
     public void jobFinished () {
+        afterCancellationWindow(this::finishValidation);
+    }
+
+    private void finishValidation() {
         if (!status.error) {
             if (parentJobId != null && JobType.PROCESS_FEED.equals(parentJobType)) {
                 // Validate stage is happening as part of an overall process feed job.
