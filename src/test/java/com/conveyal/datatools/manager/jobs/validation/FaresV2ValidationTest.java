@@ -93,7 +93,7 @@ public class FaresV2ValidationTest {
         return Stream.of(
             Arguments.of(codes, "fare_transfer_rule_duration_limit_type_without_duration_limit"),
             Arguments.of(codes, "fare_transfer_rule_duration_limit_without_type"),
-            Arguments.of(codes, "fare_transfer_rule_missing_transfer_count"),
+            Arguments.of(codes, "fare_transfer_rule_without_transfer_count"),
             Arguments.of(codes, "fare_transfer_rule_with_forbidden_transfer_count")
         );
     }
