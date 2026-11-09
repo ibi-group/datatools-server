@@ -89,7 +89,7 @@ public class CancellationContext {
 
     /**
      * Rollback all started jobs in reverse order, marking them as canceled and recording any exceptions that occurred
-     * during rollback. This method should be called when a cancellation requestCancellation has been made and the job is being
+     * during rollback. This method should be called when a requestCancellation has been made and the job is being
      * rolled back.
      */
     void rollback() {
