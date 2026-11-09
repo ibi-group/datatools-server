@@ -57,7 +57,7 @@ public class CreateFeedVersionFromSnapshotJob extends FeedSourceJob {
     }
 
     @Override
-    protected void rollbackCancellation() throws Exception {
+    protected void rollback() throws Exception {
         LOG.info("Rolling back creation of feed version {} from snapshot {}", feedVersion.id, snapshot.name);
         if (!started) return;
         String namespace = feedVersion.feedLoadResult == null

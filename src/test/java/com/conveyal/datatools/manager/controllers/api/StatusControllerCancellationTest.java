@@ -388,7 +388,7 @@ class StatusControllerCancellationTest {
         }
 
         @Override
-        protected void rollbackCancellation() {
+        protected void rollback() {
             rolledBack.set(true);
         }
     }

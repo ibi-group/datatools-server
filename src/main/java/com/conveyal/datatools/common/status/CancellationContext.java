@@ -1,6 +1,5 @@
 package com.conveyal.datatools.common.status;
 
-import com.conveyal.datatools.manager.utils.JobUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,7 +18,7 @@ public class CancellationContext {
     final MonitorableJob rootJob;
     final List<MonitorableJob> startedJobs = new ArrayList<>();
     final List<Runnable> afterCurrentCancellationWindowTasks = new ArrayList<>();
-    volatile boolean requestCancellation;
+    volatile boolean cancellationRequested;
     volatile boolean acceptingCancellations = true;
 
     CancellationContext(MonitorableJob rootJob) {
@@ -35,7 +34,7 @@ public class CancellationContext {
         if (!acceptingCancellations) {
             return false;
         }
-        requestCancellation = true;
+        cancellationRequested = true;
         rootJob.status.cancellationRequested = true;
         return true;
     }
@@ -46,7 +45,7 @@ public class CancellationContext {
      * proper rollback and cleanup of resources.
      */
     void checkForCancellation() {
-        if (requestCancellation) {
+        if (cancellationRequested) {
             throw new CancellationException("Job cancellation requested.");
         }
     }
@@ -62,13 +61,10 @@ public class CancellationContext {
     }
 
     /**
-     * Stop accepting cancellation requests and return whether a cancellation has been requested. This method is used to
-     * finalize the cancellation state of the job, allowing it to proceed to completion or rollback as appropriate.
-     * If a cancellation has been requested, the job will be rolled back; otherwise, it will proceed to completion.
+     * Stop accepting cancellation requests.
      */
-    synchronized boolean stopAcceptingCancellations() {
+    synchronized void stopAcceptingCancellations() {
         acceptingCancellations = false;
-        return requestCancellation;
     }
 
     /**
@@ -89,7 +85,7 @@ public class CancellationContext {
 
     /**
      * Rollback all started jobs in reverse order, marking them as canceled and recording any exceptions that occurred
-     * during rollback. This method should be called when a requestCancellation has been made and the job is being
+     * during rollback. This method should be called when a cancellation has been requested and the job is being
      * rolled back.
      */
     void rollback() {
@@ -97,9 +93,9 @@ public class CancellationContext {
         Exception failure = null;
         for (int i = startedJobs.size() - 1; i >= 0; i--) {
             try {
-                startedJobs.get(i).rollbackCancellation();
+                startedJobs.get(i).rollback();
             } catch (Exception e) {
-                LOG.error("Cancellation rollback failed for job {}", startedJobs.get(i).jobId, e);
+                LOG.error("Rollback (due to cancellation) failed for job {}", startedJobs.get(i).jobId, e);
                 if (failure == null) {
                     failure = e;
                 } else if (failure != e) {
@@ -126,7 +122,7 @@ public class CancellationContext {
         }
         job.status.cancellationRequested = true;
         job.status.cancelled = failure == null;
-        job.status.fail(failure == null ? "Job cancelled." : "Cancellation rollback failed.", failure);
+        job.status.fail(failure == null ? "Job cancelled." : "Rollback (due to cancellation) failed.", failure);
     }
 
     @FunctionalInterface

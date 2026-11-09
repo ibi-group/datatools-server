@@ -158,7 +158,7 @@ public class CreateSnapshotJob extends MonitorableJob {
     }
 
     @Override
-    protected void rollbackCancellation() throws Exception {
+    protected void rollback() throws Exception {
         LOG.info("Rolling back snapshot creation for feed snapshot {}",  snapshot.name);
         CancellationContext.rollbackResources(
             () -> {

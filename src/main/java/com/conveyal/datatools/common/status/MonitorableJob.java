@@ -156,7 +156,6 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         // via the StatusController HTTP endpoint.
     }
 
-    @JsonIgnore @BsonIgnore
     public boolean supportsCancellation() {
         return false;
     }
@@ -187,7 +186,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     /**
      * Release only resources created by this job. Called in reverse execution order, after work has stopped.
      */
-    protected void rollbackCancellation() throws Exception {
+    protected void rollback() throws Exception {
     }
 
     /**
@@ -324,7 +323,12 @@ public abstract class MonitorableJob implements Runnable, Serializable {
                 handleCancellationRollback(e);
             }
         } catch (Exception e) {
-            if (!hasCancellationBeenRequested(e, isRootJob)) {
+            if (isRootJob && cancellationContext != null) {
+                cancellationContext.stopAcceptingCancellations();
+            }
+            if (hasCancellationBeenRequested()) {
+                cancelJob(e, isRootJob);
+            } else {
                 status.fail("Job failed due to unhandled exception!", e);
             }
         } finally {
@@ -346,22 +350,23 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         }
     }
 
+
+    /**
+     * Cancel the job, marking it as failed and rolling back any started sub-jobs.
+     */
+    private void cancelJob(Exception e, boolean isRootJob) {
+        LOG.warn("Job {} failed while cancellation was pending.", jobId, e);
+        if (!isRootJob) {
+            throw new CancellationException("Job cancellation requested.");
+        }
+        cancellationContext.rollback();
+    }
+
     /**
      * Check if a cancellation has been requested for this job or any of its parent jobs.
      */
-    private boolean hasCancellationBeenRequested(Exception e, boolean isRootJob) {
-        // Libraries may report an error while cancellation is pending. Still perform the requested cleanup.
-        boolean cancellationRequested = isRootJob
-            ? cancellationContext.stopAcceptingCancellations()
-            : cancellationContext != null && cancellationContext.requestCancellation;
-        if (cancellationRequested) {
-            LOG.warn("Job {} failed while cancellation was pending.", jobId, e);
-            if (!isRootJob) {
-                throw new CancellationException("Job cancellation requested.");
-            }
-            cancellationContext.rollback();
-        }
-        return cancellationRequested;
+    private boolean hasCancellationBeenRequested() {
+        return cancellationContext != null && cancellationContext.cancellationRequested;
     }
 
     /**
