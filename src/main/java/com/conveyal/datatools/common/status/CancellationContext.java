@@ -17,7 +17,7 @@ public class CancellationContext {
     private static final Logger LOG = LoggerFactory.getLogger(CancellationContext.class);
     final MonitorableJob rootJob;
     final List<MonitorableJob> startedJobs = new ArrayList<>();
-    final List<Runnable> afterCurrentCancellationWindowTasks = new ArrayList<>();
+    final List<DeferredTask> afterCurrentCancellationWindowTasks = new ArrayList<>();
     volatile boolean cancellationRequested;
     volatile boolean acceptingCancellations = true;
 
@@ -70,16 +70,31 @@ public class CancellationContext {
     /**
      * Commit the job, executing any tasks that were registered to run after this. This method should be called when
      * the job has completed successfully and is ready to finalize its state. After this method is called, any
-     * registered tasks will be executed, and the list of tasks will be cleared.
+     * registered tasks will be attempted, and the list of tasks will be cleared. Failures are recorded on the
+     * owning jobs and rethrown after all tasks have run, so an earlier failure cannot prevent queued cleanup.
      */
     void commitJob() {
         closeCancellationWindow();
+        RuntimeException failure = null;
         try {
-            for (Runnable task : afterCurrentCancellationWindowTasks) {
-                task.run();
+            for (DeferredTask task : afterCurrentCancellationWindowTasks) {
+                try {
+                    task.task.run();
+                } catch (RuntimeException e) {
+                    task.owner.status.fail("Deferred task failed!", e);
+                    if (failure == null) {
+                        failure = e;
+                    } else if (failure != e) {
+                        failure.addSuppressed(e);
+                    }
+                }
             }
         } finally {
             afterCurrentCancellationWindowTasks.clear();
+        }
+        if (failure != null) {
+            // A callback's CancellationException must not trigger rollback after the window has closed.
+            throw new IllegalStateException("Deferred task finalization failed.", failure);
         }
     }
 
@@ -151,4 +166,13 @@ public class CancellationContext {
         }
     }
 
+    static final class DeferredTask {
+        final MonitorableJob owner;
+        final Runnable task;
+
+        DeferredTask(MonitorableJob owner, Runnable task) {
+            this.owner = owner;
+            this.task = task;
+        }
+    }
 }

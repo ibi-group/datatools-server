@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
+import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -60,6 +61,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -117,6 +119,44 @@ class StatusControllerCancellationTest {
 
         assertTrue(job.status.cancelled);
         assertTrue(job.rolledBack.get(), "Cancellation should roll back the job.");
+    }
+
+    @Test
+    void failedDeferredTaskStillRunsSubsequentTasks() {
+        FeedVersion version = mock(FeedVersion.class);
+        FeedVersion invalidVersion = mock(FeedVersion.class);
+
+        doThrow(new IllegalStateException("Persistence failed")).when(version).persistFeedVersionAfterValidation(true);
+        doAnswer(invocation -> {
+            MonitorableJob.Status status = invocation.getArgument(0);
+            status.fail("Validation failed");
+            return null;
+        }).when(invalidVersion).validateMobility(any(MonitorableJob.Status.class));
+
+        MonitorableJob validationJob = new ValidateMobilityDataFeedJob(version, USER, true);
+        MonitorableJob cleanupJob = new ValidateMobilityDataFeedJob(invalidVersion, USER, true);
+        MonitorableJob root = new MonitorableJob(USER, "Process feed", MonitorableJob.JobType.PROCESS_FEED) {
+            @Override
+            public boolean supportsCancellation() {
+                return true;
+            }
+
+            @Override
+            public void jobLogic() {
+            }
+        };
+
+        root.addNextJob(validationJob, cleanupJob);
+        root.enableCancellation();
+        root.run();
+
+        verify(version).persistFeedVersionAfterValidation(true);
+        verify(invalidVersion).delete();
+        assertTrue(validationJob.status.error);
+        assertEquals("Persistence failed", validationJob.status.exceptionType);
+        assertTrue(cleanupJob.status.error);
+        assertTrue(root.status.error);
+        assertFalse(root.status.cancelled);
     }
 
     @Test

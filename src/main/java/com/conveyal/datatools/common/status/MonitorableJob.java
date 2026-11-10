@@ -27,6 +27,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
     private static final ThreadLocal<CancellationContext> CURRENT_CANCELLATION = new ThreadLocal<>();
+    private static final ThreadLocal<MonitorableJob> CURRENT_JOB = new ThreadLocal<>();
     private transient volatile CancellationContext cancellationContext;
     private boolean postProcessing;
     protected final Auth0UserProfile owner;
@@ -190,23 +191,28 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     }
 
     /**
-     * Keep publication and notifications outside the reversible part of a job chain.
+     * Keep tasks outside the reversible part of a job chain.
      */
     protected void afterCancellationWindow(Runnable task) {
-        afterCurrentCancellationWindow(task);
+        afterCancellationWindow(this, task);
+    }
+
+    public static void afterCurrentCancellationWindow(Runnable task) {
+        afterCancellationWindow(CURRENT_JOB.get(), task);
     }
 
     /**
      * Run the given task after the current cancellation window has closed. If there is no current cancellation
      * window, the task will be run immediately. Otherwise, it will be queued to run after the current cancellation
-     * window has closed.
+     * window has closed. Deferred failures are reported on the job registering the task, and do not prevent
+     * subsequent queued tasks from running.
      */
-    public static void afterCurrentCancellationWindow(Runnable task) {
+    private static void afterCancellationWindow(MonitorableJob owner, Runnable task) {
         CancellationContext context = CURRENT_CANCELLATION.get();
         if (context == null || !context.acceptingCancellations) {
             task.run();
         } else {
-            context.afterCurrentCancellationWindowTasks.add(task);
+            context.afterCurrentCancellationWindowTasks.add(new CancellationContext.DeferredTask(owner, task));
         }
     }
 
@@ -242,7 +248,9 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      */
     public void run () {
         CancellationContext previousContext = CURRENT_CANCELLATION.get();
+        MonitorableJob previousJob = CURRENT_JOB.get();
         boolean isRootJob = updateCancellationContext(previousContext);
+        CURRENT_JOB.set(this);
         active = true;
         boolean parentJobErrored = false;
         boolean subTaskErrored = false;
@@ -333,6 +341,11 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             }
         } finally {
             finalizeJobCancellation(previousContext, isRootJob);
+            if (previousJob == null) {
+                CURRENT_JOB.remove();
+            } else {
+                CURRENT_JOB.set(previousJob);
+            }
             LOG.info("{} (jobId={}) {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
             active = false;
             MetricsService.recordJobOutcome(type, status.error, status.duration);
