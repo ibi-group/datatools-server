@@ -129,7 +129,7 @@ public class GtfsPlusValidation implements Serializable {
 
                         // Skip any byte order mark that may be present. Files must be UTF-8,
                         // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
-                        try (InputStream bis = new BOMInputStream(zipFile.getInputStream(entry))) {
+                        try (InputStream bis = BOMInputStream.builder().setInputStream(zipFile.getInputStream(entry)).get()) {
                             validateTable(validation.issues, tableNode, bis, gtfsFeed, tableScanner);
                         }
                     }
