@@ -45,6 +45,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -649,7 +650,7 @@ public class FeedVersion extends Model implements Serializable {
      * Delete this feed version and clean up, removing references to it and derived objects and state.
      * Steps:
      * 1. If we are deleting the latest version, change the memoized "last fetched" value in the FeedSource.
-     * 2. Delete the GTFS Zip file locally or on S3
+     * 2. Delete the GTFS Zip file locally or on S3, PostgreSQL schema, and local GTFS+ MapDB cache.
      * 3. Remove this feed version from all Deployments [shouldn't we be updating the version rather than deleting it?]
      * 4. Finally delete the version object from the database.
      */
@@ -670,8 +671,7 @@ public class FeedVersion extends Model implements Serializable {
             }
             ensurePublishedVersionIdIsUnset(fs);
 
-            deleteFeedVersionFile();
-            deleteDBSchema(namespace);
+            deleteResources();
 
             // Remove this FeedVersion from all Deployments associated with this FeedVersion's FeedSource's Project
             // TODO TEST THOROUGHLY THAT THIS UPDATE EXPRESSION IS CORRECT
@@ -694,18 +694,26 @@ public class FeedVersion extends Model implements Serializable {
      * Delete resources related to this orphaned feed version. Then delete the orphaned feed version.
      */
     public void deleteOrphan() {
+        deleteResources();
+        Persistence.feedVersions.removeById(id);
+    }
+
+    /**
+     * Delete version resources independently of the current GTFS+ module configuration.
+     */
+    private void deleteResources() {
         deleteFeedVersionFile();
         deleteDBSchema(namespace);
-        if (DataManager.isModuleEnabled("gtfsplus")) {
+        // MapDB caches are local only; do not send their filenames to the S3 feed store.
+        Path cacheDirectory = FeedStore.basePath.toPath().resolve(DataManager.GTFS_PLUS_SUBDIR);
+        for (String suffix : List.of(".db", ".db.p")) {
+            Path cacheFile = cacheDirectory.resolve(id + suffix);
             try {
-                FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
-                gtfsPlusStore.deleteFeed(id + ".db");
-                gtfsPlusStore.deleteFeed(id + ".db.p");
-            } catch (CheckedAWSException e) {
-                LOG.error("Failed to delete GTFS+ files.");
+                Files.deleteIfExists(cacheFile);
+            } catch (IOException e) {
+                LOG.error("Failed to delete GTFS+ cache file {}", cacheFile, e);
             }
         }
-        Persistence.feedVersions.removeById(id);
     }
 
     /**

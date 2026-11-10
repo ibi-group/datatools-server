@@ -1,7 +1,6 @@
-package com.conveyal.datatools;
+package com.conveyal.datatools.manager;
 
-import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.DataSanitizer;
+import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -13,12 +12,16 @@ import com.mongodb.client.model.Sorts;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 import static com.conveyal.datatools.TestUtils.appendDate;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
@@ -26,11 +29,15 @@ import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static com.mongodb.client.model.Filters.eq;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DataSanitizerTest {
+
+    @TempDir
+    Path directory;
 
     private static Project project;
     private static FeedVersion feedVersionOrphan;
@@ -155,5 +162,56 @@ class DataSanitizerTest {
         for (FeedVersion feedVersion : feedVersions) {
             assertTrue(feedVersion.version <= 2);
         }
+    }
+
+    @Test
+    void shouldPreserveExistingVersionsAndDeleteOnlyOrphanCaches() throws Exception {
+        FeedVersion existing = new FeedVersion();
+        existing.id = UUID.randomUUID() + ".zip";
+        Persistence.feedVersions.create(existing);
+        try {
+            Path activeCache = Files.createFile(directory.resolve(existing.id + ".db"));
+            Path activeCompanion = Files.createFile(directory.resolve(existing.id + ".db.p"));
+            String orphanId = UUID.randomUUID() + ".zip";
+            Path orphanCache = Files.createFile(directory.resolve(orphanId + ".db"));
+            Path orphanCompanion = Files.createFile(directory.resolve(orphanId + ".db.p"));
+            Path loneCompanion = Files.createFile(directory.resolve(UUID.randomUUID() + ".zip.db.p"));
+            Path loneCache = Files.createFile(directory.resolve(UUID.randomUUID() + ".zip.db"));
+            Path originalZip = Files.createFile(directory.resolve(orphanId));
+            Path unrelated = Files.createFile(directory.resolve("unrelated.db"));
+            Path nested = Files.createDirectories(directory.resolve("nested"));
+            Path nestedCache = Files.createFile(nested.resolve("nested.zip.db"));
+            Path namedDirectory = Files.createDirectory(directory.resolve("directory.zip.db"));
+
+            assertEquals(4, DataSanitizer.sanitizeOrphanedCaches(directory, false));
+            assertTrue(Files.exists(orphanCache), "Dry run must preserve the cache.");
+            assertTrue(Files.exists(orphanCompanion));
+            assertTrue(Files.exists(loneCompanion));
+            assertTrue(Files.exists(loneCache));
+
+            assertEquals(4, DataSanitizer.sanitizeOrphanedCaches(directory, true));
+            assertFalse(Files.exists(orphanCache));
+            assertFalse(Files.exists(orphanCompanion));
+            assertFalse(Files.exists(loneCompanion));
+            assertFalse(Files.exists(loneCache));
+            assertTrue(Files.exists(activeCache));
+            assertTrue(Files.exists(activeCompanion));
+            assertTrue(Files.exists(originalZip));
+            assertTrue(Files.exists(unrelated));
+            assertTrue(Files.exists(nestedCache));
+            assertTrue(Files.isDirectory(namedDirectory));
+            assertNotNull(Persistence.feedVersions.getById(existing.id));
+            assertEquals(0, DataSanitizer.sanitizeOrphanedCaches(directory, true));
+        } finally {
+            Persistence.feedVersions.removeById(existing.id);
+        }
+    }
+
+    @Test
+    void shouldHandleMissingDirectory() throws Exception {
+        Path missing = directory.resolve("missing");
+        assertEquals(0, DataSanitizer.sanitizeOrphanedCaches(missing, false));
+        assertEquals(0, DataSanitizer.sanitizeOrphanedCaches(missing, true));
+        assertFalse(Files.exists(missing));
     }
 }
