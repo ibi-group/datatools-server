@@ -109,7 +109,7 @@ public class SnapshotController {
             createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile, publishProprietaryFiles));
         }
         // Begin asynchronous execution.
-        JobUtils.heavyExecutor.execute(createSnapshotJob);
+        JobUtils.cancellableExecutor.execute(createSnapshotJob);
         return SparkUtils.formatJobMessage(createSnapshotJob.jobId, "Creating snapshot.");
     }
 
@@ -130,7 +130,7 @@ public class SnapshotController {
         boolean preserveBuffer = "true".equals(req.queryParams("preserveBuffer")) && feedSource.editorNamespace != null;
         CreateSnapshotJob createSnapshotJob =
                 new CreateSnapshotJob(userProfile, snapshot, true, false, preserveBuffer);
-        JobUtils.heavyExecutor.execute(createSnapshotJob);
+        JobUtils.cancellableExecutor.execute(createSnapshotJob);
         return formatJobMessage(createSnapshotJob.jobId, "Importing version as snapshot.");
     }
 
@@ -169,7 +169,7 @@ public class SnapshotController {
         String name = "Restore snapshot " + snapshotToRestore.name;
         Snapshot snapshot = new Snapshot(name, feedSource.id, snapshotToRestore.namespace);
         CreateSnapshotJob createSnapshotJob = new CreateSnapshotJob(userProfile, snapshot, true, false, preserveBuffer);
-        JobUtils.heavyExecutor.execute(createSnapshotJob);
+        JobUtils.cancellableExecutor.execute(createSnapshotJob);
         return formatJobMessage(createSnapshotJob.jobId, "Restoring snapshot...");
     }
 

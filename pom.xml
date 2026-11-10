@@ -277,6 +277,13 @@
             <version>5.7.0</version>
             <scope>test</scope>
         </dependency>
+        <!-- Mock external storage and database dependencies in job lifecycle tests. -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.20.0</version>
+            <scope>test</scope>
+        </dependency>
         <!-- Provides JUnit 5.x parametrized tests -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

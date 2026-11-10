@@ -4,7 +4,6 @@ import com.conveyal.datatools.common.status.FeedVersionJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -35,6 +34,10 @@ public class ValidateFeedJob extends FeedVersionJob {
 
     @Override
     public void jobFinished () {
+        afterCancellationWindow(this::finishValidation);
+    }
+
+    private void finishValidation() {
         if (!status.error) {
             if (parentJobId != null && JobType.PROCESS_FEED.equals(parentJobType)) {
                 // Validate stage is happening as part of an overall process feed job.
