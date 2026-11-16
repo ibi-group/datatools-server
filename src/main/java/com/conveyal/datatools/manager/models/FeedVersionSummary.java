@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.mongodb.BasicDBObject;
 import com.mongodb.client.model.UnwindOptions;
 import com.mongodb.client.model.Variable;
 import org.bson.Document;
@@ -25,16 +26,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Aggregates.limit;
 import static com.mongodb.client.model.Aggregates.lookup;
 import static com.mongodb.client.model.Aggregates.match;
 import static com.mongodb.client.model.Aggregates.project;
-import static com.mongodb.client.model.Aggregates.replaceRoot;
 import static com.mongodb.client.model.Aggregates.sort;
 import static com.mongodb.client.model.Aggregates.unwind;
 import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.expr;
 import static com.mongodb.client.model.Filters.in;
 import static com.mongodb.client.model.Filters.ne;
@@ -452,129 +454,68 @@ public class FeedVersionSummary extends Model implements Serializable {
     }
 
     /**
-     * Get the deployed feed versions from the latest deployment for this project. For equivalent Mongo query, see
-     * <a href="src/main/resources/mongo/getFeedVersionsFromLatestDeployment.js">getFeedVersionsFromLatestDeployment.js</a>.
-     * If this is updated, be sure to also update the matching Mongo query.
+     * Get the deployed feed versions from the latest deployment for this project.
+     * This was previously implemented using a Mongo lookup, however that turns out to be much slower
+     * compared to separate queries (e.g. 5.5 seconds before vs. 150 ms after).
+     * See also <a href="https://www.mongodb.com/docs/manual/data-modeling/design-antipatterns/reduce-lookup-operations/">...</a>
      */
-    static Map<String, FeedVersionSummary> getFeedVersionsFromLatestDeployment(String projectId) {
-        List<Bson> stages = new ArrayList<>();
-        stages.add(match(in("_id", projectId)));
-
-        // Lookup Deployments for the project.
-        stages.add(lookup(
-            "Deployment",
-            "_id",
-            "projectId",
-            "deployments"
-        ));
-
-        // Unwind deployments array to get individual deployment documents.
-        stages.add(unwind("$deployments"));
-
-        // Project only fields needed from deployment to reduce doc size before sorting.
-        stages.add(project(fields(
-            computed("deployment", "$deployments._id"),
-            computed("lastUpdated", "$deployments.lastUpdated"),
-            computed("feedVersionIds", "$deployments.feedVersionIds")
-        )));
-
-        // Sort deployments by lastUpdated descending.
-        stages.add(sort(descending("lastUpdated")));
-        stages.add(limit(1));
-
-        List<Bson> feedVersionPipeline = List.of(
-            match(expr(new Document("$in", List.of("$_id", "$$feedVersionIds")))),
-            project(
-                include(
-                    "feedSourceId",
-                    "validationResult.firstCalendarDate",
-                    "validationResult.lastCalendarDate",
-                    "validationResult.errorCount"
-                )
-            )
+    static Map<String, FeedVersionSummary> getFeedVersionsFromLatestDeployment(String projectId, List<FeedSourceSummary> feedSourceSummaries) {
+        // Get the latest deployment for this project
+        // TODO: check nulls
+        Deployment deployment = Persistence.deployments.getOneFiltered(
+            eq("projectId", projectId),
+            new BasicDBObject("lastUpdated", -1)
         );
 
-        // Use pipeline form of lookup to fetch FeedVersions matching deployment’s feedVersionIds
-        List<Variable<String>> feedVersionIds = List.of(new Variable<>("feedVersionIds", "$feedVersionIds"));
+        if (deployment != null) {
+            // Get the feed versions for this deployment
+            // TODO: Change persistence param to Collection.
+            List<String> feedVersionIds = List.copyOf(deployment.feedVersionIds);
+            List<FeedVersionSummary> feedVersions = Persistence.feedVersionSummaries.getByIds(feedVersionIds);
 
-        stages.add(lookup(
-            "FeedVersion",
-            feedVersionIds,
-            feedVersionPipeline,
-            "feedVersions"
-        ));
-        stages.add(unwind("$feedVersions", new UnwindOptions().preserveNullAndEmptyArrays(false)));
-        stages.add(replaceRoot("$feedVersions"));
-        // Final projection: select and compute only the fields needed for the output to minimize size.
-        stages.add(project(
-            include(
-                "_id",
-                "feedSourceId",
-                "validationResult"
-            )
-        ));
+            Map<String, FeedVersionSummary> result = new HashMap<>();
+            feedVersions.forEach(v -> {
+                Optional<FeedSourceSummary> feedSource = feedSourceSummaries.stream().filter(s -> s.id.equals(v.feedSourceId)).findFirst();
+                feedSource.ifPresent(
+                    feedSourceSummary -> v.feedSourcePublishedVersionId = feedSourceSummary.publishedVersionId);
+                result.put(v.feedSourceId, v);
+            });
+            return result;
+        }
 
-        return extractFeedVersionSummaries(
-            "Project",
-            "_id",
-            "feedSourceId",
-            true,
-            stages
-        );
+        return new HashMap<>();
     }
 
     /**
-     * Get the deployed feed version from the pinned deployment for this feed source. For equivalent Mongo query, see
-     * <a href="src/main/resources/mongo/getFeedVersionsFromPinnedDeployment.js">getFeedVersionsFromPinnedDeployment.js</a>.
+     * Get the deployed feed version from the pinned deployment for this feed source.
+     * This was previously implemented using a Mongo lookup, however that turns out to be much slower
+     * compared to separate queries (e.g. 6 seconds before vs. 600 ms after).
+     * See also <a href="https://www.mongodb.com/docs/manual/data-modeling/design-antipatterns/reduce-lookup-operations/">...</a>
      */
-    static Map<String, FeedVersionSummary> getFeedVersionsFromPinnedDeployment(String projectId) {
-        List<Bson> stages = new ArrayList<>();
+    static Map<String, FeedVersionSummary> getFeedVersionsFromPinnedDeployment(String projectId, List<FeedSourceSummary> feedSourceSummaries) {
+        // Get pinned deployment id
+        Project project = Persistence.projects.getById(projectId);
+        String pinnedDeploymentId = project.pinnedDeploymentId;
 
-        // Match projects by projectId.
-        stages.add(match(in("_id", projectId)));
+        // Get pinned deployment
+        Deployment pinnedDeployment = Persistence.deployments.getById(pinnedDeploymentId);
 
-        // Project only pinnedDeploymentId to keep doc small.
-        stages.add(project(include("pinnedDeploymentId")));
+        if (pinnedDeployment != null) {
+            // Get feed versions for this deployment
+            List<String> feedVersionIds = List.copyOf(pinnedDeployment.feedVersionIds);
+            List<FeedVersionSummary> feedVersions = Persistence.feedVersionSummaries.getByIds(feedVersionIds);
 
-        // Lookup Deployment documents by pinnedDeploymentId.
-        stages.add(lookup("Deployment", "pinnedDeploymentId", "_id", "deployment"));
+            Map<String, FeedVersionSummary> result = new HashMap<>();
+            feedVersions.forEach(v -> {
+                Optional<FeedSourceSummary> feedSource = feedSourceSummaries.stream().filter(s -> s.id.equals(v.feedSourceId)).findFirst();
+                feedSource.ifPresent(
+                    feedSourceSummary -> v.feedSourcePublishedVersionId = feedSourceSummary.publishedVersionId);
+                result.put(v.feedSourceId, v);
+            });
+            return result;
+        }
 
-        // Unwind deployment array (assuming single deployment per project).
-        stages.add(unwind("$deployment"));
-
-        // Define pipeline in $lookup to filter and project FeedVersion docs.
-        List<Bson> feedVersionPipeline = List.of(
-            match(
-                expr(
-                    new Document("$in", List.of("$_id", "$$feedVersionIds"))
-                )
-            ),
-            project(
-                include(
-                    "_id",
-                    "feedSourceId",
-                    "validationResult.firstCalendarDate",
-                    "validationResult.lastCalendarDate",
-                    "validationResult.errorCount"
-                )
-            )
-        );
-
-        // Define variable for correlated lookup on FeedVersion collection.
-        List<Variable<String>> feedVersionIds = List.of(
-            new Variable<>("feedVersionIds", "$deployment.feedVersionIds")
-        );
-
-        // Lookup FeedVersion docs with pipeline and store as feedVersions array.
-        stages.add(lookup("FeedVersion", feedVersionIds, feedVersionPipeline, "feedVersions"));
-
-        return extractFeedVersionSummaries(
-            "Project",
-            "_id",
-            "feedSourceId",
-            true,
-            stages
-        );
+        return new HashMap<>();
     }
 
     /**

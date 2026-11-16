@@ -127,8 +127,8 @@ public class FeedSourceSummary {
     private static void assignDeployedVersion(String projectId, List<FeedSourceSummary> feedSourceSummaries) {
         Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedVersionSummary.getLatestFeedVersionForFeedSources(projectId);
         Map<String, FeedVersionSummary> latestActiveFeedVersionForFeedSources = FeedVersionSummary.getLatestActiveFeedVersionForFeedSources(projectId);
-        Map<String, FeedVersionSummary> pinnedDeploymentFeedVersions = FeedVersionSummary.getFeedVersionsFromPinnedDeployment(projectId);
-        Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedVersionSummary.getFeedVersionsFromLatestDeployment(projectId);
+        Map<String, FeedVersionSummary> pinnedDeploymentFeedVersions = FeedVersionSummary.getFeedVersionsFromPinnedDeployment(projectId, feedSourceSummaries);
+        Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedVersionSummary.getFeedVersionsFromLatestDeployment(projectId, feedSourceSummaries);
 
         feedSourceSummaries.forEach(feedSourceSummary -> {
             feedSourceSummary.assignLatestFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
