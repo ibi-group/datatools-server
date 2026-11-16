@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 import static com.conveyal.datatools.TestUtils.createFeedSource;
 import static com.conveyal.datatools.TestUtils.createProject;
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getFeedVersionsFromLatestDeployment;
+import static com.conveyal.datatools.manager.models.FeedVersionSummary.getFeedVersionsFromPinnedDeployment;
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestActiveFeedVersionForFeedSources;
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestFeedVersionForFeedSources;
 import static com.mongodb.client.model.Filters.in;
@@ -32,7 +33,8 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     private static FeedSource sourceWithFutureAndActiveFeed;
     private static FeedSource sourceWithFutureFeed;
     private static Set<String> allNonEmptyFeedSourceIds;
-    private static Deployment newDeployment;
+    private static Deployment pinnedDeployment;
+    private static Deployment latestDeployment;
 
     private static final LocalDate TODAY = LocalDate.now();
 
@@ -55,17 +57,19 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
             sourceWithFutureFeed.id
         );
 
-        Deployment oldDeployment = new Deployment();
-        oldDeployment.projectId = project.id;
-        oldDeployment.feedVersionIds = List.of("2-active-current", "3-expired");
-        oldDeployment.lastUpdated = Date.from(Instant.now().minus(50, ChronoUnit.DAYS));
-        Persistence.deployments.create(oldDeployment);
+        pinnedDeployment = new Deployment();
+        pinnedDeployment.projectId = project.id;
+        pinnedDeployment.feedVersionIds = List.of("2-active-current", "3-expired");
+        pinnedDeployment.lastUpdated = Date.from(Instant.now().minus(50, ChronoUnit.DAYS));
+        Persistence.deployments.create(pinnedDeployment);
 
-        newDeployment = new Deployment();
-        newDeployment.projectId = project.id;
-        newDeployment.feedVersionIds = List.of("2-future", "1-active-current");
-        newDeployment.lastUpdated = Date.from(Instant.now().minus(1, ChronoUnit.DAYS));
-        Persistence.deployments.create(newDeployment);
+        latestDeployment = new Deployment();
+        latestDeployment.projectId = project.id;
+        latestDeployment.feedVersionIds = List.of("2-future", "1-active-current");
+        latestDeployment.lastUpdated = Date.from(Instant.now().minus(1, ChronoUnit.DAYS));
+        Persistence.deployments.create(latestDeployment);
+
+        Persistence.projects.updateField(project.id, "pinnedDeploymentId", pinnedDeployment.id);
     }
 
     @AfterAll
@@ -121,7 +125,23 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
             FeedSourceSummary.getFeedSourceSummaries(project.id, null)
         );
         assertEquals(
-            Set.copyOf(newDeployment.feedVersionIds),
+            Set.copyOf(latestDeployment.feedVersionIds),
+            feedVersionSummaries.values().stream().map(v -> v.id).collect(Collectors.toSet())
+        );
+    }
+
+    /**
+     * Make sure the latest feed versions, whether expired, future, or current, are correct for each feed source.
+     */
+    @Test
+    void canGetFeedVersionsFromPinnedDeployment() {
+        createFeedVersions();
+        Map<String, FeedVersionSummary> feedVersionSummaries = getFeedVersionsFromPinnedDeployment(
+            project.id,
+            FeedSourceSummary.getFeedSourceSummaries(project.id, null)
+        );
+        assertEquals(
+            Set.copyOf(pinnedDeployment.feedVersionIds),
             feedVersionSummaries.values().stream().map(v -> v.id).collect(Collectors.toSet())
         );
     }
