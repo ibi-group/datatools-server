@@ -476,12 +476,9 @@ public class FeedVersionSummary extends Model implements Serializable {
      * See also <a href="https://www.mongodb.com/docs/manual/data-modeling/design-antipatterns/reduce-lookup-operations/">...</a>
      */
     static Map<String, FeedVersionSummary> getFeedVersionsFromPinnedDeployment(String projectId, List<FeedSourceSummary> feedSourceSummaries) {
-        // Get pinned deployment id
-        Project project = Persistence.projects.getById(projectId);
-        String pinnedDeploymentId = project.pinnedDeploymentId;
-
         // Get pinned deployment
-        Deployment pinnedDeployment = Persistence.deployments.getById(pinnedDeploymentId);
+        Project project = Persistence.projects.getById(projectId);
+        Deployment pinnedDeployment = Persistence.deployments.getById(project.pinnedDeploymentId);
 
         return getFeedVersionsForDeployment(pinnedDeployment, feedSourceSummaries);
     }
@@ -493,8 +490,7 @@ public class FeedVersionSummary extends Model implements Serializable {
         Map<String, FeedVersionSummary> result = new HashMap<>();
         if (deployment != null) {
             // Get feed versions for this deployment
-            List<String> feedVersionIds = List.copyOf(deployment.feedVersionIds);
-            List<FeedVersionSummary> feedVersions = Persistence.feedVersionSummaries.getByIds(feedVersionIds);
+            List<FeedVersionSummary> feedVersions = Persistence.feedVersionSummaries.getByIds(deployment.feedVersionIds);
 
             feedVersions.forEach(v -> {
                 Optional<FeedSourceSummary> feedSource = feedSourceSummaries.stream().filter(s -> s.id.equals(v.feedSourceId)).findFirst();
