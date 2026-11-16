@@ -461,33 +461,16 @@ public class FeedVersionSummary extends Model implements Serializable {
      */
     static Map<String, FeedVersionSummary> getFeedVersionsFromLatestDeployment(String projectId, List<FeedSourceSummary> feedSourceSummaries) {
         // Get the latest deployment for this project
-        // TODO: check nulls
         Deployment deployment = Persistence.deployments.getOneFiltered(
             eq("projectId", projectId),
             new BasicDBObject("lastUpdated", -1)
         );
 
-        if (deployment != null) {
-            // Get the feed versions for this deployment
-            // TODO: Change persistence param to Collection.
-            List<String> feedVersionIds = List.copyOf(deployment.feedVersionIds);
-            List<FeedVersionSummary> feedVersions = Persistence.feedVersionSummaries.getByIds(feedVersionIds);
-
-            Map<String, FeedVersionSummary> result = new HashMap<>();
-            feedVersions.forEach(v -> {
-                Optional<FeedSourceSummary> feedSource = feedSourceSummaries.stream().filter(s -> s.id.equals(v.feedSourceId)).findFirst();
-                feedSource.ifPresent(
-                    feedSourceSummary -> v.feedSourcePublishedVersionId = feedSourceSummary.publishedVersionId);
-                result.put(v.feedSourceId, v);
-            });
-            return result;
-        }
-
-        return new HashMap<>();
+        return getFeedVersionsForDeployment(deployment, feedSourceSummaries);
     }
 
     /**
-     * Get the deployed feed version from the pinned deployment for this feed source.
+     * Get the deployed feed versions from the pinned deployment for the given project.
      * This was previously implemented using a Mongo lookup, however that turns out to be much slower
      * compared to separate queries (e.g. 6 seconds before vs. 600 ms after).
      * See also <a href="https://www.mongodb.com/docs/manual/data-modeling/design-antipatterns/reduce-lookup-operations/">...</a>
@@ -500,22 +483,27 @@ public class FeedVersionSummary extends Model implements Serializable {
         // Get pinned deployment
         Deployment pinnedDeployment = Persistence.deployments.getById(pinnedDeploymentId);
 
-        if (pinnedDeployment != null) {
+        return getFeedVersionsForDeployment(pinnedDeployment, feedSourceSummaries);
+    }
+
+    /**
+     * Get the feed versions from the specified deployment.
+     */
+    static Map<String, FeedVersionSummary> getFeedVersionsForDeployment(Deployment deployment, List<FeedSourceSummary> feedSourceSummaries) {
+        Map<String, FeedVersionSummary> result = new HashMap<>();
+        if (deployment != null) {
             // Get feed versions for this deployment
-            List<String> feedVersionIds = List.copyOf(pinnedDeployment.feedVersionIds);
+            List<String> feedVersionIds = List.copyOf(deployment.feedVersionIds);
             List<FeedVersionSummary> feedVersions = Persistence.feedVersionSummaries.getByIds(feedVersionIds);
 
-            Map<String, FeedVersionSummary> result = new HashMap<>();
             feedVersions.forEach(v -> {
                 Optional<FeedSourceSummary> feedSource = feedSourceSummaries.stream().filter(s -> s.id.equals(v.feedSourceId)).findFirst();
                 feedSource.ifPresent(
                     feedSourceSummary -> v.feedSourcePublishedVersionId = feedSourceSummary.publishedVersionId);
                 result.put(v.feedSourceId, v);
             });
-            return result;
         }
-
-        return new HashMap<>();
+        return result;
     }
 
     /**
