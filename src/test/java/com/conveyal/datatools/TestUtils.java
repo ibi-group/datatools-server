@@ -308,7 +308,6 @@ public class TestUtils {
 
     public static Project createProject(String name) {
         Project project = new Project();
-        project.id = UUID.randomUUID().toString();
         project.name = name;
         Persistence.projects.create(project);
         return project;
