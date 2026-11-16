@@ -26,6 +26,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -307,6 +308,7 @@ public class TestUtils {
 
     public static Project createProject(String name) {
         Project project = new Project();
+        project.id = UUID.randomUUID().toString();
         project.name = name;
         Persistence.projects.create(project);
         return project;

@@ -9,13 +9,18 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.TestUtils.createFeedSource;
 import static com.conveyal.datatools.TestUtils.createProject;
+import static com.conveyal.datatools.manager.models.FeedVersionSummary.getFeedVersionsFromLatestDeployment;
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestActiveFeedVersionForFeedSources;
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestFeedVersionForFeedSources;
 import static com.mongodb.client.model.Filters.in;
@@ -27,6 +32,7 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     private static FeedSource sourceWithFutureAndActiveFeed;
     private static FeedSource sourceWithFutureFeed;
     private static Set<String> allNonEmptyFeedSourceIds;
+    private static Deployment newDeployment;
 
     private static final LocalDate TODAY = LocalDate.now();
 
@@ -48,6 +54,18 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
             sourceWithFutureAndActiveFeed.id,
             sourceWithFutureFeed.id
         );
+
+        Deployment oldDeployment = new Deployment();
+        oldDeployment.projectId = project.id;
+        oldDeployment.feedVersionIds = List.of("2-active-current", "3-expired");
+        oldDeployment.lastUpdated = Date.from(Instant.now().minus(50, ChronoUnit.DAYS));
+        Persistence.deployments.create(oldDeployment);
+
+        newDeployment = new Deployment();
+        newDeployment.projectId = project.id;
+        newDeployment.feedVersionIds = List.of("2-future", "1-active-current");
+        newDeployment.lastUpdated = Date.from(Instant.now().minus(1, ChronoUnit.DAYS));
+        Persistence.deployments.create(newDeployment);
     }
 
     @AfterAll
@@ -90,6 +108,22 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         assertEquals(Set.of(sourceWithFutureAnd2ActiveFeeds.id, sourceWithFutureAndActiveFeed.id), activeSummaries.keySet());
         assertEquals("1-active-current", activeSummaries.get(sourceWithFutureAnd2ActiveFeeds.id).id);
         assertEquals("2-active-current", activeSummaries.get(sourceWithFutureAndActiveFeed.id).id);
+    }
+
+    /**
+     * Make sure the latest feed versions, whether expired, future, or current, are correct for each feed source.
+     */
+    @Test
+    void canGetFeedVersionsFromLatestDeployment() {
+        createFeedVersions();
+        Map<String, FeedVersionSummary> feedVersionSummaries = getFeedVersionsFromLatestDeployment(
+            project.id,
+            FeedSourceSummary.getFeedSourceSummaries(project.id, null)
+        );
+        assertEquals(
+            Set.copyOf(newDeployment.feedVersionIds),
+            feedVersionSummaries.values().stream().map(v -> v.id).collect(Collectors.toSet())
+        );
     }
 
     private static void createFeedVersions() {
