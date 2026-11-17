@@ -26,7 +26,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Aggregates.limit;
@@ -459,14 +458,14 @@ public class FeedVersionSummary extends Model implements Serializable {
      * compared to separate queries (e.g. 5.5 seconds before vs. 150 ms after).
      * See also <a href="https://www.mongodb.com/docs/manual/data-modeling/design-antipatterns/reduce-lookup-operations/">...</a>
      */
-    static Map<String, FeedVersionSummary> getFeedVersionsFromLatestDeployment(String projectId, List<FeedSourceSummary> feedSourceSummaries) {
+    static Map<String, FeedVersionSummary> getFeedVersionsFromLatestDeployment(String projectId) {
         // Get the latest deployment for this project
         Deployment deployment = Persistence.deployments.getOneFiltered(
             eq("projectId", projectId),
             new BasicDBObject("lastUpdated", -1)
         );
 
-        return getFeedVersionsForDeployment(deployment, feedSourceSummaries);
+        return getFeedVersionsForDeployment(deployment);
     }
 
     /**
@@ -475,27 +474,23 @@ public class FeedVersionSummary extends Model implements Serializable {
      * compared to separate queries (e.g. 6 seconds before vs. 600 ms after).
      * See also <a href="https://www.mongodb.com/docs/manual/data-modeling/design-antipatterns/reduce-lookup-operations/">...</a>
      */
-    static Map<String, FeedVersionSummary> getFeedVersionsFromPinnedDeployment(String projectId, List<FeedSourceSummary> feedSourceSummaries) {
+    static Map<String, FeedVersionSummary> getFeedVersionsFromPinnedDeployment(String projectId) {
         // Get pinned deployment
         Project project = Persistence.projects.getById(projectId);
         Deployment pinnedDeployment = Persistence.deployments.getById(project.pinnedDeploymentId);
 
-        return getFeedVersionsForDeployment(pinnedDeployment, feedSourceSummaries);
+        return getFeedVersionsForDeployment(pinnedDeployment);
     }
 
     /**
      * Get the feed versions from the specified deployment.
      */
-    static Map<String, FeedVersionSummary> getFeedVersionsForDeployment(Deployment deployment, List<FeedSourceSummary> feedSourceSummaries) {
+    static Map<String, FeedVersionSummary> getFeedVersionsForDeployment(Deployment deployment) {
         Map<String, FeedVersionSummary> result = new HashMap<>();
         if (deployment != null) {
             // Get feed versions for this deployment
             List<FeedVersionSummary> feedVersions = Persistence.feedVersionSummaries.getByIds(deployment.feedVersionIds);
-
             feedVersions.forEach(v -> {
-                Optional<FeedSourceSummary> feedSource = feedSourceSummaries.stream().filter(s -> s.id.equals(v.feedSourceId)).findFirst();
-                feedSource.ifPresent(
-                    feedSourceSummary -> v.feedSourcePublishedVersionId = feedSourceSummary.publishedVersionId);
                 result.put(v.feedSourceId, v);
             });
         }

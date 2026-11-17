@@ -26,6 +26,7 @@ import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatest
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestFeedVersionForFeedSources;
 import static com.mongodb.client.model.Filters.in;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class FeedVersionSummaryQueryTest extends DatatoolsTest {
     private static Project project;
@@ -50,6 +51,9 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         sourceWithFutureAndActiveFeed = createFeedSource("Test feed source 2", project);
         sourceWithFutureFeed = createFeedSource("Test feed source 3", project);
         createFeedSource("Feed source without feed versions", project);
+
+        // Set a published version id to make sure it is populated in the correct FeedVersionSummary.
+        Persistence.feedSources.updateField(sourceWithFutureAndActiveFeed.id, "publishedVersionId", "some-feedversion-id");
 
         allNonEmptyFeedSourceIds = Set.of(
             sourceWithFutureAnd2ActiveFeeds.id,
@@ -120,14 +124,13 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     @Test
     void canGetFeedVersionsFromLatestDeployment() {
         createFeedVersions();
-        Map<String, FeedVersionSummary> feedVersionSummaries = getFeedVersionsFromLatestDeployment(
-            project.id,
-            FeedSourceSummary.getFeedSourceSummaries(project.id, null)
-        );
+        Map<String, FeedVersionSummary> feedVersionSummaries = getFeedVersionsFromLatestDeployment(project.id);
         assertEquals(
             Set.copyOf(latestDeployment.feedVersionIds),
             feedVersionSummaries.values().stream().map(v -> v.id).collect(Collectors.toSet())
         );
+        assertEquals(sourceWithFutureAndActiveFeed.publishedVersionId, feedVersionSummaries.get(sourceWithFutureAndActiveFeed.id).feedSourcePublishedVersionId);
+        assertNull(feedVersionSummaries.get(sourceWithFutureAnd2ActiveFeeds.id).feedSourcePublishedVersionId);
     }
 
     /**
@@ -136,10 +139,7 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     @Test
     void canGetFeedVersionsFromPinnedDeployment() {
         createFeedVersions();
-        Map<String, FeedVersionSummary> feedVersionSummaries = getFeedVersionsFromPinnedDeployment(
-            project.id,
-            FeedSourceSummary.getFeedSourceSummaries(project.id, null)
-        );
+        Map<String, FeedVersionSummary> feedVersionSummaries = getFeedVersionsFromPinnedDeployment(project.id);
         assertEquals(
             Set.copyOf(pinnedDeployment.feedVersionIds),
             feedVersionSummaries.values().stream().map(v -> v.id).collect(Collectors.toSet())
