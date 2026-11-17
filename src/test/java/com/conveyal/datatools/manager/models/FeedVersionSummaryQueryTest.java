@@ -146,6 +146,13 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         );
     }
 
+    @Test
+    void canGetFeedSourceSummaries() {
+        createFeedVersions();
+        List<FeedSourceSummary> summaries = FeedSourceSummary.getFeedSourceSummaries(project.id, null);
+        assertEquals(4, summaries.size());
+    }
+
     private static void createFeedVersions() {
         createFeedVersion("1-active-older", 1, sourceWithFutureAnd2ActiveFeeds, -30, 10);
         createFeedVersion("1-active-current", 2, sourceWithFutureAnd2ActiveFeeds, -5, 0);

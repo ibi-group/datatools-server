@@ -139,7 +139,9 @@ public class FeedSourceSummary {
                 latestDeploymentDeployedFeedVersions.get(feedSourceId)
             );
             feedSourceSummary.setDeployedFeedVersionValues(deployedVersion);
-            deployedVersion.feedSourcePublishedVersionId = feedSourceId;
+            if (deployedVersion != null) {
+                deployedVersion.feedSourcePublishedVersionId = feedSourceId;
+            }
         });
     }
 
