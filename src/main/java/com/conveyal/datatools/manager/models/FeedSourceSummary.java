@@ -131,11 +131,12 @@ public class FeedSourceSummary {
         Map<String, FeedVersionSummary> latestDeploymentDeployedFeedVersions = FeedVersionSummary.getFeedVersionsFromLatestDeployment(projectId, feedSourceSummaries);
 
         feedSourceSummaries.forEach(feedSourceSummary -> {
-            feedSourceSummary.assignLatestFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id));
-            feedSourceSummary.assignLatestActiveFeedVersion(latestActiveFeedVersionForFeedSources.get(feedSourceSummary.id));
+            String feedSourceId = feedSourceSummary.id;
+            feedSourceSummary.assignLatestFeedVersion(latestFeedVersionForFeedSources.get(feedSourceId));
+            feedSourceSummary.assignLatestActiveFeedVersion(latestActiveFeedVersionForFeedSources.get(feedSourceId));
             FeedVersionSummary deployedVersion = pinnedDeploymentFeedVersions.getOrDefault(
-                feedSourceSummary.id,
-                latestDeploymentDeployedFeedVersions.get(feedSourceSummary.id)
+                feedSourceId,
+                latestDeploymentDeployedFeedVersions.get(feedSourceId)
             );
             feedSourceSummary.setDeployedFeedVersionValues(deployedVersion);
         });
