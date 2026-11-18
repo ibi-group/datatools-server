@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM maven:3.10.0-eclipse-temurin-21-alpine
+FROM maven:3.10.0-amazoncorretto-21-alpine
 
 COPY . /datatools
 
