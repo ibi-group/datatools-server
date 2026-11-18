@@ -32,11 +32,11 @@ jobs:
         with:
           java-version: 19
           distribution: 'temurin'
-      # Install node 22 for running e2e tests (and for maven-semantic-release).
-      - name: Use Node.js 22.x
+      # Install node 26 for running e2e tests (and for maven-semantic-release).
+      - name: Use Node.js 26.x
         uses: actions/setup-node@v1
         with:
-          node-version: 22.x
+          node-version: 26.x
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.12.1
         with:
