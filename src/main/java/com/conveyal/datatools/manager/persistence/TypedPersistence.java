@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 
@@ -171,7 +172,7 @@ public class TypedPersistence<T extends Model> {
      * @param ids   List of IDs to return objects with
      * @return      Objects in the collection with given IDs
      */
-    public List<T> getByIds (List<String> ids) {
+    public List<T> getByIds (Collection<String> ids) {
         return mongoCollection.find(in("_id", ids)).into(new ArrayList<>());
     }
 
