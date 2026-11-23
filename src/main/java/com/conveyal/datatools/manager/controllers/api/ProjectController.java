@@ -343,13 +343,14 @@ public class ProjectController {
      */
     public static void register (String apiPrefix) {
         // Construct JSON managers which help serialize the response. Slim JSON is the generic JSON view. Full JSON
-        // contains additional fields (at the moment just #otpServers) and should only be used when the controller
+        // contains additional fields (at the moment just #OtpServerWithoutEc2Instances) and should only be used when the controller
         // returns a single project (slimJson is better suited for a collection). If fullJson is attempted for use
-        // with a collection, massive performance issues will ensure (mainly due to multiple calls to AWS EC2).
+        // with a collection, massive performance issues will ensue (mainly due to multiple calls to AWS EC2).
         JsonManager<Project> slimJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
         JsonManager<Project> fullJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
         fullJson.addMixin(Project.class, Project.ProjectWithOtpServers.class);
         fullJson.addMixin(OtpServer.class, OtpServer.OtpServerWithoutEc2Instances.class);
+        slimJson.addMixin(Project.class, Project.ProjectWithOtpServers.class);
 
         get(apiPrefix + "secure/project/:id", ProjectController::getProject, fullJson::write);
         get(apiPrefix + "secure/project", ProjectController::getAllProjects, slimJson::write);
