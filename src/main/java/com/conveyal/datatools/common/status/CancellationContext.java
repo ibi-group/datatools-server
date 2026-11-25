@@ -81,7 +81,14 @@ public class CancellationContext {
                 try {
                     task.task.run();
                 } catch (RuntimeException e) {
-                    task.owner.status.fail("Deferred task failed!", e);
+                    for (MonitorableJob failedJob = task.owner; failedJob != null; ) {
+                        failedJob.status.fail("Deferred task failed!", e);
+                        String parentJobId = failedJob.parentJobId;
+                        failedJob = startedJobs.stream()
+                            .filter(job -> job.jobId.equals(parentJobId))
+                            .findFirst()
+                            .orElse(null);
+                    }
                     if (failure == null) {
                         failure = e;
                     } else if (failure != e) {
