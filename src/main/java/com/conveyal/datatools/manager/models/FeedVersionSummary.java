@@ -490,9 +490,7 @@ public class FeedVersionSummary extends Model implements Serializable {
         if (deployment != null) {
             // Get feed versions for this deployment
             List<FeedVersionSummary> feedVersions = Persistence.feedVersionSummaries.getByIds(deployment.feedVersionIds);
-            feedVersions.forEach(v -> {
-                result.put(v.feedSourceId, v);
-            });
+            feedVersions.forEach(v -> result.put(v.feedSourceId, v));
         }
         return result;
     }
