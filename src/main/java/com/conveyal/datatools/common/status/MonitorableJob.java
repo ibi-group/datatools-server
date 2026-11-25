@@ -176,8 +176,16 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     }
 
     public void failSubmission(Exception failure) {
-        if (cancellationContext != null) cancellationContext.stopAcceptingCancellations();
+        if (cancellationContext != null) {
+            cancellationContext.stopAcceptingCancellations();
+            cancellationContext.markFinished();
+        }
         status.fail("Job could not be submitted.", failure);
+    }
+
+    public boolean isInUnfinishedCancellationContext() {
+        CancellationContext context = cancellationContext;
+        return context != null && !context.finished;
     }
 
     protected void checkCancellation() {
@@ -389,6 +397,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     private void finalizeJobCancellation(CancellationContext previousContext, boolean isRootJob) {
         if (isRootJob) {
             cancellationContext.stopAcceptingCancellations();
+            cancellationContext.markFinished();
         }
         if (previousContext == null) {
             CURRENT_CANCELLATION.remove();

@@ -7,9 +7,12 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -28,6 +31,67 @@ class JobUtilsTest {
         } finally {
             job.active = false;
             JobUtils.getJobsByUserId(job.retrieveUserId(), false).remove(job);
+        }
+    }
+
+    @Test
+    void testRetainsCompletedChildJobsUntilCancellationContextFinishes() throws Exception {
+        CountDownLatch blockingChildStarted = new CountDownLatch(1);
+        CountDownLatch finishBlockingChild = new CountDownLatch(1);
+        MonitorableJob root = new MonitorableJob() {
+            @Override
+            public boolean supportsCancellation() {
+                return true;
+            }
+
+            @Override
+            public void jobLogic() {
+            }
+        };
+        MonitorableJob singleLookupChild = createMonitorableJob();
+        MonitorableJob bulkLookupChild = createMonitorableJob();
+        MonitorableJob blockingChild = new MonitorableJob() {
+            @Override
+            public void jobLogic() throws Exception {
+                blockingChildStarted.countDown();
+                finishBlockingChild.await();
+            }
+        };
+        root.addNextJob(singleLookupChild, bulkLookupChild, blockingChild);
+        root.enableCancellation();
+        Thread worker = new Thread(root);
+        worker.start();
+
+        try {
+            assertTrue(blockingChildStarted.await(5, TimeUnit.SECONDS));
+            assertFalse(singleLookupChild.active);
+            assertFalse(bulkLookupChild.active);
+            assertSame(singleLookupChild, JobUtils.getJobById(
+                root.retrieveUserId(), singleLookupChild.jobId, true
+            ));
+            assertTrue(JobUtils.userJobsMap.get(root.retrieveUserId()).contains(singleLookupChild));
+
+            Set<MonitorableJob> jobs = JobUtils.getJobsByUserId(root.retrieveUserId(), true);
+            assertTrue(jobs.contains(bulkLookupChild));
+            assertTrue(JobUtils.userJobsMap.get(root.retrieveUserId()).contains(bulkLookupChild));
+            finishBlockingChild.countDown();
+            worker.join(5000);
+
+            assertFalse(worker.isAlive());
+            assertSame(singleLookupChild, JobUtils.getJobById(
+                root.retrieveUserId(), singleLookupChild.jobId, true
+            ));
+            assertFalse(JobUtils.userJobsMap.get(root.retrieveUserId()).contains(singleLookupChild));
+            JobUtils.getJobsByUserId(root.retrieveUserId(), true);
+            assertFalse(JobUtils.userJobsMap.get(root.retrieveUserId()).contains(bulkLookupChild));
+        } finally {
+            finishBlockingChild.countDown();
+            worker.join(5000);
+            Set<MonitorableJob> remainingJobs = JobUtils.getJobsByUserId(root.retrieveUserId(), false);
+            remainingJobs.remove(root);
+            remainingJobs.remove(singleLookupChild);
+            remainingJobs.remove(bulkLookupChild);
+            remainingJobs.remove(blockingChild);
         }
     }
 

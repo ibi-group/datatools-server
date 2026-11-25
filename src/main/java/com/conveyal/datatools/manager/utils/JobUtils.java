@@ -82,7 +82,7 @@ public class JobUtils {
         }
         for (MonitorableJob job : userJobs) {
             if (job.jobId.equals(jobId)) {
-                if (clearCompleted && !job.active && (job.status.completed || job.status.error)) {
+                if (clearCompleted && !shouldRetainJob(job)) {
                     // remove job if completed or errored
                     userJobs.remove(job);
                 }
@@ -150,7 +150,16 @@ public class JobUtils {
      * may or may not be active.
      */
     public static Set<MonitorableJob> filterStagedAndActiveJobs(Set<MonitorableJob> jobs) {
-        return filterJobs(jobs, job -> job.active || (!job.status.completed && !job.status.error));
+        return filterJobs(jobs, JobUtils::shouldRetainJob);
+    }
+
+    /**
+     * Determine if a job should be retained in the userJobsMap. Jobs that are active, staged, or in an unfinished
+     * cancellation context should be retained. Jobs that have completed or errored should be removed from the map.
+     */
+    private static boolean shouldRetainJob(MonitorableJob job) {
+        return job.active || job.isInUnfinishedCancellationContext() ||
+            (!job.status.completed && !job.status.error);
     }
 
     /**

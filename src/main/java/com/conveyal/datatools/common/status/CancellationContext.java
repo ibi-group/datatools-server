@@ -20,6 +20,7 @@ public class CancellationContext {
     final List<DeferredTask> afterCurrentCancellationWindowTasks = new ArrayList<>();
     volatile boolean cancellationRequested;
     volatile boolean acceptingCancellations = true;
+    volatile boolean finished;
 
     CancellationContext(MonitorableJob rootJob) {
         this.rootJob = rootJob;
@@ -65,6 +66,10 @@ public class CancellationContext {
      */
     synchronized void stopAcceptingCancellations() {
         acceptingCancellations = false;
+    }
+
+    void markFinished() {
+        finished = true;
     }
 
     /**
