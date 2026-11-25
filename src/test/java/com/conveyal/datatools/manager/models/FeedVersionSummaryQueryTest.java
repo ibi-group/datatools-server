@@ -9,17 +9,24 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.TestUtils.createFeedSource;
 import static com.conveyal.datatools.TestUtils.createProject;
+import static com.conveyal.datatools.manager.models.FeedVersionSummary.getFeedVersionsFromLatestDeployment;
+import static com.conveyal.datatools.manager.models.FeedVersionSummary.getFeedVersionsFromPinnedDeployment;
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestActiveFeedVersionForFeedSources;
 import static com.conveyal.datatools.manager.models.FeedVersionSummary.getLatestFeedVersionForFeedSources;
 import static com.mongodb.client.model.Filters.in;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class FeedVersionSummaryQueryTest extends DatatoolsTest {
     private static Project project;
@@ -27,6 +34,8 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
     private static FeedSource sourceWithFutureAndActiveFeed;
     private static FeedSource sourceWithFutureFeed;
     private static Set<String> allNonEmptyFeedSourceIds;
+    private static Deployment pinnedDeployment;
+    private static Deployment latestDeployment;
 
     private static final LocalDate TODAY = LocalDate.now();
 
@@ -43,11 +52,28 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         sourceWithFutureFeed = createFeedSource("Test feed source 3", project);
         createFeedSource("Feed source without feed versions", project);
 
+        // Set a published version id to make sure it is populated in the correct FeedVersionSummary.
+        Persistence.feedSources.updateField(sourceWithFutureAndActiveFeed.id, "publishedVersionId", "some-feedversion-id");
+
         allNonEmptyFeedSourceIds = Set.of(
             sourceWithFutureAnd2ActiveFeeds.id,
             sourceWithFutureAndActiveFeed.id,
             sourceWithFutureFeed.id
         );
+
+        pinnedDeployment = new Deployment();
+        pinnedDeployment.projectId = project.id;
+        pinnedDeployment.feedVersionIds = List.of("2-active-current", "3-expired");
+        pinnedDeployment.lastUpdated = Date.from(Instant.now().minus(50, ChronoUnit.DAYS));
+        Persistence.deployments.create(pinnedDeployment);
+
+        latestDeployment = new Deployment();
+        latestDeployment.projectId = project.id;
+        latestDeployment.feedVersionIds = List.of("2-future", "1-active-current");
+        latestDeployment.lastUpdated = Date.from(Instant.now().minus(1, ChronoUnit.DAYS));
+        Persistence.deployments.create(latestDeployment);
+
+        Persistence.projects.updateField(project.id, "pinnedDeploymentId", pinnedDeployment.id);
     }
 
     @AfterAll
@@ -90,6 +116,41 @@ class FeedVersionSummaryQueryTest extends DatatoolsTest {
         assertEquals(Set.of(sourceWithFutureAnd2ActiveFeeds.id, sourceWithFutureAndActiveFeed.id), activeSummaries.keySet());
         assertEquals("1-active-current", activeSummaries.get(sourceWithFutureAnd2ActiveFeeds.id).id);
         assertEquals("2-active-current", activeSummaries.get(sourceWithFutureAndActiveFeed.id).id);
+    }
+
+    /**
+     * Make sure the latest feed versions, whether expired, future, or current, are correct for each feed source.
+     */
+    @Test
+    void canGetFeedVersionsFromLatestDeployment() {
+        createFeedVersions();
+        Map<String, FeedVersionSummary> feedVersionSummaries = getFeedVersionsFromLatestDeployment(project.id);
+        assertEquals(
+            Set.copyOf(latestDeployment.feedVersionIds),
+            feedVersionSummaries.values().stream().map(v -> v.id).collect(Collectors.toSet())
+        );
+        assertEquals(sourceWithFutureAndActiveFeed.publishedVersionId, feedVersionSummaries.get(sourceWithFutureAndActiveFeed.id).feedSourcePublishedVersionId);
+        assertNull(feedVersionSummaries.get(sourceWithFutureAnd2ActiveFeeds.id).feedSourcePublishedVersionId);
+    }
+
+    /**
+     * Make sure the latest feed versions, whether expired, future, or current, are correct for each feed source.
+     */
+    @Test
+    void canGetFeedVersionsFromPinnedDeployment() {
+        createFeedVersions();
+        Map<String, FeedVersionSummary> feedVersionSummaries = getFeedVersionsFromPinnedDeployment(project.id);
+        assertEquals(
+            Set.copyOf(pinnedDeployment.feedVersionIds),
+            feedVersionSummaries.values().stream().map(v -> v.id).collect(Collectors.toSet())
+        );
+    }
+
+    @Test
+    void canGetFeedSourceSummaries() {
+        createFeedVersions();
+        List<FeedSourceSummary> summaries = FeedSourceSummary.getFeedSourceSummaries(project.id, null);
+        assertEquals(4, summaries.size());
     }
 
     private static void createFeedVersions() {
