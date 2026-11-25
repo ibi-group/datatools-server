@@ -81,8 +81,6 @@ public class CreateFeedVersionFromSnapshotJob extends FeedSourceJob {
                 if (DataManager.isModuleEnabled("gtfsplus")) {
                     FeedStore store = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
                     CancellationContext.rollbackResources(
-                        () -> store.deleteFeed(feedVersion.id + ".db"),
-                        () -> store.deleteFeed(feedVersion.id + ".db.p"),
                         () -> Files.deleteIfExists(store.getFeedFile(feedVersion.id + ".db").toPath()),
                         () -> Files.deleteIfExists(store.getFeedFile(feedVersion.id + ".db.p").toPath())
                     );
