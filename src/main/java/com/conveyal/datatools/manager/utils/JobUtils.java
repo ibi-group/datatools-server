@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -28,6 +29,21 @@ public class JobUtils {
 
     // Heavy executor should contain long-lived CPU-intensive tasks (e.g., feed loading/validation)
     public static Executor heavyExecutor = Executors.newFixedThreadPool(4);
+
+    // Uses the heavy pool, but opts jobs into cooperative cancellation and rollback instead of thread interruption.
+    public static final Executor cancellableExecutor = command -> {
+        if (!(command instanceof MonitorableJob)) {
+            throw new IllegalArgumentException("Cancellable executor requires a monitorable job.");
+        }
+        MonitorableJob job = (MonitorableJob) command;
+        job.enableCancellation();
+        try {
+            heavyExecutor.execute(job);
+        } catch (RejectedExecutionException e) {
+            job.failSubmission(e);
+            throw e;
+        }
+    };
 
     // light executor is for tasks for things that should finish quickly (e.g., email notifications)
     public static Executor lightExecutor = Executors.newSingleThreadExecutor();
@@ -66,7 +82,7 @@ public class JobUtils {
         }
         for (MonitorableJob job : userJobs) {
             if (job.jobId.equals(jobId)) {
-                if (clearCompleted && (job.status.completed || job.status.error)) {
+                if (clearCompleted && !shouldRetainJob(job)) {
                     // remove job if completed or errored
                     userJobs.remove(job);
                 }
@@ -134,7 +150,16 @@ public class JobUtils {
      * may or may not be active.
      */
     public static Set<MonitorableJob> filterStagedAndActiveJobs(Set<MonitorableJob> jobs) {
-        return filterJobs(jobs, job -> !job.status.completed && !job.status.error);
+        return filterJobs(jobs, JobUtils::shouldRetainJob);
+    }
+
+    /**
+     * Determine if a job should be retained in the userJobsMap. Jobs that are active, staged, or in an unfinished
+     * cancellation context should be retained. Jobs that have completed or errored should be removed from the map.
+     */
+    private static boolean shouldRetainJob(MonitorableJob job) {
+        return job.active || job.isInUnfinishedCancellationContext() ||
+            (!job.status.completed && !job.status.error);
     }
 
     /**
